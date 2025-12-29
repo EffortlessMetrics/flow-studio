@@ -18,13 +18,12 @@ from swarm.runtime.diff_scanner import (
     scan_file_changes_sync,
 )
 from swarm.runtime.path_helpers import (
-    ensure_handoff_dir,
     ensure_llm_dir,
     ensure_receipts_dir,
-    handoff_envelope_path as make_handoff_envelope_path,
     receipt_path as make_receipt_path,
     transcript_path as make_transcript_path,
 )
+from swarm.runtime.handoff_io import write_handoff_envelope
 from swarm.runtime.types import (
     HandoffEnvelope,
     RoutingDecision,
@@ -136,9 +135,6 @@ def finalize_step_stub(
     events: List[RunEvent] = []
     agent_key = ctx.step_agents[0] if ctx.step_agents else None
 
-    handoff_dir = ctx.run_base / "handoff"
-    handoff_dir.mkdir(parents=True, exist_ok=True)
-
     file_changes = scan_file_changes_sync(ctx.repo_root)
     file_changes_dict = file_changes_to_dict(file_changes)
 
@@ -167,12 +163,22 @@ def finalize_step_stub(
         "can_further_iteration_help": "no",
         "artifacts": [],
         "file_changes": file_changes_dict,
-        "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+        "routing_signal": {
+            "decision": RoutingDecision.ADVANCE.value,
+            "reason": "stub_finalization",
+            "confidence": 1.0,
+            "needs_human": False,
+        },
     }
 
-    handoff_path = handoff_dir / f"{ctx.step_id}.draft.json"
-    with handoff_path.open("w", encoding="utf-8") as f:
-        json.dump(handoff_data, f, indent=2)
+    # Write using unified IO (handles draft + committed + validation)
+    write_handoff_envelope(
+        run_base=ctx.run_base,
+        step_id=ctx.step_id,
+        envelope_data=handoff_data,
+        write_draft=True,
+        validate=True,
+    )
 
     envelope = HandoffEnvelope(
         step_id=ctx.step_id,
@@ -190,11 +196,6 @@ def finalize_step_stub(
         duration_ms=step_result.duration_ms,
         timestamp=datetime.now(timezone.utc),
     )
-
-    envelope_path = make_handoff_envelope_path(ctx.run_base, ctx.step_id)
-    envelope_path.parent.mkdir(parents=True, exist_ok=True)
-    with envelope_path.open("w", encoding="utf-8") as f:
-        json.dump(handoff_envelope_to_dict(envelope), f, indent=2)
 
     # Write receipt for lifecycle mode (run_worker + finalize_step)
     ensure_receipts_dir(ctx.run_base)

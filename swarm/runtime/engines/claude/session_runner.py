@@ -24,11 +24,14 @@ from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Tuple
 
 from swarm.runtime.path_helpers import (
     ensure_llm_dir,
-    ensure_handoff_dir,
     ensure_receipts_dir,
     handoff_envelope_path as make_handoff_envelope_path,
     receipt_path as make_receipt_path,
     transcript_path as make_transcript_path,
+)
+from swarm.runtime.handoff_io import (
+    write_handoff_envelope,
+    update_envelope_routing,
 )
 from swarm.runtime.types import (
     RoutingDecision,
@@ -228,7 +231,6 @@ async def _execute_step_session_sdk(
         )
 
         # Phase 2: Finalize (extract structured handoff envelope)
-        ensure_handoff_dir(ctx.run_base)
         draft_handoff_path = ctx.run_base / "handoff" / f"{ctx.step_id}.draft.json"
         committed_handoff_path = make_handoff_envelope_path(ctx.run_base, ctx.step_id)
 
@@ -240,19 +242,18 @@ async def _execute_step_session_sdk(
             if hasattr(work_result, 'file_changes') and work_result.file_changes:
                 envelope_data["file_changes"] = work_result.file_changes
 
-            # Write draft envelope (for debugging)
-            with draft_handoff_path.open("w", encoding="utf-8") as f:
-                json.dump(envelope_data, f, indent=2)
-
-            # Write committed envelope at canonical path (for hydration)
-            with committed_handoff_path.open("w", encoding="utf-8") as f:
-                json.dump(envelope_data, f, indent=2)
+            # Write envelope using unified IO (handles draft + committed)
+            write_handoff_envelope(
+                run_base=ctx.run_base,
+                step_id=ctx.step_id,
+                envelope_data=envelope_data,
+                write_draft=True,
+                validate=True,
+            )
 
             logger.debug(
-                "Wrote handoff envelope for step %s: draft=%s, committed=%s",
+                "Wrote handoff envelope for step %s via handoff_io",
                 ctx.step_id,
-                draft_handoff_path,
-                committed_handoff_path,
             )
 
             events.append(
@@ -307,30 +308,25 @@ async def _execute_step_session_sdk(
                     )
                 )
 
-                # Persist routing_signal into committed envelope
-                if finalize_result and finalize_result.success and committed_handoff_path.exists():
-                    try:
-                        with committed_handoff_path.open("r", encoding="utf-8") as f:
-                            envelope_data = json.load(f)
-                        envelope_data["routing_signal"] = {
-                            "decision": routing_signal.decision.value,
-                            "next_step_id": routing_signal.next_step_id,
-                            "route": routing_signal.route,
-                            "reason": routing_signal.reason,
-                            "confidence": routing_signal.confidence,
-                            "needs_human": routing_signal.needs_human,
-                        }
-                        with committed_handoff_path.open("w", encoding="utf-8") as f:
-                            json.dump(envelope_data, f, indent=2)
+                # Persist routing_signal into committed envelope using unified IO
+                if finalize_result and finalize_result.success:
+                    routing_dict = {
+                        "decision": routing_signal.decision.value,
+                        "next_step_id": routing_signal.next_step_id,
+                        "route": routing_signal.route,
+                        "reason": routing_signal.reason,
+                        "confidence": routing_signal.confidence,
+                        "needs_human": routing_signal.needs_human,
+                    }
+                    updated = update_envelope_routing(
+                        run_base=ctx.run_base,
+                        step_id=ctx.step_id,
+                        routing_signal=routing_dict,
+                    )
+                    if updated:
                         logger.debug(
-                            "Updated committed envelope with routing_signal for step %s",
+                            "Updated envelope routing_signal for step %s via handoff_io",
                             ctx.step_id,
-                        )
-                    except Exception as e:
-                        logger.warning(
-                            "Failed to persist routing_signal to envelope for step %s: %s",
-                            ctx.step_id,
-                            e,
                         )
 
         # Get combined session result
