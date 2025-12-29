@@ -33,6 +33,7 @@ from swarm.config.runtime_config import (
 )
 from swarm.runtime.path_helpers import (
     ensure_llm_dir,
+    ensure_handoff_dir,
     ensure_receipts_dir,
     handoff_envelope_path as make_handoff_envelope_path,
     receipt_path as make_receipt_path,
@@ -46,25 +47,12 @@ from swarm.runtime.types import (
 
 # Use the unified SDK adapter - ONLY import from claude_sdk
 from swarm.runtime.claude_sdk import (
-    SDK_AVAILABLE as CLAUDE_SDK_AVAILABLE,
     check_sdk_available as check_claude_sdk_available,
-    create_high_trust_options,
-    get_sdk_module,
-    # WP6: Per-step session pattern
     ClaudeSDKClient,
     create_tool_policy_hook,
-    is_blocked_command,
-    WorkPhaseResult,
-    FinalizePhaseResult,
-    RoutePhaseResult,
-    StepSessionResult,
     TelemetryData,
-    HANDOFF_ENVELOPE_SCHEMA,
-    ROUTING_SIGNAL_SCHEMA,
-    # Hook factory functions for guardrails and telemetry
     create_dangerous_command_hook,
     create_telemetry_hook,
-    create_file_access_audit_hook,
 )
 
 from ..async_utils import run_async_safely
@@ -72,14 +60,13 @@ from ..base import LifecycleCapableEngine
 from ..models import (
     FinalizationResult,
     HistoryTruncationInfo,
-    RoutingContext,
     StepContext,
     StepResult,
 )
 
 # Import from specialized modules
 from .prompt_builder import build_prompt, load_agent_persona
-from .router import check_microloop_termination, route_step_stub, run_router_session
+from .router import route_step_stub
 from .stubs import (
     run_worker_stub,
     finalize_step_stub,
@@ -92,14 +79,70 @@ from .sdk_runner import (
     run_worker_async,
     finalize_step_async,
     route_step_async,
-    build_finalization_prompt,
-    JIT_FINALIZATION_PROMPT,
 )
 
 # ContextPack support for hydration phase
-from swarm.runtime.context_pack import build_context_pack, ContextPack
+from swarm.runtime.context_pack import build_context_pack
 
 logger = logging.getLogger(__name__)
+
+
+def parse_routing_decision(decision_str: str) -> RoutingDecision:
+    """Parse a routing decision string into a RoutingDecision enum.
+
+    Handles both canonical values (advance, loop, terminate, branch) and
+    common aliases from external sources (proceed, rerun, blocked, route).
+
+    Args:
+        decision_str: The routing decision string (case-insensitive).
+
+    Returns:
+        The corresponding RoutingDecision enum value.
+        Defaults to ADVANCE if unrecognized.
+    """
+    decision_lower = decision_str.lower().strip()
+
+    # Canonical mappings
+    canonical_map = {
+        "advance": RoutingDecision.ADVANCE,
+        "loop": RoutingDecision.LOOP,
+        "terminate": RoutingDecision.TERMINATE,
+        "branch": RoutingDecision.BRANCH,
+    }
+
+    if decision_lower in canonical_map:
+        return canonical_map[decision_lower]
+
+    # Common aliases
+    alias_map = {
+        "proceed": RoutingDecision.ADVANCE,
+        "continue": RoutingDecision.ADVANCE,
+        "next": RoutingDecision.ADVANCE,
+        "rerun": RoutingDecision.LOOP,
+        "retry": RoutingDecision.LOOP,
+        "repeat": RoutingDecision.LOOP,
+        "blocked": RoutingDecision.TERMINATE,
+        "stop": RoutingDecision.TERMINATE,
+        "end": RoutingDecision.TERMINATE,
+        "exit": RoutingDecision.TERMINATE,
+        "route": RoutingDecision.BRANCH,
+        "switch": RoutingDecision.BRANCH,
+        "redirect": RoutingDecision.BRANCH,
+    }
+
+    if decision_lower in alias_map:
+        logger.debug(
+            "Mapped routing decision alias '%s' -> %s",
+            decision_str,
+            alias_map[decision_lower].value,
+        )
+        return alias_map[decision_lower]
+
+    logger.warning(
+        "Unknown routing decision '%s', defaulting to ADVANCE",
+        decision_str,
+    )
+    return RoutingDecision.ADVANCE
 
 
 class ClaudeStepEngine(LifecycleCapableEngine):
@@ -266,11 +309,13 @@ class ClaudeStepEngine(LifecycleCapableEngine):
             return ctx
 
         # Build ContextPack
+        # Prefer self.repo_root but fall back to ctx.repo_root
+        effective_repo_root = self.repo_root or ctx.repo_root
         try:
             context_pack = build_context_pack(
                 ctx=ctx,
                 run_state=None,  # Not using in-memory run state
-                repo_root=self.repo_root,
+                repo_root=effective_repo_root,
             )
 
             # Inject into context
@@ -653,16 +698,32 @@ class ClaudeStepEngine(LifecycleCapableEngine):
             )
 
             # Phase 2: Finalize (extract structured handoff envelope)
-            handoff_dir = ctx.run_base / "handoff"
-            handoff_path = handoff_dir / f"{ctx.step_id}.draft.json"
-            handoff_dir.mkdir(parents=True, exist_ok=True)
+            ensure_handoff_dir(ctx.run_base)
+            draft_handoff_path = ctx.run_base / "handoff" / f"{ctx.step_id}.draft.json"
+            committed_handoff_path = make_handoff_envelope_path(ctx.run_base, ctx.step_id)
 
-            finalize_result = await session.finalize(handoff_path=handoff_path)
+            finalize_result = await session.finalize(handoff_path=draft_handoff_path)
 
             if finalize_result.success and finalize_result.envelope:
-                # Write handoff to disk
-                with handoff_path.open("w", encoding="utf-8") as f:
-                    json.dump(finalize_result.envelope, f, indent=2)
+                # Enrich envelope with file_changes if available from work phase
+                envelope_data = dict(finalize_result.envelope)
+                if hasattr(work_result, 'file_changes') and work_result.file_changes:
+                    envelope_data["file_changes"] = work_result.file_changes
+
+                # Write draft envelope (for debugging)
+                with draft_handoff_path.open("w", encoding="utf-8") as f:
+                    json.dump(envelope_data, f, indent=2)
+
+                # Write committed envelope at canonical path (for hydration)
+                with committed_handoff_path.open("w", encoding="utf-8") as f:
+                    json.dump(envelope_data, f, indent=2)
+
+                logger.debug(
+                    "Wrote handoff envelope for step %s: draft=%s, committed=%s",
+                    ctx.step_id,
+                    draft_handoff_path,
+                    committed_handoff_path,
+                )
 
                 events.append(
                     RunEvent(
@@ -674,8 +735,9 @@ class ClaudeStepEngine(LifecycleCapableEngine):
                         agent_key=agent_key,
                         payload={
                             "success": True,
-                            "status": finalize_result.envelope.get("status", "unknown"),
-                            "handoff_path": str(handoff_path),
+                            "status": envelope_data.get("status", "unknown"),
+                            "handoff_path": str(committed_handoff_path),
+                            "has_file_changes": "file_changes" in envelope_data,
                         },
                     )
                 )
@@ -687,17 +749,11 @@ class ClaudeStepEngine(LifecycleCapableEngine):
                 route_result = await session.route(routing_config=routing_config)
 
                 if route_result.success and route_result.signal:
-                    # Convert dict to RoutingSignal
+                    # Convert dict to RoutingSignal using centralized parser
                     signal_data = route_result.signal
-                    decision_str = signal_data.get("decision", "advance").lower()
-                    decision_map = {
-                        "advance": RoutingDecision.ADVANCE,
-                        "loop": RoutingDecision.LOOP,
-                        "terminate": RoutingDecision.TERMINATE,
-                        "branch": RoutingDecision.BRANCH,
-                    }
+                    decision_str = signal_data.get("decision", "advance")
                     routing_signal = RoutingSignal(
-                        decision=decision_map.get(decision_str, RoutingDecision.ADVANCE),
+                        decision=parse_routing_decision(decision_str),
                         next_step_id=signal_data.get("next_step_id"),
                         route=signal_data.get("route"),
                         reason=signal_data.get("reason", ""),
@@ -824,9 +880,11 @@ class ClaudeStepEngine(LifecycleCapableEngine):
         self, ctx: StepContext
     ) -> Tuple[StepResult, List[RunEvent], str]:
         """Async implementation of run_worker."""
+        # Prefer self.repo_root but fall back to ctx.repo_root
+        effective_repo_root = self.repo_root or ctx.repo_root
         return await run_worker_async(
             ctx=ctx,
-            repo_root=self.repo_root,
+            repo_root=effective_repo_root,
             profile_id=self._profile_id,
             build_prompt_fn=self._build_prompt,
             stats_db=self._stats_db,
@@ -839,11 +897,13 @@ class ClaudeStepEngine(LifecycleCapableEngine):
         work_summary: str,
     ) -> FinalizationResult:
         """Async implementation of finalize_step."""
+        # Prefer self.repo_root but fall back to ctx.repo_root
+        effective_repo_root = self.repo_root or ctx.repo_root
         return await finalize_step_async(
             ctx=ctx,
             step_result=step_result,
             work_summary=work_summary,
-            repo_root=self.repo_root,
+            repo_root=effective_repo_root,
         )
 
     async def _route_step_async(
@@ -852,10 +912,12 @@ class ClaudeStepEngine(LifecycleCapableEngine):
         handoff_data: Dict[str, Any],
     ) -> Optional[RoutingSignal]:
         """Async implementation of route_step."""
+        # Prefer self.repo_root but fall back to ctx.repo_root
+        effective_repo_root = self.repo_root or ctx.repo_root
         return await route_step_async(
             ctx=ctx,
             handoff_data=handoff_data,
-            repo_root=self.repo_root,
+            repo_root=effective_repo_root,
         )
 
     def _run_step_sdk(self, ctx: StepContext) -> Tuple[StepResult, Iterable[RunEvent]]:
