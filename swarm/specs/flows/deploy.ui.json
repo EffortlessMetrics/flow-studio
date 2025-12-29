@@ -1,0 +1,86 @@
+{
+  "$schema": "../schemas/flow_ui_overlay.schema.json",
+  "flow_id": "deploy",
+  "version": "1.0.0",
+  "nodes": {
+    "decide": {
+      "position": { "x": 100, "y": 200 },
+      "color": "node_highlight",
+      "collapsed": false,
+      "pinned": true
+    },
+    "monitor": {
+      "position": { "x": 300, "y": 200 },
+      "color": "node_highlight",
+      "collapsed": false,
+      "pinned": true
+    },
+    "smoke": {
+      "position": { "x": 500, "y": 200 },
+      "color": "node_highlight",
+      "collapsed": false,
+      "pinned": true
+    },
+    "finalize": {
+      "position": { "x": 700, "y": 200 },
+      "color": "node_highlight",
+      "collapsed": false,
+      "pinned": true
+    },
+    "report": {
+      "position": { "x": 900, "y": 200 },
+      "color": "node_highlight",
+      "collapsed": false,
+      "pinned": true
+    }
+  },
+  "edges": {},
+  "palette": {
+    "node_default": "#4a5568",
+    "node_highlight": "#38b2ac",
+    "node_active": "#4fd1c5",
+    "node_completed": "#2d3748",
+    "node_error": "#e53e3e",
+    "edge_default": "#718096",
+    "edge_loop": "#ed8936",
+    "edge_branch": "#4299e1",
+    "background": "#1a202c",
+    "grid": "#2d3748"
+  },
+  "canvas": {
+    "zoom": 1,
+    "pan": { "x": 0, "y": 0 },
+    "grid_size": 20,
+    "grid_visible": true,
+    "snap_to_grid": true
+  },
+  "groups": [
+    {
+      "id": "verification",
+      "label": "Deployment Verification",
+      "node_ids": ["monitor", "smoke", "finalize"],
+      "color": "#38b2ac80",
+      "collapsed": false
+    }
+  ],
+  "annotations": [
+    {
+      "id": "point_of_no_return",
+      "text": "Point of no return - PR merged here",
+      "position": { "x": 100, "y": 100 },
+      "style": {
+        "font_size": 12,
+        "color": "#fc8181"
+      }
+    },
+    {
+      "id": "status_note",
+      "text": "STABLE / INVESTIGATE / ROLLBACK / NOT_DEPLOYED",
+      "position": { "x": 700, "y": 280 },
+      "style": {
+        "font_size": 12,
+        "color": "#4fd1c5"
+      }
+    }
+  ]
+}

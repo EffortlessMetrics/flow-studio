@@ -5,12 +5,16 @@ The SpecManager is the ONLY component authorized to write spec files.
 It provides:
 - Schema validation via jsonschema
 - Atomic writes with backup
-- ETag-based concurrency control
+- ETag-based concurrency control (using spec_hash from canonical module)
 - Git integration (optional commit on save)
 - Compile-to-prompt-plan convenience methods
+- Shred/merge overlay behavior (flow.json + flow.ui.json)
 
 This module follows ADR-001 (spec-first architecture) and provides the
 central authority for all spec file operations.
+
+The spec store lives at swarm/specs/ (JSON-only runtime truth).
+Legacy swarm/spec/ (YAML) is supported for migration but deprecated.
 """
 
 from __future__ import annotations
@@ -28,11 +32,32 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import yaml
 
+# Import canonical JSON utilities
+try:
+    from swarm.runtime.spec_system.canonical import canonical_json, spec_hash
+    CANONICAL_AVAILABLE = True
+except ImportError:
+    CANONICAL_AVAILABLE = False
+    # Fallback implementations
+    def canonical_json(obj: Any, indent: int | None = None) -> str:
+        if indent is not None:
+            separators = (",", ": ")
+        else:
+            separators = (",", ":")
+        return json.dumps(obj, sort_keys=True, separators=separators, ensure_ascii=False, indent=indent)
+
+    def spec_hash(obj: Any, length: int = 12) -> str:
+        data = canonical_json(obj).encode("utf-8")
+        return hashlib.sha256(data).hexdigest()[:length]
+
+
 logger = logging.getLogger(__name__)
 
 # Default directories relative to repo root
-DEFAULT_SPEC_DIR = "swarm/spec"
+DEFAULT_SPEC_DIR = "swarm/spec"  # Legacy YAML location
+DEFAULT_SPECS_DIR = "swarm/specs"  # New JSON location (runtime truth)
 DEFAULT_FLOWS_SUBDIR = "flows"
+DEFAULT_STATIONS_SUBDIR = "stations"
 DEFAULT_TEMPLATES_SUBDIR = "templates"
 DEFAULT_SCHEMAS_SUBDIR = "schemas"
 
@@ -297,9 +322,15 @@ class SpecManager:
     - Atomic writes with backup
     - ETag-based concurrency control
     - Optional git integration
+    - Shred/merge overlay behavior (flow.json + flow.ui.json)
+
+    The spec store lives at swarm/specs/ (JSON-only runtime truth).
 
     Usage:
         manager = SpecManager(repo_root=Path("/path/to/repo"))
+
+        # Read specs (with overlay merge)
+        flow = manager.get_flow_with_ui("3-build")  # Merges flow.json + flow.ui.json
 
         # Read specs
         graph = manager.get_flow_graph("build-flow")
@@ -311,6 +342,9 @@ class SpecManager:
         # Write with concurrency control
         new_etag = manager.save_flow_graph("build-flow", graph_data, etag=old_etag)
 
+        # Write with shred (splits into flow.json + flow.ui.json)
+        manager.save_flow_with_ui("3-build", data, ui_data=ui_overlay)
+
         # Compile to prompt plan
         plan = manager.compile_to_prompt_plan("3-build")
     """
@@ -319,6 +353,7 @@ class SpecManager:
         self,
         repo_root: Optional[Path] = None,
         spec_dir: Optional[Path] = None,
+        specs_dir: Optional[Path] = None,
         enable_git: bool = False,
         backup_on_write: bool = True,
     ):
@@ -326,12 +361,14 @@ class SpecManager:
 
         Args:
             repo_root: Repository root path. If None, attempts to auto-detect.
-            spec_dir: Override for spec directory. If None, uses repo_root/swarm/spec.
+            spec_dir: Override for legacy spec directory (YAML). If None, uses repo_root/swarm/spec.
+            specs_dir: Override for new specs directory (JSON). If None, uses repo_root/swarm/specs.
             enable_git: If True, commit changes after saving specs.
             backup_on_write: If True, create .bak files before overwriting.
         """
         self._repo_root = self._resolve_repo_root(repo_root)
-        self._spec_dir = spec_dir or (self._repo_root / DEFAULT_SPEC_DIR)
+        self._spec_dir = spec_dir or (self._repo_root / DEFAULT_SPEC_DIR)  # Legacy
+        self._specs_dir = specs_dir or (self._repo_root / DEFAULT_SPECS_DIR)  # New JSON store
         self._enable_git = enable_git
         self._backup_on_write = backup_on_write
 
@@ -342,9 +379,9 @@ class SpecManager:
         self._jsonschema_available = self._check_jsonschema()
 
         logger.debug(
-            "SpecManager initialized: repo_root=%s, spec_dir=%s, git=%s",
+            "SpecManager initialized: repo_root=%s, specs_dir=%s, git=%s",
             self._repo_root,
-            self._spec_dir,
+            self._specs_dir,
             self._enable_git,
         )
 
@@ -387,25 +424,54 @@ class SpecManager:
 
     @property
     def spec_dir(self) -> Path:
-        """Get spec directory path."""
+        """Get legacy spec directory path (YAML)."""
         return self._spec_dir
 
+    @property
+    def specs_dir(self) -> Path:
+        """Get new specs directory path (JSON - runtime truth)."""
+        return self._specs_dir
+
     def _flows_dir(self) -> Path:
-        """Get flows directory."""
-        return self._spec_dir / DEFAULT_FLOWS_SUBDIR
+        """Get flows directory (new JSON store)."""
+        return self._specs_dir / DEFAULT_FLOWS_SUBDIR
+
+    def _stations_dir(self) -> Path:
+        """Get stations directory (new JSON store)."""
+        return self._specs_dir / DEFAULT_STATIONS_SUBDIR
 
     def _templates_dir(self) -> Path:
-        """Get templates directory."""
-        return self._spec_dir / DEFAULT_TEMPLATES_SUBDIR
+        """Get templates directory (new JSON store)."""
+        return self._specs_dir / DEFAULT_TEMPLATES_SUBDIR
 
     def _schemas_dir(self) -> Path:
-        """Get schemas directory."""
+        """Get schemas directory (new JSON store, fallback to legacy)."""
+        new_schemas = self._specs_dir / DEFAULT_SCHEMAS_SUBDIR
+        if new_schemas.exists():
+            return new_schemas
         return self._spec_dir / DEFAULT_SCHEMAS_SUBDIR
 
+    def _flow_path(self, flow_id: str) -> Path:
+        """Get path to flow JSON file."""
+        return self._flows_dir() / f"{flow_id}.json"
+
+    def _flow_ui_path(self, flow_id: str) -> Path:
+        """Get path to flow UI overlay file."""
+        return self._flows_dir() / f"{flow_id}.ui.json"
+
     def _flow_graph_path(self, flow_id: str) -> Path:
-        """Get path to flow graph file."""
-        # Flow graphs stored at: swarm/spec/flows/{flow_id}/graph.json
-        return self._flows_dir() / flow_id / "graph.json"
+        """Get path to flow graph file (legacy path structure)."""
+        # Legacy: swarm/spec/flows/{flow_id}/graph.json
+        # Check new location first
+        new_path = self._flows_dir() / f"{flow_id}.json"
+        if new_path.exists():
+            return new_path
+        # Fall back to legacy structure
+        return self._spec_dir / DEFAULT_FLOWS_SUBDIR / flow_id / "graph.json"
+
+    def _station_path(self, station_id: str) -> Path:
+        """Get path to station JSON file."""
+        return self._stations_dir() / f"{station_id}.json"
 
     def _template_path(self, template_id: str) -> Path:
         """Get path to template file."""
@@ -422,10 +488,20 @@ class SpecManager:
     # =========================================================================
 
     def _compute_etag(self, content: Union[str, bytes]) -> str:
-        """Compute SHA256 ETag from content."""
+        """Compute SHA256 ETag from content.
+
+        Uses the canonical spec_hash for deterministic hashing.
+        """
         if isinstance(content, str):
             content = content.encode("utf-8")
         return hashlib.sha256(content).hexdigest()
+
+    def _compute_data_etag(self, data: Dict[str, Any]) -> str:
+        """Compute ETag from data using canonical JSON serialization.
+
+        This ensures identical logical data produces identical ETags.
+        """
+        return spec_hash(data, length=64)
 
     def _compute_file_etag(self, path: Path) -> Optional[str]:
         """Compute ETag from file content."""
@@ -666,6 +742,32 @@ class SpecManager:
             for p in templates_dir.glob("*.json")
             if not p.name.startswith("_")
         )
+
+    def get_template(self, template_id: str) -> Tuple[Dict[str, Any], str]:
+        """Get a template as raw dict with ETag.
+
+        This is a convenience method for the API layer that returns the
+        template data as a dict (for JSON serialization) along with an ETag
+        for HTTP caching.
+
+        Args:
+            template_id: The template identifier (e.g., "microloop-writer").
+
+        Returns:
+            Tuple of (template_data_dict, etag_string).
+
+        Raises:
+            FileNotFoundError: If template not found.
+        """
+        path = self._template_path(template_id)
+        if not path.exists():
+            raise FileNotFoundError(f"Template not found: {template_id}")
+
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        etag = self._compute_file_etag(path)
+        return data, etag
 
     # =========================================================================
     # Writing Specs
@@ -947,6 +1049,182 @@ class SpecManager:
         }
 
     # =========================================================================
+    # Shred/Merge Overlay (flow.json + flow.ui.json)
+    # =========================================================================
+
+    def _deep_merge(self, base: Dict[str, Any], overlay: Dict[str, Any]) -> Dict[str, Any]:
+        """Deep merge overlay into base.
+
+        Arrays are replaced, not merged. Nested dicts are recursively merged.
+        """
+        result = base.copy()
+        for key, value in overlay.items():
+            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+                result[key] = self._deep_merge(result[key], value)
+            else:
+                result[key] = value
+        return result
+
+    def get_flow_with_ui(self, flow_id: str) -> Tuple[Dict[str, Any], Optional[str]]:
+        """Load a flow spec with UI overlay merged.
+
+        Reads flow.json and flow.ui.json, deep merges them.
+        Returns merged data and combined ETag.
+
+        Args:
+            flow_id: The flow identifier (e.g., "3-build").
+
+        Returns:
+            Tuple of (merged_data, combined_etag).
+
+        Raises:
+            SpecNotFoundError: If flow.json doesn't exist.
+        """
+        flow_path = self._flow_path(flow_id)
+        ui_path = self._flow_ui_path(flow_id)
+
+        if not flow_path.exists():
+            raise SpecNotFoundError("flow", flow_id, flow_path)
+
+        try:
+            with open(flow_path, "r", encoding="utf-8") as f:
+                flow_data = json.load(f)
+        except json.JSONDecodeError as e:
+            raise SpecValidationError(
+                "flow",
+                [ValidationError(path="", message=f"Invalid JSON: {e}")],
+            )
+
+        # Load UI overlay if it exists
+        ui_data = {}
+        if ui_path.exists():
+            try:
+                with open(ui_path, "r", encoding="utf-8") as f:
+                    ui_data = json.load(f)
+            except json.JSONDecodeError as e:
+                logger.warning("Invalid UI overlay JSON for %s: %s", flow_id, e)
+
+        # Merge
+        merged = self._deep_merge(flow_data, ui_data)
+
+        # Combined ETag from both files
+        flow_etag = self._compute_file_etag(flow_path) or ""
+        ui_etag = self._compute_file_etag(ui_path) or ""
+        combined_etag = self._compute_etag(f"{flow_etag}:{ui_etag}")
+
+        return merged, combined_etag
+
+    def save_flow_with_ui(
+        self,
+        flow_id: str,
+        data: Dict[str, Any],
+        ui_keys: Optional[List[str]] = None,
+        etag: Optional[str] = None,
+    ) -> Tuple[str, str]:
+        """Save a flow spec, shredding UI-only fields into flow.ui.json.
+
+        This supports the shred/merge pattern where:
+        - flow.json contains runtime-relevant data
+        - flow.ui.json contains UI-only overlays (positions, colors, etc.)
+
+        Args:
+            flow_id: The flow identifier.
+            data: The full flow data (will be split).
+            ui_keys: Keys to extract to UI overlay. Defaults to ["ui", "positions", "layout"].
+            etag: If provided, verify combined ETag matches.
+
+        Returns:
+            Tuple of (flow_etag, ui_etag).
+        """
+        if ui_keys is None:
+            ui_keys = ["ui", "positions", "layout", "style", "viewport"]
+
+        flow_path = self._flow_path(flow_id)
+        ui_path = self._flow_ui_path(flow_id)
+
+        # Check ETag for concurrency
+        if etag is not None:
+            _, current_etag = self.get_flow_with_ui(flow_id)
+            if current_etag and current_etag != etag:
+                raise ConcurrencyError("flow", flow_id, etag, current_etag)
+
+        # Split data
+        flow_data = {}
+        ui_data = {}
+
+        for key, value in data.items():
+            if key in ui_keys:
+                ui_data[key] = value
+            else:
+                flow_data[key] = value
+
+        # Ensure directories exist
+        flow_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Save flow.json using canonical JSON
+        flow_content = canonical_json(flow_data, indent=2) + "\n"
+        self._atomic_write(flow_path, flow_content, create_backup=self._backup_on_write)
+        flow_etag = self._compute_etag(flow_content)
+
+        # Save flow.ui.json only if there's UI data
+        ui_etag = ""
+        if ui_data:
+            ui_content = canonical_json(ui_data, indent=2) + "\n"
+            self._atomic_write(ui_path, ui_content, create_backup=self._backup_on_write)
+            ui_etag = self._compute_etag(ui_content)
+
+        logger.info(
+            "Saved flow with UI: %s (flow_etag: %s, ui_etag: %s)",
+            flow_id, flow_etag[:12], ui_etag[:12] if ui_etag else "none"
+        )
+
+        return flow_etag, ui_etag
+
+    def save_station(
+        self,
+        station_id: str,
+        data: Dict[str, Any],
+        etag: Optional[str] = None,
+    ) -> str:
+        """Save a station spec to the JSON store.
+
+        Args:
+            station_id: The station identifier.
+            data: The station data to save.
+            etag: If provided, verify this matches current ETag.
+
+        Returns:
+            New ETag after save.
+        """
+        # Validate
+        errors = self.validate_spec("station", data)
+        if errors:
+            raise SpecValidationError("station", errors)
+
+        path = self._station_path(station_id)
+
+        # Check ETag for concurrency control
+        if etag is not None:
+            current_etag = self._compute_file_etag(path)
+            if current_etag is not None and current_etag != etag:
+                raise ConcurrencyError("station", station_id, etag, current_etag)
+
+        # Ensure directory exists
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Serialize using canonical JSON
+        content = canonical_json(data, indent=2) + "\n"
+
+        # Atomic write
+        self._atomic_write(path, content, create_backup=self._backup_on_write)
+
+        # Compute new ETag
+        new_etag = self._compute_etag(content)
+
+        logger.info("Saved station: %s (etag: %s)", station_id, new_etag[:16])
+        return new_etag
+
+    # =========================================================================
     # Utility Methods
     # =========================================================================
 
@@ -1020,3 +1298,378 @@ def reset_manager() -> None:
     """Reset the default SpecManager (useful for testing)."""
     global _default_manager
     _default_manager = None
+
+
+# =============================================================================
+# FlowGraph Merge/Shred Functions (WP3)
+# =============================================================================
+
+
+class FlowSpecManager:
+    """Manager for FlowGraph logic and UI overlay files.
+
+    This class provides the merge/shred pattern for flow specs:
+    - merge_flow_with_overlay(): Combines logic graph + UI overlay for API response
+    - shred_flow_update(): Splits merged data back into separate files on save
+
+    API returns merged view to UI; on save, server shreds back to separate files.
+
+    The flow specs live at swarm/specs/flows/:
+    - {flow_id}.json - Logic graph (nodes, edges, metadata)
+    - {flow_id}.ui.json - UI overlay (positions, colors, canvas state)
+    """
+
+    def __init__(self, repo_root: Optional[Path] = None):
+        """Initialize the FlowSpecManager.
+
+        Args:
+            repo_root: Repository root path. If None, attempts to auto-detect.
+        """
+        self._manager = SpecManager(repo_root=repo_root)
+        self._flows_dir = self._manager.specs_dir / "flows"
+
+    @property
+    def flows_dir(self) -> Path:
+        """Get the flows directory path."""
+        return self._flows_dir
+
+    def list_flows(self) -> List[str]:
+        """List all available flow IDs.
+
+        Returns:
+            List of flow IDs (e.g., ["signal", "plan", "build", "gate", "deploy", "wisdom"]).
+        """
+        if not self._flows_dir.exists():
+            return []
+
+        flow_ids = set()
+        for json_file in self._flows_dir.glob("*.json"):
+            # Skip UI overlay files
+            if not json_file.name.endswith(".ui.json"):
+                flow_ids.add(json_file.stem)
+
+        return sorted(flow_ids)
+
+    def load_flow_graph(self, flow_id: str) -> Dict[str, Any]:
+        """Load just the logic graph (no UI overlay).
+
+        Args:
+            flow_id: The flow identifier (e.g., "signal").
+
+        Returns:
+            Flow graph data as dictionary.
+
+        Raises:
+            SpecNotFoundError: If flow graph doesn't exist.
+        """
+        path = self._flows_dir / f"{flow_id}.json"
+        if not path.exists():
+            raise SpecNotFoundError("flow_graph", flow_id, path)
+
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except json.JSONDecodeError as e:
+            raise SpecValidationError(
+                "flow_graph",
+                [ValidationError(path="", message=f"Invalid JSON: {e}")],
+            )
+
+    def load_ui_overlay(self, flow_id: str) -> Optional[Dict[str, Any]]:
+        """Load just the UI overlay.
+
+        Args:
+            flow_id: The flow identifier (e.g., "signal").
+
+        Returns:
+            UI overlay data as dictionary, or None if no overlay exists.
+        """
+        path = self._flows_dir / f"{flow_id}.ui.json"
+        if not path.exists():
+            return None
+
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except json.JSONDecodeError as e:
+            logger.warning("Invalid UI overlay JSON for %s: %s", flow_id, e)
+            return None
+
+    def merge_flow_with_overlay(self, flow_id: str) -> Tuple[Dict[str, Any], str]:
+        """Merge flow graph with UI overlay for API response.
+
+        This is the primary read operation for the UI. It combines:
+        - {flow_id}.json (logic graph: nodes, edges, routing)
+        - {flow_id}.ui.json (UI overlay: positions, colors, canvas state)
+
+        The merged result includes:
+        - All logic graph fields at top level
+        - UI overlay merged in (nodes get position/color from overlay)
+        - Combined ETag for concurrency control
+
+        Args:
+            flow_id: The flow identifier (e.g., "signal").
+
+        Returns:
+            Tuple of (merged_data, combined_etag).
+
+        Raises:
+            SpecNotFoundError: If flow graph doesn't exist.
+        """
+        flow_data = self.load_flow_graph(flow_id)
+        ui_data = self.load_ui_overlay(flow_id) or {}
+
+        # Deep merge UI overlay into flow data
+        merged = self._deep_merge_with_nodes(flow_data, ui_data)
+
+        # Compute combined ETag
+        flow_path = self._flows_dir / f"{flow_id}.json"
+        ui_path = self._flows_dir / f"{flow_id}.ui.json"
+
+        flow_etag = self._manager._compute_file_etag(flow_path) or ""
+        ui_etag = self._manager._compute_file_etag(ui_path) or ""
+        combined_etag = self._manager._compute_etag(f"{flow_etag}:{ui_etag}")
+
+        return merged, combined_etag
+
+    def _deep_merge_with_nodes(
+        self, flow_data: Dict[str, Any], ui_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Deep merge UI overlay into flow data, with special node handling.
+
+        For nodes array, we merge UI data by node ID to add positions/colors.
+        """
+        merged = flow_data.copy()
+
+        # Merge top-level UI-only keys
+        for key in ["palette", "canvas", "groups", "annotations"]:
+            if key in ui_data:
+                merged[key] = ui_data[key]
+
+        # Merge node-level UI data (positions, colors, etc.)
+        if "nodes" in ui_data and "nodes" in merged:
+            ui_nodes = ui_data["nodes"]
+            if isinstance(ui_nodes, dict):
+                # UI overlay uses {node_id: {position, color, ...}} format
+                for i, node in enumerate(merged["nodes"]):
+                    node_id = node.get("id")
+                    if node_id and node_id in ui_nodes:
+                        # Merge UI properties into node
+                        merged["nodes"][i] = {**node, **ui_nodes[node_id]}
+
+        # Merge edge-level UI data
+        if "edges" in ui_data and "edges" in merged:
+            ui_edges = ui_data["edges"]
+            if isinstance(ui_edges, dict):
+                # UI overlay uses {from:to: {color, waypoints, ...}} format
+                for i, edge in enumerate(merged["edges"]):
+                    edge_key = f"{edge.get('from')}:{edge.get('to')}"
+                    if edge_key in ui_edges:
+                        merged["edges"][i] = {**edge, **ui_edges[edge_key]}
+
+        return merged
+
+    def shred_flow_update(
+        self,
+        flow_id: str,
+        merged_data: Dict[str, Any],
+        etag: Optional[str] = None,
+    ) -> Tuple[str, str]:
+        """Split merged data back into logic graph and UI overlay files.
+
+        This is the primary write operation from the UI. It takes merged data
+        and shreds it into:
+        - {flow_id}.json (logic graph: nodes, edges, routing)
+        - {flow_id}.ui.json (UI overlay: positions, colors, canvas state)
+
+        Args:
+            flow_id: The flow identifier (e.g., "signal").
+            merged_data: The merged flow data from UI.
+            etag: Optional combined ETag for concurrency control.
+
+        Returns:
+            Tuple of (flow_etag, ui_etag).
+
+        Raises:
+            ConcurrencyError: If etag doesn't match current state.
+        """
+        # Check ETag for concurrency
+        if etag is not None:
+            _, current_etag = self.merge_flow_with_overlay(flow_id)
+            if current_etag != etag:
+                raise ConcurrencyError("flow", flow_id, etag, current_etag)
+
+        # Keys that belong in UI overlay
+        ui_top_level_keys = {"palette", "canvas", "groups", "annotations", "version"}
+        ui_node_keys = {"position", "size", "color", "icon", "collapsed", "pinned",
+                        "label_position", "custom_class"}
+        ui_edge_keys = {"color", "stroke_width", "stroke_style", "label_visible",
+                        "waypoints"}
+
+        # Split the data
+        flow_data: Dict[str, Any] = {}
+        ui_data: Dict[str, Any] = {"flow_id": flow_id}
+
+        for key, value in merged_data.items():
+            if key in ui_top_level_keys:
+                ui_data[key] = value
+            elif key == "nodes":
+                # Split node data
+                flow_nodes = []
+                ui_nodes = {}
+                for node in value:
+                    node_id = node.get("id")
+                    flow_node = {}
+                    ui_node = {}
+                    for nk, nv in node.items():
+                        if nk in ui_node_keys:
+                            ui_node[nk] = nv
+                        else:
+                            flow_node[nk] = nv
+                    flow_nodes.append(flow_node)
+                    if ui_node:
+                        ui_nodes[node_id] = ui_node
+                flow_data["nodes"] = flow_nodes
+                if ui_nodes:
+                    ui_data["nodes"] = ui_nodes
+            elif key == "edges":
+                # Split edge data
+                flow_edges = []
+                ui_edges = {}
+                for edge in value:
+                    edge_key = f"{edge.get('from')}:{edge.get('to')}"
+                    flow_edge = {}
+                    ui_edge = {}
+                    for ek, ev in edge.items():
+                        if ek in ui_edge_keys:
+                            ui_edge[ek] = ev
+                        else:
+                            flow_edge[ek] = ev
+                    flow_edges.append(flow_edge)
+                    if ui_edge:
+                        ui_edges[edge_key] = ui_edge
+                flow_data["edges"] = flow_edges
+                if ui_edges:
+                    ui_data["edges"] = ui_edges
+            else:
+                flow_data[key] = value
+
+        # Ensure directory exists
+        self._flows_dir.mkdir(parents=True, exist_ok=True)
+
+        # Write flow graph
+        flow_path = self._flows_dir / f"{flow_id}.json"
+        flow_content = json.dumps(flow_data, indent=2, ensure_ascii=False) + "\n"
+        self._manager._atomic_write(flow_path, flow_content)
+        flow_etag = self._manager._compute_etag(flow_content)
+
+        # Write UI overlay (only if there's UI data beyond flow_id)
+        ui_etag = ""
+        ui_path = self._flows_dir / f"{flow_id}.ui.json"
+        if len(ui_data) > 1:  # More than just flow_id
+            ui_content = json.dumps(ui_data, indent=2, ensure_ascii=False) + "\n"
+            self._manager._atomic_write(ui_path, ui_content)
+            ui_etag = self._manager._compute_etag(ui_content)
+
+        logger.info(
+            "Shredded flow update: %s (flow_etag: %s, ui_etag: %s)",
+            flow_id, flow_etag[:12], ui_etag[:12] if ui_etag else "none"
+        )
+
+        return flow_etag, ui_etag
+
+
+# =============================================================================
+# Module-Level FlowGraph Functions (WP3)
+# =============================================================================
+
+
+_default_flow_manager: Optional[FlowSpecManager] = None
+
+
+def get_flow_manager(repo_root: Optional[Path] = None) -> FlowSpecManager:
+    """Get or create the default FlowSpecManager.
+
+    Args:
+        repo_root: Optional repository root. If None, uses auto-detection.
+
+    Returns:
+        The FlowSpecManager instance.
+    """
+    global _default_flow_manager
+    if _default_flow_manager is None:
+        _default_flow_manager = FlowSpecManager(repo_root=repo_root)
+    return _default_flow_manager
+
+
+def merge_flow_with_overlay(flow_id: str) -> Tuple[Dict[str, Any], str]:
+    """Merge flow graph with UI overlay for API response.
+
+    Convenience function that uses the default FlowSpecManager.
+
+    Args:
+        flow_id: The flow identifier (e.g., "signal").
+
+    Returns:
+        Tuple of (merged_data, combined_etag).
+    """
+    return get_flow_manager().merge_flow_with_overlay(flow_id)
+
+
+def shred_flow_update(
+    flow_id: str,
+    merged_data: Dict[str, Any],
+    etag: Optional[str] = None,
+) -> Tuple[str, str]:
+    """Split merged data back into logic graph and UI overlay files.
+
+    Convenience function that uses the default FlowSpecManager.
+
+    Args:
+        flow_id: The flow identifier (e.g., "signal").
+        merged_data: The merged flow data from UI.
+        etag: Optional combined ETag for concurrency control.
+
+    Returns:
+        Tuple of (flow_etag, ui_etag).
+    """
+    return get_flow_manager().shred_flow_update(flow_id, merged_data, etag)
+
+
+def load_flow_graph(flow_id: str) -> Dict[str, Any]:
+    """Load just the flow logic graph (no UI overlay).
+
+    Convenience function that uses the default FlowSpecManager.
+
+    Args:
+        flow_id: The flow identifier (e.g., "signal").
+
+    Returns:
+        Flow graph data as dictionary.
+    """
+    return get_flow_manager().load_flow_graph(flow_id)
+
+
+def load_ui_overlay(flow_id: str) -> Optional[Dict[str, Any]]:
+    """Load just the UI overlay for a flow.
+
+    Convenience function that uses the default FlowSpecManager.
+
+    Args:
+        flow_id: The flow identifier (e.g., "signal").
+
+    Returns:
+        UI overlay data as dictionary, or None if no overlay exists.
+    """
+    return get_flow_manager().load_ui_overlay(flow_id)
+
+
+def list_flows() -> List[str]:
+    """List all available flow IDs.
+
+    Convenience function that uses the default FlowSpecManager.
+
+    Returns:
+        List of flow IDs.
+    """
+    return get_flow_manager().list_flows()

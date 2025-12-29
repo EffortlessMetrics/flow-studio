@@ -14,7 +14,11 @@ Usage:
         RoutingDecision, DecisionType, RoutingSignal, RoutingExplanation,
         RoutingFactor, EdgeOption, Elimination, LLMReasoning,
         CELEvaluation, MicroloopContext, DecisionMetrics,
+        # WP4: Bounded, auditable, cheap routing types
+        WP4EliminationEntry, WP4RoutingMetrics, WP4RoutingExplanation,
+        wp4_routing_explanation_to_dict, wp4_routing_explanation_from_dict,
         HandoffEnvelope, RunState,
+        InterruptionFrame, ResumePoint, InjectedNode,
         RunSpec, RunSummary, RunEvent, BackendCapabilities,
         generate_run_id,
         run_spec_to_dict, run_spec_from_dict,
@@ -24,6 +28,9 @@ Usage:
         routing_explanation_to_dict, routing_explanation_from_dict,
         handoff_envelope_to_dict, handoff_envelope_from_dict,
         run_state_to_dict, run_state_from_dict,
+        interruption_frame_to_dict, interruption_frame_from_dict,
+        resume_point_to_dict, resume_point_from_dict,
+        injected_node_to_dict, injected_node_from_dict,
     )
 """
 
@@ -178,6 +185,69 @@ class DecisionMetrics:
     edges_eliminated: int = 0
     llm_calls: int = 0
     cel_evaluations: int = 0
+
+
+# =============================================================================
+# WP4: Simplified Routing Explanation for Audit Trail
+# =============================================================================
+# The WP4 routing_explanation.schema.json uses a simpler format optimized for
+# audit trails. This coexists with the more detailed RoutingExplanation below.
+
+
+@dataclass
+class WP4EliminationEntry:
+    """Entry in the WP4 elimination log.
+
+    Attributes:
+        edge_id: ID of the eliminated edge.
+        reason: Why this edge was eliminated.
+        stage: At which stage the edge was eliminated.
+    """
+
+    edge_id: str
+    reason: str
+    stage: str  # "condition", "constraint", "priority", "llm_tiebreak"
+
+
+@dataclass
+class WP4RoutingMetrics:
+    """Metrics for WP4 routing explanation.
+
+    Attributes:
+        edges_considered: Total number of edges initially considered.
+        time_ms: Time taken for routing decision in milliseconds.
+        llm_tokens_used: Tokens used for LLM tiebreaker (if applicable).
+    """
+
+    edges_considered: int = 0
+    time_ms: float = 0.0
+    llm_tokens_used: int = 0
+
+
+@dataclass
+class WP4RoutingExplanation:
+    """WP4-compliant routing explanation for bounded, auditable, cheap routing.
+
+    This dataclass matches the WP4 routing_explanation.schema.json format,
+    providing a simpler structure optimized for audit trails.
+
+    Attributes:
+        decision: Human-readable summary of the routing decision.
+        method: How the decision was made (deterministic, llm_tiebreak, no_candidates).
+        selected_edge: ID of the selected edge (or empty string if flow terminates).
+        candidates_evaluated: Number of candidate edges that were evaluated.
+        elimination_log: Log of edges eliminated during routing and why.
+        llm_reasoning: LLM's explanation when llm_tiebreak was used.
+        metrics: Timing and cost metrics for the routing decision.
+    """
+
+    decision: str
+    method: str  # "deterministic", "llm_tiebreak", "no_candidates"
+    selected_edge: str
+    candidates_evaluated: int = 0
+    elimination_log: List[WP4EliminationEntry] = field(default_factory=list)
+    llm_reasoning: Optional[str] = None
+    metrics: Optional[WP4RoutingMetrics] = None
 
 
 @dataclass
@@ -785,6 +855,89 @@ def routing_explanation_from_dict(data: Dict[str, Any]) -> RoutingExplanation:
     )
 
 
+# -----------------------------------------------------------------------------
+# WP4 Routing Explanation Serialization
+# -----------------------------------------------------------------------------
+
+
+def wp4_routing_explanation_to_dict(explanation: WP4RoutingExplanation) -> Dict[str, Any]:
+    """Convert WP4RoutingExplanation to a dictionary for serialization.
+
+    Args:
+        explanation: The WP4RoutingExplanation to convert.
+
+    Returns:
+        Dictionary representation matching routing_explanation.schema.json.
+    """
+    result: Dict[str, Any] = {
+        "decision": explanation.decision,
+        "method": explanation.method,
+        "selected_edge": explanation.selected_edge,
+        "candidates_evaluated": explanation.candidates_evaluated,
+    }
+
+    if explanation.elimination_log:
+        result["elimination_log"] = [
+            {
+                "edge_id": e.edge_id,
+                "reason": e.reason,
+                "stage": e.stage,
+            }
+            for e in explanation.elimination_log
+        ]
+
+    if explanation.llm_reasoning:
+        result["llm_reasoning"] = explanation.llm_reasoning
+
+    if explanation.metrics:
+        result["metrics"] = {
+            "edges_considered": explanation.metrics.edges_considered,
+            "time_ms": explanation.metrics.time_ms,
+        }
+        if explanation.metrics.llm_tokens_used:
+            result["metrics"]["llm_tokens_used"] = explanation.metrics.llm_tokens_used
+
+    return result
+
+
+def wp4_routing_explanation_from_dict(data: Dict[str, Any]) -> WP4RoutingExplanation:
+    """Parse WP4RoutingExplanation from a dictionary.
+
+    Args:
+        data: Dictionary with WP4RoutingExplanation fields.
+
+    Returns:
+        Parsed WP4RoutingExplanation instance.
+    """
+    elimination_log = [
+        WP4EliminationEntry(
+            edge_id=e.get("edge_id", ""),
+            reason=e.get("reason", ""),
+            stage=e.get("stage", "condition"),
+        )
+        for e in data.get("elimination_log", [])
+    ]
+
+    metrics = None
+    if "metrics" in data:
+        m = data["metrics"]
+        metrics = WP4RoutingMetrics(
+            edges_considered=m.get("edges_considered", 0),
+            time_ms=m.get("time_ms", 0.0),
+            llm_tokens_used=m.get("llm_tokens_used", 0),
+        )
+
+    return WP4RoutingExplanation(
+        decision=data.get("decision", ""),
+        method=data.get("method", "deterministic"),
+        selected_edge=data.get("selected_edge", ""),
+        candidates_evaluated=data.get("candidates_evaluated", 0),
+        elimination_log=elimination_log,
+        llm_reasoning=data.get("llm_reasoning"),
+        metrics=metrics,
+    )
+
+
 def routing_signal_to_dict(signal: RoutingSignal) -> Dict[str, Any]:
     """Convert RoutingSignal to a dictionary for serialization.
 
@@ -932,16 +1085,85 @@ def handoff_envelope_from_dict(data: Dict[str, Any]) -> HandoffEnvelope:
 
 
 # -----------------------------------------------------------------------------
-# RunState Serialization (for durable program counter)
+# RunState Serialization (for durable program counter with detour support)
 # -----------------------------------------------------------------------------
 
 
 @dataclass
+class InterruptionFrame:
+    """Frame representing an interruption point in the execution stack.
+
+    When a run is interrupted (for a detour, human intervention, or pause),
+    an InterruptionFrame is pushed to the stack to enable resumption.
+
+    Attributes:
+        reason: Human-readable reason for the interruption.
+        interrupted_at: Timestamp when the interruption occurred.
+        return_node: Node ID to return to after the detour completes.
+        context_snapshot: Snapshot of execution context at interruption time.
+    """
+
+    reason: str
+    interrupted_at: datetime
+    return_node: str
+    context_snapshot: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ResumePoint:
+    """A saved resume point for continuation after interruption.
+
+    Resume points allow the orchestrator to continue execution from
+    a specific node with restored context after a detour completes.
+
+    Attributes:
+        node_id: Node ID to resume execution at.
+        saved_context: Execution context saved at the resume point.
+    """
+
+    node_id: str
+    saved_context: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class InjectedNode:
+    """Specification for a dynamically injected node.
+
+    Injected nodes are added to the execution graph at runtime,
+    typically for detour handling or dynamic workflow modifications.
+
+    Attributes:
+        node_id: Unique identifier for the injected node.
+        agent_key: The agent to execute at this node.
+        role: Human-readable role/purpose of this node.
+        insert_after: Node ID after which to insert this node.
+        insert_before: Node ID before which to insert this node (alternative).
+        params: Additional parameters for the node execution.
+        routing_override: Optional routing to use instead of default.
+    """
+
+    node_id: str
+    agent_key: str
+    role: str = ""
+    insert_after: Optional[str] = None
+    insert_before: Optional[str] = None
+    params: Dict[str, Any] = field(default_factory=dict)
+    routing_override: Optional[Dict[str, Any]] = None
+
+
+@dataclass
 class RunState:
-    """Durable program counter for stepwise flow execution.
+    """Durable program counter for stepwise flow execution with detour support.
 
     Tracks current execution state of a run, enabling resumption
-    from any step after process restart.
+    from any step after process restart. Supports interruption stacks
+    for nested detours and resume points for continuation.
+
+    The detour mechanism allows:
+    - Pausing execution at any point
+    - Injecting additional nodes into the flow
+    - Resuming from where execution left off
+    - Nested detours (detour within a detour)
 
     Attributes:
         run_id: The run identifier.
@@ -950,10 +1172,15 @@ class RunState:
         step_index: The 0-based index of current step in the flow.
         loop_state: Dictionary tracking iteration counts per microloop.
         handoff_envelopes: Map of step_id to HandoffEnvelope for completed steps.
-        status: Current run status (pending, running, succeeded, failed, canceled).
+        status: Current run status (pending, running, succeeded, failed, canceled,
+                paused, interrupted).
         timestamp: ISO 8601 timestamp when this state was last updated.
         current_flow_index: 1-based index of the current flow (1=signal, 6=wisdom).
         flow_transition_history: Ordered list of flow transitions with metadata.
+        interruption_stack: Stack of interruption frames for nested detours.
+        resume_stack: Stack of resume points for continuation after interruption.
+        injected_nodes: List of dynamically injected node IDs.
+        completed_nodes: List of node IDs that have completed execution.
     """
 
     run_id: str
@@ -967,6 +1194,256 @@ class RunState:
     # Flow tracking fields for macro-routing
     current_flow_index: int = 1
     flow_transition_history: List[Dict[str, Any]] = field(default_factory=list)
+    # Detour support: interruption and resume stacks
+    interruption_stack: List[InterruptionFrame] = field(default_factory=list)
+    resume_stack: List[ResumePoint] = field(default_factory=list)
+    injected_nodes: List[str] = field(default_factory=list)
+    completed_nodes: List[str] = field(default_factory=list)
+
+    # -------------------------------------------------------------------------
+    # Detour Stack Operations
+    # -------------------------------------------------------------------------
+
+    def push_interruption(
+        self,
+        reason: str,
+        return_node: str,
+        context_snapshot: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Push an interruption frame onto the stack.
+
+        Call this when pausing execution for a detour. The return_node
+        specifies where to continue after the detour completes.
+
+        Args:
+            reason: Human-readable reason for the interruption.
+            return_node: Node ID to return to after detour.
+            context_snapshot: Optional context to restore on resume.
+        """
+        frame = InterruptionFrame(
+            reason=reason,
+            interrupted_at=datetime.now(timezone.utc),
+            return_node=return_node,
+            context_snapshot=context_snapshot or {},
+        )
+        self.interruption_stack.append(frame)
+        self.timestamp = datetime.now(timezone.utc)
+
+    def pop_interruption(self) -> Optional[InterruptionFrame]:
+        """Pop the most recent interruption frame from the stack.
+
+        Returns:
+            The popped InterruptionFrame, or None if stack is empty.
+        """
+        if not self.interruption_stack:
+            return None
+        frame = self.interruption_stack.pop()
+        self.timestamp = datetime.now(timezone.utc)
+        return frame
+
+    def peek_interruption(self) -> Optional[InterruptionFrame]:
+        """Peek at the top of the interruption stack without popping.
+
+        Returns:
+            The top InterruptionFrame, or None if stack is empty.
+        """
+        if not self.interruption_stack:
+            return None
+        return self.interruption_stack[-1]
+
+    def push_resume(
+        self,
+        node_id: str,
+        saved_context: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Push a resume point onto the stack.
+
+        Call this when saving a point to return to after completing
+        injected nodes or detour processing.
+
+        Args:
+            node_id: Node ID to resume at.
+            saved_context: Context to restore when resuming.
+        """
+        point = ResumePoint(
+            node_id=node_id,
+            saved_context=saved_context or {},
+        )
+        self.resume_stack.append(point)
+        self.timestamp = datetime.now(timezone.utc)
+
+    def pop_resume(self) -> Optional[ResumePoint]:
+        """Pop the most recent resume point from the stack.
+
+        Returns:
+            The popped ResumePoint, or None if stack is empty.
+        """
+        if not self.resume_stack:
+            return None
+        point = self.resume_stack.pop()
+        self.timestamp = datetime.now(timezone.utc)
+        return point
+
+    def peek_resume(self) -> Optional[ResumePoint]:
+        """Peek at the top of the resume stack without popping.
+
+        Returns:
+            The top ResumePoint, or None if stack is empty.
+        """
+        if not self.resume_stack:
+            return None
+        return self.resume_stack[-1]
+
+    def add_injected_node(self, node_id: str) -> None:
+        """Add a dynamically injected node ID to the list.
+
+        Args:
+            node_id: The ID of the injected node.
+        """
+        if node_id not in self.injected_nodes:
+            self.injected_nodes.append(node_id)
+            self.timestamp = datetime.now(timezone.utc)
+
+    def mark_node_completed(self, node_id: str) -> None:
+        """Mark a node as completed.
+
+        Args:
+            node_id: The ID of the completed node.
+        """
+        if node_id not in self.completed_nodes:
+            self.completed_nodes.append(node_id)
+            self.timestamp = datetime.now(timezone.utc)
+
+    def is_node_completed(self, node_id: str) -> bool:
+        """Check if a node has been completed.
+
+        Args:
+            node_id: The node ID to check.
+
+        Returns:
+            True if the node has been completed.
+        """
+        return node_id in self.completed_nodes
+
+    def is_interrupted(self) -> bool:
+        """Check if the run is currently in an interrupted state.
+
+        Returns:
+            True if there are pending interruptions on the stack.
+        """
+        return len(self.interruption_stack) > 0
+
+    def get_interruption_depth(self) -> int:
+        """Get the current depth of nested interruptions.
+
+        Returns:
+            The number of interruption frames on the stack.
+        """
+        return len(self.interruption_stack)
+
+
+def interruption_frame_to_dict(frame: InterruptionFrame) -> Dict[str, Any]:
+    """Convert InterruptionFrame to a dictionary for serialization.
+
+    Args:
+        frame: The InterruptionFrame to convert.
+
+    Returns:
+        Dictionary representation suitable for JSON serialization.
+    """
+    return {
+        "reason": frame.reason,
+        "interrupted_at": _datetime_to_iso(frame.interrupted_at),
+        "return_node": frame.return_node,
+        "context_snapshot": dict(frame.context_snapshot),
+    }
+
+
+def interruption_frame_from_dict(data: Dict[str, Any]) -> InterruptionFrame:
+    """Parse InterruptionFrame from a dictionary.
+
+    Args:
+        data: Dictionary with InterruptionFrame fields.
+
+    Returns:
+        Parsed InterruptionFrame instance.
+    """
+    return InterruptionFrame(
+        reason=data.get("reason", ""),
+        interrupted_at=_iso_to_datetime(data.get("interrupted_at")) or datetime.now(timezone.utc),
+        return_node=data.get("return_node", ""),
+        context_snapshot=dict(data.get("context_snapshot", {})),
+    )
+
+
+def resume_point_to_dict(point: ResumePoint) -> Dict[str, Any]:
+    """Convert ResumePoint to a dictionary for serialization.
+
+    Args:
+        point: The ResumePoint to convert.
+
+    Returns:
+        Dictionary representation suitable for JSON serialization.
+    """
+    return {
+        "node_id": point.node_id,
+        "saved_context": dict(point.saved_context),
+    }
+
+
+def resume_point_from_dict(data: Dict[str, Any]) -> ResumePoint:
+    """Parse ResumePoint from a dictionary.
+
+    Args:
+        data: Dictionary with ResumePoint fields.
+
+    Returns:
+        Parsed ResumePoint instance.
+    """
+    return ResumePoint(
+        node_id=data.get("node_id", ""),
+        saved_context=dict(data.get("saved_context", {})),
+    )
+
+
+def injected_node_to_dict(node: InjectedNode) -> Dict[str, Any]:
+    """Convert InjectedNode to a dictionary for serialization.
+
+    Args:
+        node: The InjectedNode to convert.
+
+    Returns:
+        Dictionary representation suitable for JSON serialization.
+    """
+    return {
+        "node_id": node.node_id,
+        "agent_key": node.agent_key,
+        "role": node.role,
+        "insert_after": node.insert_after,
+        "insert_before": node.insert_before,
+        "params": dict(node.params),
+        "routing_override": node.routing_override,
+    }
+
+
+def injected_node_from_dict(data: Dict[str, Any]) -> InjectedNode:
+    """Parse InjectedNode from a dictionary.
+
+    Args:
+        data: Dictionary with InjectedNode fields.
+
+    Returns:
+        Parsed InjectedNode instance.
+    """
+    return InjectedNode(
+        node_id=data.get("node_id", ""),
+        agent_key=data.get("agent_key", ""),
+        role=data.get("role", ""),
+        insert_after=data.get("insert_after"),
+        insert_before=data.get("insert_before"),
+        params=dict(data.get("params", {})),
+        routing_override=data.get("routing_override"),
+    )
 
 
 def run_state_to_dict(state: RunState) -> Dict[str, Any]:
@@ -981,7 +1458,11 @@ def run_state_to_dict(state: RunState) -> Dict[str, Any]:
     return {
         "run_id": state.run_id,
         "flow_key": state.flow_key,
+        # Also include flow_id for schema compatibility
+        "flow_id": state.flow_key,
         "current_step_id": state.current_step_id,
+        # Also include current_node for schema compatibility
+        "current_node": state.current_step_id,
         "step_index": state.step_index,
         "loop_state": dict(state.loop_state),
         "handoff_envelopes": {
@@ -993,6 +1474,22 @@ def run_state_to_dict(state: RunState) -> Dict[str, Any]:
         # Flow tracking fields
         "current_flow_index": state.current_flow_index,
         "flow_transition_history": list(state.flow_transition_history),
+        # Detour support fields
+        "interruption_stack": [
+            interruption_frame_to_dict(frame)
+            for frame in state.interruption_stack
+        ],
+        "resume_stack": [
+            resume_point_to_dict(point)
+            for point in state.resume_stack
+        ],
+        "injected_nodes": list(state.injected_nodes),
+        "completed_nodes": list(state.completed_nodes),
+        # Schema-compatible aliases
+        "artifacts": {
+            step_id: env.artifacts if hasattr(env, 'artifacts') else {}
+            for step_id, env in state.handoff_envelopes.items()
+        },
     }
 
 
@@ -1007,7 +1504,7 @@ def run_state_from_dict(data: Dict[str, Any]) -> RunState:
 
     Note:
         Provides backwards compatibility for states missing the new
-        current_flow_index and flow_transition_history fields.
+        detour support fields (interruption_stack, resume_stack, etc.).
     """
     envelopes_data = data.get("handoff_envelopes", {})
     handoff_envelopes = {
@@ -1015,10 +1512,30 @@ def run_state_from_dict(data: Dict[str, Any]) -> RunState:
         for step_id, env_data in envelopes_data.items()
     }
 
+    # Parse interruption stack
+    interruption_stack_data = data.get("interruption_stack", [])
+    interruption_stack = [
+        interruption_frame_from_dict(frame_data)
+        for frame_data in interruption_stack_data
+    ]
+
+    # Parse resume stack
+    resume_stack_data = data.get("resume_stack", [])
+    resume_stack = [
+        resume_point_from_dict(point_data)
+        for point_data in resume_stack_data
+    ]
+
+    # Handle both flow_key and flow_id for compatibility
+    flow_key = data.get("flow_key") or data.get("flow_id", "")
+
+    # Handle both current_step_id and current_node for compatibility
+    current_step_id = data.get("current_step_id") or data.get("current_node")
+
     return RunState(
         run_id=data.get("run_id", ""),
-        flow_key=data.get("flow_key", ""),
-        current_step_id=data.get("current_step_id"),
+        flow_key=flow_key,
+        current_step_id=current_step_id,
         step_index=data.get("step_index", 0),
         loop_state=dict(data.get("loop_state", {})),
         handoff_envelopes=handoff_envelopes,
@@ -1027,4 +1544,9 @@ def run_state_from_dict(data: Dict[str, Any]) -> RunState:
         # Flow tracking fields (backward compatible defaults)
         current_flow_index=data.get("current_flow_index", 1),
         flow_transition_history=list(data.get("flow_transition_history", [])),
+        # Detour support fields (backward compatible defaults)
+        interruption_stack=interruption_stack,
+        resume_stack=resume_stack,
+        injected_nodes=list(data.get("injected_nodes", [])),
+        completed_nodes=list(data.get("completed_nodes", [])),
     )

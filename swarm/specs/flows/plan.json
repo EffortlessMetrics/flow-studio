@@ -1,0 +1,126 @@
+{
+  "$schema": "../schemas/flow_graph.schema.json",
+  "id": "plan",
+  "name": "Plan",
+  "version": "1.0.0",
+  "nodes": [
+    {
+      "id": "impact",
+      "agents": ["impact-analyzer"],
+      "role": "Analyze cross-cutting impact of changes -> impact_map.json with file/module focus areas.",
+      "objective": "Map affected modules and dependencies",
+      "inputs": ["RUN_BASE/signal/requirements.md", "RUN_BASE/signal/bdd_scenarios.md", "RUN_BASE/signal/scope_assessment.md", "existing codebase"],
+      "outputs": ["RUN_BASE/plan/impact_map.json"]
+    },
+    {
+      "id": "options",
+      "agents": ["design-optioneer"],
+      "role": "Propose 2-3 architecture options with trade-offs -> design_options.md.",
+      "objective": "Generate viable design alternatives",
+      "inputs": ["RUN_BASE/plan/impact_map.json", "RUN_BASE/signal/requirements.md", "RUN_BASE/signal/problem_statement.md"],
+      "outputs": ["RUN_BASE/plan/design_options.md"]
+    },
+    {
+      "id": "adr",
+      "agents": ["adr-author"],
+      "role": "Write Architecture Decision Record for chosen design -> adr.md with context, decision, consequences.",
+      "objective": "Document design decision with rationale",
+      "teaching_note": "The ADR is the single source of truth for design decisions. It captures WHY a design was chosen, not just WHAT. Flow 3 agents must follow the ADR strictly.",
+      "teaching_highlight": true,
+      "inputs": ["RUN_BASE/plan/design_options.md", "RUN_BASE/plan/impact_map.json", "RUN_BASE/signal/requirements.md"],
+      "outputs": ["RUN_BASE/plan/adr.md"]
+    },
+    {
+      "id": "interface",
+      "agents": ["interface-designer"],
+      "role": "Define API contracts, data models, migrations -> api_contracts.yaml, schema.md.",
+      "objective": "Specify component boundaries and contracts",
+      "teaching_note": "Contracts define the boundaries between components. The Gate flow (Flow 4) will verify implementation matches these contracts exactly.",
+      "teaching_highlight": true,
+      "inputs": ["RUN_BASE/plan/adr.md", "RUN_BASE/signal/requirements.md", "existing API contracts"],
+      "outputs": ["RUN_BASE/plan/api_contracts.yaml", "RUN_BASE/plan/interface_spec.md", "RUN_BASE/plan/schema.md"]
+    },
+    {
+      "id": "observability",
+      "agents": ["observability-designer"],
+      "role": "Define metrics, logs, traces, SLOs -> observability_spec.md.",
+      "objective": "Plan monitoring and observability",
+      "inputs": ["RUN_BASE/plan/adr.md", "RUN_BASE/plan/api_contracts.yaml", "RUN_BASE/signal/requirements.md"],
+      "outputs": ["RUN_BASE/plan/observability_spec.md"]
+    },
+    {
+      "id": "test_strategy",
+      "agents": ["test-strategist"],
+      "role": "Map BDD scenarios to test types, coverage targets -> test_plan.md.",
+      "objective": "Define testing approach and coverage goals",
+      "inputs": ["RUN_BASE/signal/bdd_scenarios.md", "RUN_BASE/plan/adr.md", "RUN_BASE/plan/api_contracts.yaml"],
+      "outputs": ["RUN_BASE/plan/test_plan.md"]
+    },
+    {
+      "id": "work",
+      "agents": ["work-planner"],
+      "role": "Break design into subtasks, define rollout strategy -> work_plan.md.",
+      "objective": "Create actionable implementation tasks",
+      "inputs": ["RUN_BASE/plan/adr.md", "RUN_BASE/plan/test_plan.md", "RUN_BASE/plan/api_contracts.yaml", "RUN_BASE/signal/scope_assessment.md"],
+      "outputs": ["RUN_BASE/plan/work_plan.md"]
+    },
+    {
+      "id": "design_critique",
+      "agents": ["design-critic"],
+      "role": "Validate design vs constraints and requirements -> design_critique.md.",
+      "objective": "Ensure design soundness before implementation",
+      "teaching_note": "The design critic ensures the plan is sound before implementation begins. Catching design flaws here is far cheaper than fixing them in code.",
+      "teaching_highlight": true,
+      "inputs": ["RUN_BASE/plan/adr.md", "RUN_BASE/plan/api_contracts.yaml", "RUN_BASE/plan/test_plan.md", "RUN_BASE/plan/work_plan.md", "RUN_BASE/signal/requirements.md"],
+      "outputs": ["RUN_BASE/plan/design_critique.md"]
+    }
+  ],
+  "edges": [
+    {
+      "from": "impact",
+      "to": "options",
+      "kind": "next"
+    },
+    {
+      "from": "options",
+      "to": "adr",
+      "kind": "next"
+    },
+    {
+      "from": "adr",
+      "to": "interface",
+      "kind": "next"
+    },
+    {
+      "from": "interface",
+      "to": "observability",
+      "kind": "next"
+    },
+    {
+      "from": "observability",
+      "to": "test_strategy",
+      "kind": "next"
+    },
+    {
+      "from": "test_strategy",
+      "to": "work",
+      "kind": "next"
+    },
+    {
+      "from": "work",
+      "to": "design_critique",
+      "kind": "next"
+    }
+  ],
+  "entry_node": "impact",
+  "exit_nodes": ["design_critique"],
+  "cross_cutting": ["clarifier", "risk-analyst", "policy-analyst", "gh-reporter"],
+  "metadata": {
+    "title": "Flow 2 - Spec -> Design (Planning)",
+    "description": "Requirements -> ADR, contracts, observability spec, test/work plans, design validation.",
+    "teaching": {
+      "title": "Spec to Design: Architecture Decisions and Contracts",
+      "summary": "This flow transforms requirements into concrete design decisions documented in an ADR (Architecture Decision Record). The ADR becomes the authoritative guide for Flow 3 implementation, and contracts define the boundaries that the Gate flow will enforce."
+    }
+  }
+}

@@ -28,11 +28,13 @@ import json
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from swarm.config.flow_registry import TeachingNotes, get_flow_steps
-from swarm.runtime.engines import StepContext
 from swarm.runtime.types import HandoffEnvelope, RunState, handoff_envelope_from_dict
+
+if TYPE_CHECKING:
+    from swarm.runtime.engines import StepContext
 
 # Module logger
 logger = logging.getLogger(__name__)
@@ -114,7 +116,7 @@ class ContextPack:
 
 
 def build_context_pack(
-    ctx: StepContext,
+    ctx: "StepContext",
     run_state: Optional[RunState] = None,
     repo_root: Optional[Path] = None,
 ) -> ContextPack:

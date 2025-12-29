@@ -1,0 +1,111 @@
+{
+  "$schema": "../schemas/flow_graph.schema.json",
+  "id": "signal",
+  "name": "Signal",
+  "version": "1.0.0",
+  "nodes": [
+    {
+      "id": "normalize",
+      "agents": ["signal-normalizer"],
+      "role": "Parse raw input, find related context -> issue_normalized.md, context_brief.md.",
+      "objective": "Transform unstructured input into normalized format",
+      "inputs": ["raw issue/ticket/conversation", "existing codebase context"],
+      "outputs": ["RUN_BASE/signal/issue_normalized.md", "RUN_BASE/signal/context_brief.md"]
+    },
+    {
+      "id": "frame",
+      "agents": ["problem-framer"],
+      "role": "Synthesize normalized signal -> problem_statement.md with clear success criteria.",
+      "objective": "Define problem scope and success criteria",
+      "inputs": ["RUN_BASE/signal/issue_normalized.md", "RUN_BASE/signal/context_brief.md"],
+      "outputs": ["RUN_BASE/signal/problem_statement.md"]
+    },
+    {
+      "id": "author_reqs",
+      "agents": ["requirements-author"],
+      "role": "Write functional + non-functional requirements -> requirements.md following structured template.",
+      "objective": "Draft testable requirements",
+      "teaching_note": "The requirements author writes the first draft. Watch how functional and non-functional requirements are separated and structured for testability.",
+      "teaching_highlight": true,
+      "inputs": ["RUN_BASE/signal/problem_statement.md", "RUN_BASE/signal/context_brief.md", "RUN_BASE/signal/requirements_critique.md"],
+      "outputs": ["RUN_BASE/signal/requirements.md"]
+    },
+    {
+      "id": "critique_reqs",
+      "agents": ["requirements-critic"],
+      "role": "Harsh review of requirements vs completeness, feasibility, testability -> requirements_critique.md.",
+      "objective": "Validate requirements quality via adversarial review",
+      "teaching_note": "MICROLOOP: The critic provides harsh feedback but never fixes. The author-critic loop continues until Status=VERIFIED or can_further_iteration_help=no.",
+      "teaching_highlight": true,
+      "inputs": ["RUN_BASE/signal/requirements.md", "RUN_BASE/signal/problem_statement.md"],
+      "outputs": ["RUN_BASE/signal/requirements_critique.md"]
+    },
+    {
+      "id": "author_bdd",
+      "agents": ["bdd-author"],
+      "role": "Turn verified requirements into executable BDD scenarios -> features/*.feature.",
+      "objective": "Create executable behavior specifications",
+      "teaching_note": "BDD scenarios become the executable contract that drives Flow 3 testing. Well-written Gherkin here saves significant rework downstream.",
+      "teaching_highlight": true,
+      "inputs": ["RUN_BASE/signal/requirements.md", "RUN_BASE/signal/problem_statement.md"],
+      "outputs": ["RUN_BASE/signal/bdd_scenarios.md", "features/*.feature"]
+    },
+    {
+      "id": "scope",
+      "agents": ["scope-assessor"],
+      "role": "Assess stakeholders, constraints, risks, effort estimate -> scope_assessment.md.",
+      "objective": "Define scope boundaries and initial risk assessment",
+      "inputs": ["RUN_BASE/signal/requirements.md", "RUN_BASE/signal/bdd_scenarios.md", "RUN_BASE/signal/problem_statement.md", "RUN_BASE/signal/context_brief.md"],
+      "outputs": ["RUN_BASE/signal/scope_assessment.md", "RUN_BASE/signal/risk_assessment.md"]
+    }
+  ],
+  "edges": [
+    {
+      "from": "normalize",
+      "to": "frame",
+      "kind": "next"
+    },
+    {
+      "from": "frame",
+      "to": "author_reqs",
+      "kind": "next"
+    },
+    {
+      "from": "author_reqs",
+      "to": "critique_reqs",
+      "kind": "next"
+    },
+    {
+      "from": "critique_reqs",
+      "to": "author_reqs",
+      "kind": "loop",
+      "condition": "status == 'UNVERIFIED' && can_further_iteration_help == true",
+      "label": "Revise",
+      "priority": 1
+    },
+    {
+      "from": "critique_reqs",
+      "to": "author_bdd",
+      "kind": "next",
+      "condition": "status == 'VERIFIED' || can_further_iteration_help == false",
+      "label": "Proceed",
+      "priority": 0
+    },
+    {
+      "from": "author_bdd",
+      "to": "scope",
+      "kind": "next"
+    }
+  ],
+  "entry_node": "normalize",
+  "exit_nodes": ["scope"],
+  "cross_cutting": ["clarifier", "risk-analyst", "gh-reporter"],
+  "metadata": {
+    "title": "Flow 1 - Signal -> Spec (Shaping)",
+    "description": "Raw input -> problem statement, requirements, BDD scenarios, early risk assessment.",
+    "teaching": {
+      "title": "Signal to Spec: Shaping Raw Input into Requirements",
+      "summary": "This flow transforms vague signals (bug reports, feature requests, stakeholder conversations) into structured, testable requirements with BDD scenarios. The key pattern is the adversarial microloop between author and critic."
+    }
+  }
+}

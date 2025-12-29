@@ -1,0 +1,90 @@
+{
+  "$schema": "../schemas/flow_ui_overlay.schema.json",
+  "flow_id": "signal",
+  "version": "1.0.0",
+  "nodes": {
+    "normalize": {
+      "position": { "x": 100, "y": 200 },
+      "collapsed": false,
+      "pinned": true
+    },
+    "frame": {
+      "position": { "x": 300, "y": 200 },
+      "collapsed": false,
+      "pinned": true
+    },
+    "author_reqs": {
+      "position": { "x": 500, "y": 200 },
+      "color": "node_highlight",
+      "collapsed": false,
+      "pinned": true
+    },
+    "critique_reqs": {
+      "position": { "x": 700, "y": 200 },
+      "color": "node_highlight",
+      "collapsed": false,
+      "pinned": true
+    },
+    "author_bdd": {
+      "position": { "x": 900, "y": 200 },
+      "color": "node_highlight",
+      "collapsed": false,
+      "pinned": true
+    },
+    "scope": {
+      "position": { "x": 1100, "y": 200 },
+      "collapsed": false,
+      "pinned": true
+    }
+  },
+  "edges": {
+    "critique_reqs:author_reqs": {
+      "color": "edge_loop",
+      "stroke_style": "dashed",
+      "label_visible": true,
+      "waypoints": [
+        { "x": 700, "y": 120 },
+        { "x": 500, "y": 120 }
+      ]
+    }
+  },
+  "palette": {
+    "node_default": "#4a5568",
+    "node_highlight": "#805ad5",
+    "node_active": "#38a169",
+    "node_completed": "#2d3748",
+    "node_error": "#e53e3e",
+    "edge_default": "#718096",
+    "edge_loop": "#ed8936",
+    "edge_branch": "#4299e1",
+    "background": "#1a202c",
+    "grid": "#2d3748"
+  },
+  "canvas": {
+    "zoom": 1,
+    "pan": { "x": 0, "y": 0 },
+    "grid_size": 20,
+    "grid_visible": true,
+    "snap_to_grid": true
+  },
+  "groups": [
+    {
+      "id": "requirements_microloop",
+      "label": "Requirements Microloop",
+      "node_ids": ["author_reqs", "critique_reqs"],
+      "color": "#805ad580",
+      "collapsed": false
+    }
+  ],
+  "annotations": [
+    {
+      "id": "microloop_note",
+      "text": "Adversarial iteration until VERIFIED",
+      "position": { "x": 600, "y": 80 },
+      "style": {
+        "font_size": 12,
+        "color": "#a0aec0"
+      }
+    }
+  ]
+}

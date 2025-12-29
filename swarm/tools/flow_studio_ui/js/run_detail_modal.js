@@ -343,7 +343,7 @@ function getStatusClass(status) {
             return "fs-status-badge info";
         case "failed":
             return "fs-status-badge error";
-        case "cancelled":
+        case "canceled":
             return "fs-status-badge warning";
         case "pending":
         default:
@@ -361,8 +361,8 @@ function getStatusLabel(status) {
             return "\u25CF RUNNING";
         case "failed":
             return "\u2717 FAILED";
-        case "cancelled":
-            return "\u2014 CANCELLED";
+        case "canceled":
+            return "\u2014 CANCELED";
         case "pending":
             return "\u2026 PENDING";
         default:

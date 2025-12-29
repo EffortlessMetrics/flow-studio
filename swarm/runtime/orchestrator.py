@@ -111,16 +111,25 @@ class GeminiStepOrchestrator:
         self,
         engine: StepEngine,
         repo_root: Optional[Path] = None,
+        use_spec_bridge: bool = False,
     ):
         """Initialize the orchestrator.
 
         Args:
             engine: StepEngine instance for executing steps.
             repo_root: Repository root path. Defaults to auto-detection.
+            use_spec_bridge: If True, load flows from JSON specs (swarm/specs/flows/*.json)
+                           instead of YAML registry (swarm/config/flows/*.yaml).
+                           This enables "Graph IR is the map" mode.
         """
         self._engine = engine
         self._repo_root = repo_root or Path(__file__).resolve().parents[2]
         self._flow_registry = FlowRegistry.get_instance()
+        self._use_spec_bridge = use_spec_bridge
+        self._spec_bridge = None
+        if use_spec_bridge:
+            from swarm.runtime.spec_system.bridge import SpecBridge
+            self._spec_bridge = SpecBridge(repo_root=self._repo_root)
         self._lock = threading.Lock()
         # Stop request tracking for graceful interruption
         # Using threading.Event for true cross-thread safety
@@ -576,10 +585,15 @@ class GeminiStepOrchestrator:
         Raises:
             ValueError: If flow_key is invalid or has no steps defined.
         """
-        # Validate flow exists
-        flow_def = self._flow_registry.get_flow(flow_key)
-        if not flow_def:
-            raise ValueError(f"Unknown flow: {flow_key}")
+        # Validate flow exists - use spec bridge if enabled, otherwise YAML registry
+        if self._use_spec_bridge and self._spec_bridge:
+            flow_def = self._spec_bridge.get_flow(flow_key)
+            if not flow_def:
+                raise ValueError(f"Unknown flow (spec bridge): {flow_key}")
+        else:
+            flow_def = self._flow_registry.get_flow(flow_key)
+            if not flow_def:
+                raise ValueError(f"Unknown flow: {flow_key}")
 
         if not flow_def.steps:
             raise ValueError(f"Flow '{flow_key}' has no steps defined")
@@ -2021,10 +2035,15 @@ class GeminiStepOrchestrator:
             ValueError: If flow_key is invalid or has no steps defined.
             asyncio.CancelledError: If execution is cancelled (PARTIAL saved).
         """
-        # Validate flow exists
-        flow_def = self._flow_registry.get_flow(flow_key)
-        if not flow_def:
-            raise ValueError(f"Unknown flow: {flow_key}")
+        # Validate flow exists - use spec bridge if enabled, otherwise YAML registry
+        if self._use_spec_bridge and self._spec_bridge:
+            flow_def = self._spec_bridge.get_flow(flow_key)
+            if not flow_def:
+                raise ValueError(f"Unknown flow (spec bridge): {flow_key}")
+        else:
+            flow_def = self._flow_registry.get_flow(flow_key)
+            if not flow_def:
+                raise ValueError(f"Unknown flow: {flow_key}")
 
         if not flow_def.steps:
             raise ValueError(f"Flow '{flow_key}' has no steps defined")

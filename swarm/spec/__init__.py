@@ -59,11 +59,21 @@ from .loader import (
 from .compiler import (
     compile_prompt,
     SpecCompiler,
+    # Template library functions (WP2)
+    list_templates,
+    load_template,
+    expand_template,
+    expand_flow_graph,
+    get_template_categories,
+    TemplateMetadata,
+    ExpandedTemplate,
 )
 
 from .manager import (
     # Main class
     SpecManager,
+    # FlowGraph Manager (WP3)
+    FlowSpecManager,
     # Data types
     FlowGraph,
     StepTemplate,
@@ -77,6 +87,13 @@ from .manager import (
     # Convenience functions
     get_manager,
     reset_manager,
+    # FlowGraph merge/shred functions (WP3)
+    get_flow_manager,
+    merge_flow_with_overlay,
+    shred_flow_update,
+    load_flow_graph,
+    load_ui_overlay,
+    list_flows as list_flow_graphs,  # Alias for WP3 API
 )
 
 __all__ = [
@@ -102,6 +119,14 @@ __all__ = [
     # Compiler
     "compile_prompt",
     "SpecCompiler",
+    # Template library functions (WP2)
+    "list_templates",
+    "load_template",
+    "expand_template",
+    "expand_flow_graph",
+    "get_template_categories",
+    "TemplateMetadata",
+    "ExpandedTemplate",
     # Manager (ADR-001: central authority for spec writes)
     "SpecManager",
     "FlowGraph",
@@ -114,4 +139,12 @@ __all__ = [
     "ConcurrencyError",
     "get_manager",
     "reset_manager",
+    # FlowGraph Manager (WP3)
+    "FlowSpecManager",
+    "get_flow_manager",
+    "merge_flow_with_overlay",
+    "shred_flow_update",
+    "load_flow_graph",
+    "load_ui_overlay",
+    "list_flow_graphs",
 ]

@@ -87,6 +87,11 @@ export interface FlowGraphEdge {
 export interface FlowGraph {
   nodes: FlowGraphNode[];
   edges: FlowGraphEdge[];
+  /** Optional UI overlay fields for flow editing */
+  palette?: Record<string, unknown>;
+  canvas?: Record<string, unknown>;
+  groups?: Record<string, unknown>;
+  annotations?: Record<string, unknown>;
 }
 
 /** Serialized graph state from getCurrentGraphState() */

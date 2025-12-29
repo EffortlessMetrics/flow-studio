@@ -1,0 +1,190 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://flow-studio.example.com/schemas/run_state.schema.json",
+  "title": "RunState",
+  "description": "Durable program counter for stepwise flow execution with detour support",
+  "type": "object",
+  "properties": {
+    "run_id": {
+      "type": "string",
+      "description": "Unique identifier for this run"
+    },
+    "flow_id": {
+      "type": "string",
+      "description": "The flow key being executed (e.g., 'build', 'plan')"
+    },
+    "current_node": {
+      "type": "string",
+      "description": "The ID of the current step/node being executed"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["running", "paused", "completed", "failed", "interrupted"],
+      "description": "Current execution status of the run"
+    },
+    "interruption_stack": {
+      "type": "array",
+      "description": "Stack of interruption frames for nested detours",
+      "items": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "description": "Human-readable reason for the interruption"
+          },
+          "interrupted_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO 8601 timestamp when interruption occurred"
+          },
+          "return_node": {
+            "type": "string",
+            "description": "Node ID to return to after the detour completes"
+          },
+          "context_snapshot": {
+            "type": "object",
+            "description": "Snapshot of execution context at interruption time",
+            "additionalProperties": true
+          }
+        },
+        "required": ["reason", "interrupted_at", "return_node"]
+      }
+    },
+    "resume_stack": {
+      "type": "array",
+      "description": "Stack of resume points for continuation after interruption",
+      "items": {
+        "type": "object",
+        "properties": {
+          "node_id": {
+            "type": "string",
+            "description": "Node ID to resume execution at"
+          },
+          "saved_context": {
+            "type": "object",
+            "description": "Execution context saved at the resume point",
+            "additionalProperties": true
+          }
+        },
+        "required": ["node_id"]
+      }
+    },
+    "injected_nodes": {
+      "type": "array",
+      "description": "List of dynamically injected node IDs",
+      "items": {
+        "type": "string"
+      }
+    },
+    "completed_nodes": {
+      "type": "array",
+      "description": "List of node IDs that have completed execution",
+      "items": {
+        "type": "string"
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "description": "Map of artifact names to their locations or values",
+      "additionalProperties": true
+    },
+    "step_index": {
+      "type": "integer",
+      "description": "Current step index within the flow (0-based)"
+    },
+    "loop_state": {
+      "type": "object",
+      "description": "Map of microloop identifiers to iteration counts",
+      "additionalProperties": {
+        "type": "integer"
+      }
+    },
+    "handoff_envelopes": {
+      "type": "object",
+      "description": "Map of step IDs to their HandoffEnvelope data",
+      "additionalProperties": {
+        "$ref": "#/definitions/HandoffEnvelope"
+      }
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when state was last updated"
+    },
+    "current_flow_index": {
+      "type": "integer",
+      "description": "1-based index of the current flow (1=signal, 6=wisdom)"
+    },
+    "flow_transition_history": {
+      "type": "array",
+      "description": "Ordered list of flow transitions with metadata",
+      "items": {
+        "type": "object",
+        "properties": {
+          "from_flow": {
+            "type": "string"
+          },
+          "to_flow": {
+            "type": ["string", "null"]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "flow_succeeded": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  },
+  "required": ["run_id", "flow_id", "status"],
+  "definitions": {
+    "HandoffEnvelope": {
+      "type": "object",
+      "description": "Durable per-step handoff artifact",
+      "properties": {
+        "step_id": { "type": "string" },
+        "flow_key": { "type": "string" },
+        "run_id": { "type": "string" },
+        "routing_signal": { "$ref": "#/definitions/RoutingSignal" },
+        "summary": { "type": "string" },
+        "artifacts": { "type": "object" },
+        "file_changes": { "type": "object" },
+        "status": { "type": "string" },
+        "error": { "type": ["string", "null"] },
+        "duration_ms": { "type": "integer" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "station_id": { "type": ["string", "null"] },
+        "station_version": { "type": ["integer", "null"] },
+        "prompt_hash": { "type": ["string", "null"] },
+        "verification_passed": { "type": "boolean" },
+        "verification_details": { "type": "object" },
+        "routing_audit": { "type": ["object", "null"] }
+      },
+      "required": ["step_id", "flow_key", "run_id", "summary", "status"]
+    },
+    "RoutingSignal": {
+      "type": "object",
+      "description": "Normalized routing decision signal",
+      "properties": {
+        "decision": {
+          "type": "string",
+          "enum": ["advance", "loop", "terminate", "branch"]
+        },
+        "next_step_id": { "type": ["string", "null"] },
+        "route": { "type": ["string", "null"] },
+        "reason": { "type": "string" },
+        "confidence": { "type": "number" },
+        "needs_human": { "type": "boolean" },
+        "next_flow": { "type": ["string", "null"] },
+        "loop_count": { "type": "integer" },
+        "exit_condition_met": { "type": "boolean" }
+      },
+      "required": ["decision"]
+    }
+  }
+}

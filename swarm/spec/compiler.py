@@ -1732,3 +1732,414 @@ def compile_prompt(
         policy_invariants_ref=policy_invariants_ref,
         use_v2=use_v2,
     )
+
+
+# =============================================================================
+# Template Library Functions (WP2: Palette-Ready Templates)
+# =============================================================================
+
+
+@dataclass
+class TemplateMetadata:
+    """Metadata for a step template, suitable for palette display.
+
+    This is a lightweight structure returned by list_templates() for
+    UI rendering without loading the full template specification.
+    """
+    id: str
+    name: str
+    description: str
+    category: str
+    station_id: str
+    tags: List[str]
+    version: int
+    ui: Dict[str, Any]
+
+
+@dataclass
+class ExpandedTemplate:
+    """Result of expand_template() - a plain node configuration.
+
+    After template expansion, the orchestrator sees plain nodes with:
+    - station_id: Which station to use
+    - objective: Resolved objective string (parameters substituted)
+    - routing: Routing configuration
+    - io: Input/output configuration
+
+    Templates are UI ergonomics, not runtime magic.
+    """
+    station_id: str
+    objective: str
+    routing: Dict[str, Any]
+    io: Dict[str, Any]
+    parameters: Dict[str, Any]  # Resolved parameter values
+
+
+def _get_template_dirs(repo_root: Optional[Path] = None) -> List[Path]:
+    """Get directories to search for templates.
+
+    Searches in order:
+    1. swarm/specs/templates/ (new location, JSON files)
+    2. swarm/spec/templates/ (legacy location, YAML files)
+
+    Args:
+        repo_root: Repository root path. If None, uses current directory.
+
+    Returns:
+        List of template directories that exist.
+    """
+    if repo_root is None:
+        repo_root = Path.cwd()
+
+    dirs = [
+        repo_root / "swarm" / "specs" / "templates",  # Primary: JSON templates
+        repo_root / "swarm" / "spec" / "templates",   # Legacy: YAML templates
+    ]
+
+    return [d for d in dirs if d.exists()]
+
+
+def _load_template_file(template_path: Path) -> Optional[Dict[str, Any]]:
+    """Load a template file (JSON or YAML).
+
+    Args:
+        template_path: Path to template file.
+
+    Returns:
+        Parsed template data or None if loading fails.
+    """
+    try:
+        if template_path.suffix == ".json":
+            with open(template_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        elif template_path.suffix in (".yaml", ".yml"):
+            import yaml
+            with open(template_path, "r", encoding="utf-8") as f:
+                return yaml.safe_load(f)
+        else:
+            logger.warning("Unknown template format: %s", template_path)
+            return None
+    except Exception as e:
+        logger.warning("Failed to load template %s: %s", template_path, e)
+        return None
+
+
+def load_template(
+    template_id: str,
+    repo_root: Optional[Path] = None,
+) -> Optional[Dict[str, Any]]:
+    """Load a template by ID from the template library.
+
+    Searches both JSON (swarm/specs/templates/) and YAML (swarm/spec/templates/)
+    locations. JSON takes precedence if both exist.
+
+    Args:
+        template_id: Template identifier (kebab-case).
+        repo_root: Repository root path.
+
+    Returns:
+        Template data dictionary or None if not found.
+    """
+    for template_dir in _get_template_dirs(repo_root):
+        # Try JSON first (primary format)
+        json_path = template_dir / f"{template_id}.json"
+        if json_path.exists():
+            return _load_template_file(json_path)
+
+        # Fall back to YAML (legacy format)
+        yaml_path = template_dir / f"{template_id}.yaml"
+        if yaml_path.exists():
+            return _load_template_file(yaml_path)
+
+        yml_path = template_dir / f"{template_id}.yml"
+        if yml_path.exists():
+            return _load_template_file(yml_path)
+
+    logger.debug("Template not found: %s", template_id)
+    return None
+
+
+def list_templates(
+    repo_root: Optional[Path] = None,
+    category: Optional[str] = None,
+    tags: Optional[List[str]] = None,
+) -> List[TemplateMetadata]:
+    """List all available templates with metadata for palette display.
+
+    This is the primary function for populating the Flow Studio template palette.
+    Returns lightweight metadata suitable for UI rendering.
+
+    Args:
+        repo_root: Repository root path.
+        category: Optional filter by category.
+        tags: Optional filter by tags (matches if any tag present).
+
+    Returns:
+        List of TemplateMetadata sorted by category and palette_order.
+    """
+    templates: List[TemplateMetadata] = []
+    seen_ids: set = set()
+
+    for template_dir in _get_template_dirs(repo_root):
+        # Scan for JSON and YAML files
+        for pattern in ("*.json", "*.yaml", "*.yml"):
+            for template_path in template_dir.glob(pattern):
+                data = _load_template_file(template_path)
+                if not data:
+                    continue
+
+                template_id = data.get("id", template_path.stem)
+
+                # Skip duplicates (JSON takes precedence)
+                if template_id in seen_ids:
+                    continue
+                seen_ids.add(template_id)
+
+                # Skip deprecated templates
+                if data.get("deprecated", False):
+                    continue
+
+                # Apply category filter
+                template_category = data.get("category", "custom")
+                if category and template_category != category:
+                    continue
+
+                # Apply tags filter
+                template_tags = data.get("tags", [])
+                if tags and not any(t in template_tags for t in tags):
+                    continue
+
+                # Extract UI defaults
+                ui = data.get("ui", data.get("ui_defaults", {}))
+
+                templates.append(TemplateMetadata(
+                    id=template_id,
+                    name=data.get("name", data.get("title", template_id)),
+                    description=data.get("description", ""),
+                    category=template_category,
+                    station_id=data.get("station_id", ""),
+                    tags=template_tags,
+                    version=data.get("version", 1),
+                    ui=ui,
+                ))
+
+    # Sort by category, then palette_order, then name
+    def sort_key(t: TemplateMetadata) -> tuple:
+        order = t.ui.get("palette_order", 999)
+        return (t.category, order, t.name)
+
+    return sorted(templates, key=sort_key)
+
+
+def expand_template(
+    template_id: str,
+    params: Optional[Dict[str, Any]] = None,
+    repo_root: Optional[Path] = None,
+) -> Optional[ExpandedTemplate]:
+    """Expand a template with parameters into a plain node configuration.
+
+    This is the core template compilation function. It takes a template_id
+    and user-provided parameters, and returns a fully resolved configuration
+    that the orchestrator can use directly.
+
+    Key principle: Templates are UI ergonomics, not runtime magic. After
+    expansion, the orchestrator sees plain nodes.
+
+    Args:
+        template_id: Template identifier.
+        params: User-provided parameter values (merged with defaults).
+        repo_root: Repository root path.
+
+    Returns:
+        ExpandedTemplate with resolved station_id, objective, routing, and IO.
+        Returns None if template not found.
+
+    Example:
+        >>> result = expand_template("microloop-writer", {"artifact_type": "test plan"})
+        >>> print(result.station_id)
+        'requirements-author'
+        >>> print(result.objective)
+        'Write test plan based on upstream context...'
+    """
+    template_data = load_template(template_id, repo_root)
+    if not template_data:
+        return None
+
+    # Merge parameters: user params override template defaults
+    param_defs = template_data.get("parameters", [])
+    resolved_params: Dict[str, Any] = {}
+
+    # Start with defaults from parameter definitions
+    for param_def in param_defs:
+        if isinstance(param_def, dict):
+            param_name = param_def.get("name", "")
+            if param_name and "default" in param_def:
+                resolved_params[param_name] = param_def["default"]
+
+    # Override with user-provided params
+    if params:
+        resolved_params.update(params)
+
+    # Resolve objective template with parameters
+    default_objective = template_data.get("default_objective", "")
+    objective = render_template(default_objective, resolved_params)
+
+    # Get routing defaults
+    routing = template_data.get("routing_defaults", {
+        "kind": "linear",
+        "on_verified": "advance",
+        "on_unverified": "advance_with_concerns",
+    })
+
+    # Get IO schema
+    io_schema = template_data.get("io_schema", {})
+    io = {
+        "additional_inputs": io_schema.get("additional_inputs", []),
+        "additional_outputs": io_schema.get("additional_outputs", []),
+    }
+
+    # Resolve any template variables in IO paths
+    io["additional_inputs"] = [
+        render_template(path, {"params": resolved_params})
+        for path in io["additional_inputs"]
+    ]
+    io["additional_outputs"] = [
+        render_template(path, {"params": resolved_params})
+        for path in io["additional_outputs"]
+    ]
+
+    return ExpandedTemplate(
+        station_id=template_data.get("station_id", ""),
+        objective=objective,
+        routing=routing,
+        io=io,
+        parameters=resolved_params,
+    )
+
+
+def expand_flow_graph(
+    flow_data: Dict[str, Any],
+    repo_root: Optional[Path] = None,
+) -> Dict[str, Any]:
+    """Expand all template references in a FlowGraph.
+
+    This function takes a FlowGraph with nodes that may reference templates
+    (via template_id field) and expands them into concrete node configurations.
+
+    Key principle: Templates are design-time only. After expansion, the
+    orchestrator sees plain nodes with all values inline.
+
+    Args:
+        flow_data: FlowGraph data dict (from JSON).
+        repo_root: Repository root path.
+
+    Returns:
+        New FlowGraph dict with all template references expanded.
+        Nodes with template_id will have their properties merged with
+        the expanded template values.
+
+    Example:
+        >>> flow = {"nodes": [{"id": "step1", "template_id": "microloop-writer"}]}
+        >>> expanded = expand_flow_graph(flow)
+        >>> print(expanded["nodes"][0]["station_id"])
+        'requirements-author'
+    """
+    import copy
+
+    # Deep copy to avoid mutating input
+    result = copy.deepcopy(flow_data)
+
+    expanded_nodes = []
+    for node in result.get("nodes", []):
+        template_id = node.get("template_id")
+
+        if template_id:
+            # Expand template
+            params = node.get("params", {})
+            expanded = expand_template(template_id, params, repo_root)
+
+            if expanded:
+                # Merge expanded template into node
+                # Node values override template defaults
+                expanded_node = {
+                    "id": node["id"],
+                    "station_id": node.get("station_id") or expanded.station_id,
+                    "objective": node.get("objective") or expanded.objective,
+                    "agents": node.get("agents", [expanded.station_id] if expanded.station_id else []),
+                    "role": node.get("role", expanded.objective),
+                    "inputs": node.get("inputs", expanded.io.get("additional_inputs", [])),
+                    "outputs": node.get("outputs", expanded.io.get("additional_outputs", [])),
+                }
+
+                # Copy routing from template if not overridden
+                if "routing" not in node and expanded.routing:
+                    expanded_node["routing"] = expanded.routing
+
+                # Preserve other node fields
+                for key in ["teaching_note", "teaching_highlight", "ui"]:
+                    if key in node:
+                        expanded_node[key] = node[key]
+
+                # Mark as expanded for debugging
+                expanded_node["_expanded_from_template"] = template_id
+                expanded_node["_expansion_params"] = params
+
+                expanded_nodes.append(expanded_node)
+            else:
+                # Template not found - keep node as-is with warning
+                logger.warning(
+                    "Template %s not found for node %s, keeping as-is",
+                    template_id,
+                    node.get("id"),
+                )
+                expanded_nodes.append(node)
+        else:
+            # No template reference - keep node as-is
+            expanded_nodes.append(node)
+
+    result["nodes"] = expanded_nodes
+    return result
+
+
+def get_template_categories(
+    repo_root: Optional[Path] = None,
+) -> List[Dict[str, Any]]:
+    """Get all template categories with counts for palette grouping.
+
+    Args:
+        repo_root: Repository root path.
+
+    Returns:
+        List of category info dicts with id, name, count, and order.
+    """
+    templates = list_templates(repo_root)
+
+    # Count templates per category
+    category_counts: Dict[str, int] = {}
+    for t in templates:
+        category_counts[t.category] = category_counts.get(t.category, 0) + 1
+
+    # Define category display order and names
+    category_info = {
+        "microloop": {"name": "Microloop", "order": 1},
+        "context": {"name": "Context Loading", "order": 2},
+        "implementation": {"name": "Implementation", "order": 3},
+        "critic": {"name": "Critics", "order": 4},
+        "verification": {"name": "Verification", "order": 5},
+        "gate": {"name": "Gates", "order": 6},
+        "artifact": {"name": "Artifacts", "order": 7},
+        "reporter": {"name": "Reporters", "order": 8},
+        "custom": {"name": "Custom", "order": 99},
+    }
+
+    result = []
+    for cat_id, count in sorted(category_counts.items()):
+        info = category_info.get(cat_id, {"name": cat_id.title(), "order": 50})
+        result.append({
+            "id": cat_id,
+            "name": info["name"],
+            "count": count,
+            "order": info["order"],
+        })
+
+    return sorted(result, key=lambda x: x["order"])

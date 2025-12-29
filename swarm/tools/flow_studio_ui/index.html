@@ -4709,7 +4709,6 @@ window.addEventListener("load", async () => {
         if (backendSelector) {
             backendSelector.addEventListener("change", (e) => {
                 selectedBackendId = e.target.value;
-                console.log("Backend changed to:", selectedBackendId);
             });
         }
         // ========================================================================
@@ -4786,7 +4785,6 @@ window.addEventListener("load", async () => {
             },
             onRerun: async (_runId) => {
                 // Re-run functionality - for now just log
-                console.log("Re-run requested for run:", _runId);
                 // Future: call Api.startRun() with appropriate params
             }
         });
@@ -4861,7 +4859,7 @@ window.addEventListener("load", async () => {
         }
         // Signal that UI is fully initialized and ready for interaction
         if (debugPerf) {
-            console.log("Flow Studio TTI ms:", Math.round(performance.now() - t0));
+            // Performance timing logged in development mode
         }
         markUiReady();
         // Export SDK for agents and automation
@@ -10022,7 +10020,7 @@ function getStatusClass(status) {
             return "fs-status-badge info";
         case "failed":
             return "fs-status-badge error";
-        case "cancelled":
+        case "canceled":
             return "fs-status-badge warning";
         case "pending":
         default:
@@ -10040,8 +10038,8 @@ function getStatusLabel(status) {
             return "\u25CF RUNNING";
         case "failed":
             return "\u2717 FAILED";
-        case "cancelled":
-            return "\u2014 CANCELLED";
+        case "canceled":
+            return "\u2014 CANCELED";
         case "pending":
             return "\u2026 PENDING";
         default:
@@ -10153,7 +10151,7 @@ function attachActionHandlers(modal, runId, summary) {
                     profile_id: summary?.profile_id,
                     backend: summary?.backend,
                 });
-                console.log("Started new run:", result.run_id);
+                // Started new run: result.run_id
                 // Call the callback if provided (for additional UI updates)
                 if (_callbacks.onRerun) {
                     await _callbacks.onRerun(runId);
@@ -10585,7 +10583,7 @@ export function initContextBudgetSettings() {
     _profileOverride = readFromStorage();
     _effectiveBudgets = computeEffectiveBudgets(_profileOverride);
     _initialized = true;
-    console.log("Context budget settings initialized:", _effectiveBudgets);
+    // Context budget settings initialized: _effectiveBudgets
 }
 /**
  * Get the current effective context budgets.

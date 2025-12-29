@@ -20,6 +20,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, TYPE_CHECKING
 
+from swarm.config.flow_registry import get_flow_spec_id
 from swarm.spec.compiler import SpecCompiler
 from swarm.spec.loader import list_flows, list_stations
 from swarm.spec.types import PromptPlan
@@ -35,7 +36,8 @@ class SpecAdapter:
     """Adapter that compiles specs for engine consumption.
 
     This adapter:
-    1. Maps flow_key (e.g., "build") to flow_id (e.g., "3-build")
+    1. Maps flow_key (e.g., "build") to flow_id (e.g., "3-build") using
+       the canonical get_flow_spec_id() from flow_registry
     2. Compiles PromptPlan from specs
     3. Provides SDK options for engine configuration
     4. Falls back to legacy prompt_builder if spec not found
@@ -50,17 +52,6 @@ class SpecAdapter:
         else:
             # Fall back to legacy
     """
-
-    # Mapping from flow_key to flow_id
-    FLOW_KEY_TO_ID = {
-        "signal": "1-signal",
-        "plan": "2-plan",
-        "build": "3-build",
-        "review": "4-review",
-        "gate": "5-gate",
-        "deploy": "6-deploy",
-        "wisdom": "7-wisdom",
-    }
 
     def __init__(self, repo_root: Optional[Path] = None):
         """Initialize the spec adapter.
@@ -90,8 +81,9 @@ class SpecAdapter:
             True if flow spec exists.
         """
         self._load_available()
-        flow_id = self.FLOW_KEY_TO_ID.get(flow_key)
-        if not flow_id:
+        flow_id = get_flow_spec_id(flow_key)
+        # get_flow_spec_id returns the key unchanged if not found
+        if flow_id == flow_key:
             return False
         return flow_id in self._available_flows
 
@@ -110,13 +102,19 @@ class SpecAdapter:
     def get_flow_id(self, flow_key: str) -> Optional[str]:
         """Map flow_key to flow_id.
 
+        Uses the canonical get_flow_spec_id() from flow_registry.
+
         Args:
             flow_key: Flow key (e.g., "build").
 
         Returns:
             Flow ID (e.g., "3-build") or None if not found.
         """
-        return self.FLOW_KEY_TO_ID.get(flow_key)
+        flow_id = get_flow_spec_id(flow_key)
+        # get_flow_spec_id returns the key unchanged if not found
+        if flow_id == flow_key:
+            return None
+        return flow_id
 
     def compile_step(
         self,

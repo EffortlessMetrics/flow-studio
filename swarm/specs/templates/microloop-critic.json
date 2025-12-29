@@ -1,0 +1,55 @@
+{
+  "id": "microloop-critic",
+  "name": "Microloop Critic",
+  "description": "Critic agent in a microloop pattern. Reviews artifacts from a writer and produces harsh, specific feedback. Critics NEVER fix - they only critique.",
+  "category": "critic",
+  "station_id": "requirements-critic",
+  "version": 1,
+  "default_objective": "Review {{artifact_type}} for {{quality_criteria}}. Produce critique report with clear Status and can_further_iteration_help guidance.",
+  "parameters": [
+    {
+      "name": "artifact_type",
+      "type": "string",
+      "required": true,
+      "default": "requirements document",
+      "title": "Artifact Type",
+      "description": "What type of artifact to review"
+    },
+    {
+      "name": "quality_criteria",
+      "type": "string",
+      "required": true,
+      "default": "completeness, correctness, and adherence to standards",
+      "title": "Quality Criteria",
+      "description": "What aspects to focus critique on"
+    },
+    {
+      "name": "severity_threshold",
+      "type": "enum",
+      "required": false,
+      "default": "warning",
+      "title": "Minimum Severity",
+      "description": "Only report issues at or above this severity",
+      "enum": ["info", "warning", "error", "critical"]
+    }
+  ],
+  "routing_defaults": {
+    "kind": "microloop",
+    "on_verified": "advance",
+    "on_unverified": "loop",
+    "max_iterations": 5
+  },
+  "io_schema": {
+    "additional_inputs": [],
+    "additional_outputs": [
+      "{{run.base}}/{{flow.key}}/critique.md"
+    ]
+  },
+  "ui": {
+    "icon": "magnifying-glass",
+    "color": "#E57373",
+    "palette_group": "Microloop",
+    "palette_order": 20
+  },
+  "tags": ["microloop", "critic", "review", "quality"]
+}

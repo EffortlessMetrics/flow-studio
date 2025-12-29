@@ -16,6 +16,13 @@ Usage:
     from swarm.api import create_app, SpecManager
     app = create_app()
     uvicorn.run(app, port=5001)
+
+API Structure:
+    /api/specs/           - Template and flow graph endpoints (from routes/specs.py)
+    /api/runs/            - Run control endpoints (from routes/runs.py)
+    /api/runs/{id}/events - SSE streaming (from routes/events.py)
+    /api/spec/            - Legacy endpoints (inline, for backward compatibility)
+    /api/health           - Health check
 """
 
 from __future__ import annotations
@@ -175,10 +182,18 @@ class SpecManager:
 
     @staticmethod
     def _find_repo_root() -> Path:
-        """Find repository root by looking for .git or CLAUDE.md."""
+        """Find repository root by looking for .git directory.
+
+        The .git directory is the most reliable indicator of repo root,
+        as there may be CLAUDE.md files in subdirectories.
+        """
         current = Path(__file__).resolve()
-        for parent in [current] + list(current.parents):
-            if (parent / ".git").exists() or (parent / "CLAUDE.md").exists():
+        for parent in current.parents:
+            if (parent / ".git").exists():
+                return parent
+        # Fallback: look for root CLAUDE.md (only at actual roots)
+        for parent in current.parents:
+            if (parent / "CLAUDE.md").exists() and (parent / "swarm").exists():
                 return parent
         raise RuntimeError("Could not find repository root")
 
@@ -772,9 +787,9 @@ def create_app(
         logger.info("Spec API server shutting down...")
 
     app = FastAPI(
-        title="Spec API",
+        title="Flow Studio API",
         description="REST API for SpecManager functionality - exposes flows, templates, validation, and compilation to the TypeScript frontend.",
-        version="1.0.0",
+        version="2.0.0",
         lifespan=lifespan,
     )
 
@@ -785,8 +800,22 @@ def create_app(
             allow_origins=["*"],
             allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
             allow_headers=["*"],
-            expose_headers=["ETag"],
+            expose_headers=["ETag", "If-Match", "If-None-Match"],
         )
+
+    # -------------------------------------------------------------------------
+    # Include Modular Routers
+    # -------------------------------------------------------------------------
+    # These routers provide the new API structure with full run control
+    try:
+        from .routes import specs_router, runs_router, events_router
+
+        app.include_router(specs_router, prefix="/api")
+        app.include_router(runs_router, prefix="/api")
+        app.include_router(events_router, prefix="/api")
+        logger.info("Loaded modular API routers")
+    except ImportError as e:
+        logger.warning("Could not load modular routers: %s", e)
 
     # -------------------------------------------------------------------------
     # Request Logging Middleware
@@ -825,13 +854,13 @@ def create_app(
         try:
             flow_data, etag = get_spec_manager().get_flow(flow_id)
 
-            # Check If-None-Match for caching
-            if if_none_match == etag:
+            # Check If-None-Match for caching (strip quotes from ETag)
+            if if_none_match and if_none_match.strip('"') == etag:
                 return Response(status_code=304)
 
             return JSONResponse(
                 content=flow_data,
-                headers={"ETag": etag},
+                headers={"ETag": f'"{etag}"'},
             )
 
         except FileNotFoundError:
@@ -908,12 +937,13 @@ def create_app(
         try:
             template_data, etag = get_spec_manager().get_template(template_id)
 
-            if if_none_match == etag:
+            # Check If-None-Match for caching (strip quotes from ETag)
+            if if_none_match and if_none_match.strip('"') == etag:
                 return Response(status_code=304)
 
             return JSONResponse(
                 content=template_data,
-                headers={"ETag": etag},
+                headers={"ETag": f'"{etag}"'},
             )
 
         except FileNotFoundError:
@@ -977,12 +1007,13 @@ def create_app(
         try:
             state_data, etag = get_spec_manager().get_run_state(run_id)
 
-            if if_none_match == etag:
+            # Check If-None-Match for caching (strip quotes from ETag)
+            if if_none_match and if_none_match.strip('"') == etag:
                 return Response(status_code=304)
 
             return JSONResponse(
                 content=state_data,
-                headers={"ETag": etag},
+                headers={"ETag": f'"{etag}"'},
             )
 
         except FileNotFoundError:
@@ -1048,19 +1079,37 @@ def main():
     global app
     app = create_app(enable_cors=not args.no_cors)
 
-    print(f"Starting Spec API server at http://{args.host}:{args.port}")
-    print("Endpoints:")
-    print("  GET  /api/spec/flows")
-    print("  GET  /api/spec/flows/<flow_id>")
-    print("  PATCH /api/spec/flows/<flow_id>")
-    print("  GET  /api/spec/templates")
-    print("  GET  /api/spec/templates/<template_id>")
-    print("  POST /api/spec/validate")
-    print("  POST /api/spec/compile")
-    print("  GET  /api/runs")
-    print("  GET  /api/runs/<run_id>/state")
-    print("  GET  /api/runs/<run_id>/events")
-    print("  GET  /api/health")
+    print(f"Starting Flow Studio API server at http://{args.host}:{args.port}")
+    print("\nNew API Endpoints (v2.0):")
+    print("  Specs:")
+    print("    GET    /api/specs/templates          - List templates (for palette)")
+    print("    GET    /api/specs/templates/{id}     - Get template")
+    print("    GET    /api/specs/flows              - List flows")
+    print("    GET    /api/specs/flows/{id}         - Get merged flow")
+    print("    PATCH  /api/specs/flows/{id}         - Update flow (requires If-Match)")
+    print("    POST   /api/specs/flows/{id}/validate - Validate flow spec")
+    print("    POST   /api/specs/flows/{id}/compile  - Compile flow")
+    print("  Runs:")
+    print("    POST   /api/runs                     - Start new run")
+    print("    GET    /api/runs                     - List runs")
+    print("    GET    /api/runs/{id}                - Get run state")
+    print("    POST   /api/runs/{id}/pause          - Pause run")
+    print("    POST   /api/runs/{id}/resume         - Resume run")
+    print("    POST   /api/runs/{id}/inject         - Inject node into run")
+    print("    POST   /api/runs/{id}/interrupt      - Interrupt with detour")
+    print("    DELETE /api/runs/{id}                - Cancel run")
+    print("    GET    /api/runs/{id}/events         - SSE event stream")
+    print("\nLegacy API Endpoints (v1.0 - backward compatible):")
+    print("    GET    /api/spec/flows               - List flows")
+    print("    GET    /api/spec/flows/{id}          - Get flow")
+    print("    PATCH  /api/spec/flows/{id}          - Update flow")
+    print("    GET    /api/spec/templates           - List templates")
+    print("    GET    /api/spec/templates/{id}      - Get template")
+    print("    POST   /api/spec/validate            - Validate spec")
+    print("    POST   /api/spec/compile             - Compile spec")
+    print("    GET    /api/runs                     - List runs (legacy)")
+    print("    GET    /api/runs/{id}/state          - Get run state (legacy)")
+    print("    GET    /api/health                   - Health check")
 
     uvicorn.run(app, host=args.host, port=args.port, reload=args.debug)
 
