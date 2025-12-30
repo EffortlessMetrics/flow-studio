@@ -23,6 +23,169 @@ This document explains the philosophy behind context budgets in stepwise executi
 
 ---
 
+## Context Packs: Per-Step Briefings, Not Logs
+
+**Context is regenerated per step, not accumulated.**
+
+Each step receives a **curated context pack**—a fresh briefing assembled specifically for that step's execution. This is fundamentally different from a "growing log" model:
+
+| Model | How It Works | Problem |
+|-------|--------------|---------|
+| **Growing Log** (wrong) | Each step sees all previous output, accumulating forever | Context window explodes; model loses focus |
+| **Per-Step Briefing** (correct) | Each step gets a curated pack: teaching notes + relevant history + upstream artifacts | Focused execution; manageable window |
+
+### What Goes Into a Context Pack
+
+The **Curator** (or ContextPackBuilder) assembles each step's context:
+
+1. **Teaching Notes** (always included, never truncated)
+   - Step objectives, inputs, outputs
+   - Emphasizes, constraints
+   - From flow config YAML
+
+2. **Relevant History** (budget-constrained)
+   - Most recent step: full output (up to `history_max_recent_chars`)
+   - Older steps: summarized/truncated (up to `history_max_older_chars` each)
+   - Selected by **priority**, not just recency
+
+3. **Upstream Artifacts** (if configured)
+   - Key outputs from previous flows
+   - Referenced by path, not inlined
+
+4. **Scent Trail** (if configured)
+   - Breadcrumb hints about overall flow state
+   - Minimal metadata, not full history
+
+### The Curator's Role
+
+The Curator decides **what each step needs to know**, not **everything that happened**. This is deliberate curation, not mindless accumulation.
+
+```
+Step N Context Pack = Curator(
+  teaching_notes: step.teaching,       // Always included
+  recent_history: history[-1],         // Full detail
+  older_history: summarize(history[:-1]),  // Condensed
+  upstream: select_relevant(artifacts),    // Curated
+  budget: runtime_config.budgets       // Bounded
+)
+```
+
+This model enables **long flows** (20+ steps) without context explosion. Each step operates with focused context, not a polluted window.
+
+---
+
+## The Curator Pattern
+
+### The Problem
+
+Workers shouldn't waste tokens searching for context. Context preparation is logistics, not intelligence.
+
+When an expensive model (Sonnet) spends its first 500 tokens grepping for relevant files, that's wasted compute. The model is doing janitorial work—gathering files, checking what exists, summarizing prior history—instead of the actual cognitive task it was invoked for.
+
+This is a fundamental mismatch:
+- **High-capability models** are optimized for reasoning, synthesis, and generation
+- **Context gathering** is mechanical work that doesn't require advanced reasoning
+- **Burning expensive tokens on logistics** is pure waste
+
+### The Solution
+
+Use a cheap model (Haiku) as a **Curator** to prepare context before the expensive model (Sonnet) executes.
+
+The Curator is a logistics specialist:
+- Reads the flow state and upcoming step requirements
+- Gathers relevant files from the codebase
+- Summarizes history and upstream artifacts
+- Packs everything into a `ContextPack` ready for the Worker
+
+The Worker receives a fully-prepared briefing and can immediately start its real job.
+
+### The Workflow
+
+```
+Orchestrator: "Next step is Test-Author"
+     │
+     ▼
+Curator (Haiku): "I see requirements.json and impl_summary.md in the
+                  handoff. I'll grab relevant code files (src/user.ts,
+                  src/user.test.ts) and pack them into the ContextPack."
+     │
+     ▼
+Worker (Sonnet): Starts with exactly the files it needs.
+                 Zero time wasted searching.
+                 Immediately writes tests.
+```
+
+This separation of concerns means:
+- Haiku does the mechanical file gathering (cheap)
+- Sonnet does the cognitive work (expensive but focused)
+- No tokens wasted on grep/find/ls by the expensive model
+
+### The Cognitive Pipeline
+
+The Curator pattern fits into a larger cognitive pipeline where each stage uses the appropriate model tier:
+
+| Stage | Role | Responsibility | Context Scope | Model Tier |
+|-------|------|----------------|---------------|------------|
+| **Prep** | Curator (Haiku) | Logistics—gather files, summarize history | Wide (scan codebase) | Cheap |
+| **Work** | Worker (Sonnet) | Execution—write code/tests | Deep (specific files) | Expensive |
+| **Verify** | Forensic Analyst | Truth—semantic diff interpretation | Narrow (diffs, logs) | Medium |
+| **Route** | Navigator (Sonnet) | Strategy—decide path | Wide (graph, summary) | Expensive |
+| **Commit** | Kernel (Python) | Physics—update ledger | None (pure mechanics) | None |
+
+Each stage operates at a different scope:
+- **Wide scope** (Curator, Navigator): Needs to see the forest, not every tree
+- **Deep scope** (Worker): Needs full detail on specific files
+- **Narrow scope** (Forensic): Needs precise view of what changed
+
+### Cost-Benefit Analysis
+
+The economics are compelling:
+
+| Activity | Without Curator | With Curator |
+|----------|-----------------|--------------|
+| Context gathering | Sonnet spends 30-60s, 2k tokens searching | Haiku spends 10s, 500 tokens |
+| Worker start | Delayed, context polluted with search noise | Immediate, clean context |
+| Cost per step | ~$0.15 wasted on logistics | ~$0.01 on Haiku curation |
+| Total savings | — | ~$0.14 per step, cleaner outputs |
+
+**Spending 10 seconds and a few cents on Haiku curation saves minutes and dollars on Sonnet re-searching.**
+
+Over a 20-step flow, this adds up to meaningful cost reduction and, more importantly, cleaner execution. The Worker never sees grep output, file listings, or search artifacts—just the prepared context it needs.
+
+### Implementation Notes
+
+The Curator pattern is implemented in `swarm/runtime/curator.py`:
+
+```python
+class ContextCurator:
+    """Prepares ContextPacks using a cheap model."""
+
+    def prepare(self, step: StepConfig, history: List[StepOutput]) -> ContextPack:
+        # 1. Read step requirements (inputs, emphasizes)
+        # 2. Identify relevant files from history and codebase
+        # 3. Summarize older history items
+        # 4. Pack into ContextPack with token budget
+        ...
+```
+
+Key design decisions:
+- Curator runs **synchronously before each step** (adds ~10s latency, saves much more)
+- Curator uses **teaching notes** to understand what files matter
+- Curator outputs a **ContextPack** that the Worker receives as its entire context
+- Curator failures are **non-fatal**—fall back to basic history selection
+
+### When to Use the Curator
+
+The Curator pattern is most valuable when:
+- Steps have complex context requirements (multiple files, cross-module dependencies)
+- The codebase is large (>100 files)
+- Flows are long (10+ steps)
+- Cost optimization matters
+
+For simple flows with small codebases, the overhead of Curator invocation may not be worth it. The pattern can be disabled per-profile or per-flow via `curator_enabled: false` in config.
+
+---
+
 ## The Core Distinction
 
 **Budgets control INPUT context selection, not OUTPUT generation limits.**

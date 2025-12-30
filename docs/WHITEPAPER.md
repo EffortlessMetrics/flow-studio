@@ -72,25 +72,26 @@
 
 ## 3. Architecture
 
-### 3.1 The Six Flows
+### 3.1 The Seven Flows
 
 | Flow | Question | Outputs | Key Agents |
 |------|----------|---------|------------|
 | **Signal** (1) | What problem are we solving? | Requirements, BDD, risk assessment | signal-normalizer, problem-framer, requirements-author/critic |
 | **Plan** (2) | How should we solve it? | ADR, contracts, observability spec, test/work plans | adr-author, interface-designer, test-strategist, design-critic |
 | **Build** (3) | Does the implementation satisfy the design? | Code, tests, receipts | test-author/critic, code-implementer/critic, mutator, fixer |
-| **Gate** (4) | Is it safe to merge? | Audit report, merge recommendation | receipt-checker, contract-enforcer, security-scanner, merge-decider |
-| **Deploy** (5) | Did deployment succeed? | Deployment log, verification report | deploy-monitor, smoke-verifier, deploy-decider |
-| **Wisdom** (6) | What did we learn? | Regressions, learnings, feedback actions | artifact-auditor, regression-analyst, learning-synthesizer, feedback-applier |
+| **Review** (4) | Is the implementation correct? | Review feedback, approval status | self-reviewer, peer-reviewer, review-synthesizer |
+| **Gate** (5) | Is it safe to merge? | Audit report, merge recommendation | receipt-checker, contract-enforcer, security-scanner, merge-decider |
+| **Deploy** (6) | Did deployment succeed? | Deployment log, verification report | deploy-monitor, smoke-verifier, deploy-decider |
+| **Wisdom** (7) | What did we learn? | Regressions, learnings, feedback actions | artifact-auditor, regression-analyst, learning-synthesizer, feedback-applier |
 
 ```diagram
-Title: The Six-Flow SDLC Pipeline
+Title: The Seven-Flow SDLC Pipeline
 
-Layout: Left-to-right flow with 6 boxes
-Boxes: Signal → Plan → Build → Gate → Deploy → Wisdom
+Layout: Left-to-right flow with 7 boxes
+Boxes: Signal → Plan → Build → Review → Gate → Deploy → Wisdom
 
 Each box shows:
-- Flow number (1-6)
+- Flow number (1-7)
 - Key question it answers
 - Primary outputs
 
@@ -201,7 +202,7 @@ Exit conditions shown as decision diamond:
 
 ### 5.1 What's Built and Working
 
-- 48 agents (3 built-in infrastructure + 45 domain agents across 6 flows)
+- 56 agents (3 built-in infrastructure + 53 domain agents across 7 flows)
 - 4 skills (test-runner, auto-linter, policy-runner, heal_selftest)
 - 16-step selftest system with three-tier governance
 - Flow Studio visualization (http://localhost:5000)

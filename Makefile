@@ -80,6 +80,16 @@ ci-validate-strict:
 quick-check:
 	uv run swarm/tools/validate_swarm.py
 
+.PHONY: lint-routing
+lint-routing:
+	@echo "Checking for deprecated routing field patterns..."
+	uv run python swarm/tools/lint_routing_fields.py
+
+.PHONY: lint-routing-strict
+lint-routing-strict:
+	@echo "Checking for deprecated routing field patterns (strict mode)..."
+	uv run python swarm/tools/lint_routing_fields.py --strict
+
 # Operator Spine: the 8 docs every operator should read
 SPINE_DOCS = README.md docs/GETTING_STARTED.md CHEATSHEET.md GLOSSARY.md \
              docs/SELFTEST_SYSTEM.md docs/FLOW_STUDIO.md REPO_MAP.md docs/VALIDATION_RULES.md
@@ -189,6 +199,34 @@ flow-studio:
 	@$(MAKE) ts-build
 	@echo "Starting Flow Studio..."
 	@uv run uvicorn swarm.tools.flow_studio_fastapi:app --reload --host 127.0.0.1 --port 5000
+
+# Spec API server - REST API for SpecManager functionality (TypeScript frontend integration)
+# Runs on port 5001 by default to avoid conflicting with Flow Studio (port 5000)
+.PHONY: spec-api
+spec-api:
+	@echo "Starting Spec API server on http://127.0.0.1:5001..."
+	@uv run uvicorn swarm.api.server:app --host 127.0.0.1 --port 5001
+
+.PHONY: spec-api-reload
+spec-api-reload:
+	@echo "Starting Spec API server with auto-reload..."
+	@uv run uvicorn swarm.api.server:app --reload --host 127.0.0.1 --port 5001
+
+# Combined: Flow Studio UI + Spec API (runs both servers)
+# Flow Studio on :5000, Spec API on :5001
+.PHONY: flow-studio-full
+flow-studio-full:
+	@$(MAKE) gen-index-html
+	@$(MAKE) ts-build
+	@echo "Starting Flow Studio (port 5000) and Spec API (port 5001)..."
+	@echo ""
+	@echo "  Flow Studio UI:  http://127.0.0.1:5000"
+	@echo "  Spec API:        http://127.0.0.1:5001"
+	@echo "  API Health:      http://127.0.0.1:5001/api/health"
+	@echo "  API Docs:        http://127.0.0.1:5001/docs"
+	@echo ""
+	@(uv run uvicorn swarm.api.server:app --host 127.0.0.1 --port 5001 &) && \
+		uv run uvicorn swarm.tools.flow_studio_fastapi:app --reload --host 127.0.0.1 --port 5000
 
 # Flow Studio smoke test: receipt-backed verification
 # Produces artifacts in artifacts/flowstudio_smoke/<timestamp>/

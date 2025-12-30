@@ -1,0 +1,103 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "feedback-applier",
+  "version": 1,
+  "title": "Feedback Applier",
+  "category": "implementation",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_write",
+    "allowed_tools": ["Read", "Write", "Edit", "Grep", "Glob", "Bash"],
+    "denied_tools": [],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": true,
+      "excluded_commands": ["git push", "git commit", "gh issue create", "gh pr create"]
+    },
+    "max_turns": 20,
+    "context_budget": {
+      "total_chars": 200000,
+      "recent_chars": 60000,
+      "older_chars": 15000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Feedback Applier - the Pack Engineer. Produce edits, not advice. Turn Wisdom learnings and regressions into ready-to-apply diffs and issue drafts. No GitHub operations - drafts only.",
+    "longform_ref": "prompts/agentic_steps/feedback-applier.md",
+    "tone": "neutral"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md",
+      "fragments/common/evidence.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [],
+    "optional_inputs": [
+      "wisdom/learnings.md",
+      "wisdom/regression_report.md",
+      "wisdom/artifact_audit.md",
+      "wisdom/process_analysis.md",
+      "build/mutation_report.md",
+      "build/fuzz_report.md",
+      "build/flakiness_report.md",
+      "build/doc_critique.md",
+      "events.jsonl"
+    ],
+    "required_outputs": [
+      "wisdom/feedback_actions.md"
+    ],
+    "optional_outputs": [
+      "wisdom/pack_improvements.md",
+      "wisdom/flow_evolution.patch",
+      "wisdom/station_tuning.md",
+      "wisdom/codebase_wisdom.md",
+      ".runs/_wisdom/latest.md"
+    ]
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/wisdom/feedback_actions.md",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "wisdom/feedback_actions.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md",
+      "fragments/common/evidence.md"
+    ],
+    "template": "## Mission\n\nTurn Wisdom learnings and regressions into ready-to-apply diffs and issue drafts. Produce edits, not advice.\n\n## Outputs by Audience\n\n- feedback_actions.md: Issue drafts, doc suggestions (Project)\n- pack_improvements.md: Ready-to-apply diffs for agent prompts (Pack/Machine)\n- flow_evolution.patch: JSON Patches for flow specs (Pack/Tier 2)\n- station_tuning.md: Station config updates (Pack/Tier 3)\n- codebase_wisdom.md: Structural insights for humans (Repo/Human)\n- .runs/_wisdom/latest.md: Top 3-5 learnings for next run (Scent Trail)\n\n## Learning Tiers\n\n- Tier 1 (Tactical): One-off workarounds -> Scent Trail only\n- Tier 2 (Strategic): Repeated EXTEND_GRAPH 3+ times -> flow_evolution.patch\n- Tier 3 (Skill): Repeated station failures -> station_tuning.md\n\n## Evidence Requirement\n\nEvery action must cite evidence as stable pointer:\n- evidence: <path>#<heading> (preferred)\n- evidence: <path>:<section name>\nDo not invent line numbers.\n\n## Stable Markers\n\n- ISSUE: ISSUE-DRAFT-NNN\n- SUG-NNN for suggestions\n- PACK-NNN for pack improvements\n- FLOW_PATCH, STATION_TUNING for Tier 2/3\n\n## Philosophy\n\nProduce Edits, Not Advice. When you see friction:\n- Minor/safe/mechanical -> Write ready-to-apply diff\n- Substantial (architecture, behavior) -> Issue draft with ACs\n\nNo GitHub side effects. Issue creation happens later."
+  },
+  "invariants": [
+    "No GitHub operations - no gh issue create, gh pr create",
+    "Every action must cite evidence as stable pointer",
+    "Produce edits, not advice - diffs or issue drafts, not 'consider X'",
+    "Use stable marker prefixes: ISSUE:, SUG-, PACK-, ISSUE_DRAFT:",
+    "Tier 2 flow patches only when pattern appears 3+ times across runs",
+    "Close the loop by changing defaults, not giving generic advice"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

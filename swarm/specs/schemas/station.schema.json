@@ -1,0 +1,187 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://flow-studio.dev/schemas/station.schema.json",
+  "title": "Station Specification",
+  "description": "Defines a reusable execution role (station) with identity, SDK config, IO contract, and handoff behavior.",
+  "type": "object",
+  "required": ["id", "version", "title"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "Unique station identifier (kebab-case)."
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Schema version for this station definition."
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable station title."
+    },
+    "description": {
+      "type": "string",
+      "description": "Detailed description of the station's purpose."
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "shaping",
+        "spec",
+        "design",
+        "implementation",
+        "critic",
+        "verification",
+        "analytics",
+        "reporter",
+        "infra",
+        "router"
+      ],
+      "default": "implementation",
+      "description": "Role family for station classification."
+    },
+    "sdk": {
+      "type": "object",
+      "description": "SDK configuration for Claude API calls.",
+      "properties": {
+        "model": {
+          "type": "string",
+          "enum": ["haiku", "sonnet", "opus", "inherit"],
+          "default": "sonnet",
+          "description": "Model to use for this station."
+        },
+        "permission_mode": {
+          "type": "string",
+          "enum": ["default", "bypassPermissions"],
+          "default": "bypassPermissions",
+          "description": "Permission mode for tool usage."
+        },
+        "allowed_tools": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["Read", "Write", "Edit", "Bash", "Grep", "Glob"],
+          "description": "List of allowed tools."
+        },
+        "denied_tools": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "List of explicitly denied tools."
+        },
+        "max_turns": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 12,
+          "description": "Maximum conversation turns."
+        },
+        "sandbox": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean", "default": true },
+            "auto_allow_bash": { "type": "boolean", "default": true },
+            "excluded_commands": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        },
+        "context_budget": {
+          "type": "object",
+          "properties": {
+            "total_chars": { "type": "integer", "default": 200000 },
+            "recent_chars": { "type": "integer", "default": 60000 },
+            "older_chars": { "type": "integer", "default": 10000 }
+          }
+        }
+      }
+    },
+    "identity": {
+      "type": "object",
+      "description": "Station identity for system prompt.",
+      "properties": {
+        "system_append": {
+          "type": "string",
+          "description": "Text appended to system prompt."
+        },
+        "tone": {
+          "type": "string",
+          "enum": ["neutral", "analytical", "critical", "supportive"],
+          "default": "neutral"
+        }
+      }
+    },
+    "io": {
+      "type": "object",
+      "description": "Input/Output contract.",
+      "properties": {
+        "required_inputs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Paths to required input artifacts (relative to run_base)."
+        },
+        "optional_inputs": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "required_outputs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Paths to required output artifacts."
+        },
+        "optional_outputs": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "handoff": {
+      "type": "object",
+      "description": "Handoff contract for step completion.",
+      "properties": {
+        "path_template": {
+          "type": "string",
+          "default": "{{run.base}}/handoff/{{step.id}}.draft.json"
+        },
+        "required_fields": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["status", "summary", "artifacts", "can_further_iteration_help"]
+        }
+      }
+    },
+    "runtime_prompt": {
+      "type": "object",
+      "description": "Runtime prompt template configuration.",
+      "properties": {
+        "fragments": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Paths to prompt fragments to include."
+        },
+        "template": {
+          "type": "string",
+          "description": "Template string with {{variable}} placeholders."
+        }
+      }
+    },
+    "invariants": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Invariant rules this station must follow."
+    },
+    "routing_hints": {
+      "type": "object",
+      "description": "Default routing behavior.",
+      "properties": {
+        "on_verified": { "type": "string", "default": "advance" },
+        "on_unverified": { "type": "string", "default": "loop" },
+        "on_partial": { "type": "string", "default": "advance_with_concerns" },
+        "on_blocked": { "type": "string", "default": "escalate" }
+      }
+    }
+  },
+  "additionalProperties": false
+}

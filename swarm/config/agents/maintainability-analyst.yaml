@@ -1,0 +1,9 @@
+# Auto-bootstrapped from swarm/AGENTS.md
+key: maintainability-analyst
+flows:
+  - wisdom
+category: analytics
+color: orange
+source: project/user
+short_role: "Naming, modularity, DRY, coupling → maintainability_analysis.md."
+model: inherit

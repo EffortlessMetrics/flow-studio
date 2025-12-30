@@ -1,0 +1,165 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://flow-studio.dev/schemas/flow_graph.schema.json",
+  "title": "FlowGraph",
+  "description": "Logic graph representation of a flow with nodes and edges",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique identifier for the flow (e.g., 'signal', 'plan', 'build')"
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable name for the flow"
+    },
+    "version": {
+      "type": "string",
+      "description": "Semantic version of the flow spec",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "nodes": {
+      "type": "array",
+      "description": "Steps in the flow as graph nodes",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique step identifier within this flow"
+          },
+          "template_id": {
+            "type": "string",
+            "description": "Reference to a step template for reuse"
+          },
+          "station_id": {
+            "type": "string",
+            "description": "Reference to a station/capability group"
+          },
+          "agents": {
+            "type": "array",
+            "description": "Agent(s) responsible for this step",
+            "items": {
+              "type": "string"
+            }
+          },
+          "params": {
+            "type": "object",
+            "description": "Step-specific parameters",
+            "additionalProperties": true
+          },
+          "objective": {
+            "type": "string",
+            "description": "What this step accomplishes"
+          },
+          "role": {
+            "type": "string",
+            "description": "Role description from flow config"
+          },
+          "teaching_note": {
+            "type": "string",
+            "description": "Teaching note for UI highlighting"
+          },
+          "teaching_highlight": {
+            "type": "boolean",
+            "description": "Whether this step should be highlighted in teaching mode"
+          },
+          "inputs": {
+            "type": "array",
+            "description": "Input artifacts for this step",
+            "items": {
+              "type": "string"
+            }
+          },
+          "outputs": {
+            "type": "array",
+            "description": "Output artifacts produced by this step",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["id"]
+      }
+    },
+    "edges": {
+      "type": "array",
+      "description": "Connections between nodes",
+      "items": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "description": "Source node ID"
+          },
+          "to": {
+            "type": "string",
+            "description": "Target node ID"
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["next", "branch", "loop", "detour", "error"],
+            "description": "Type of edge transition"
+          },
+          "condition": {
+            "type": "string",
+            "description": "Condition expression for conditional edges"
+          },
+          "priority": {
+            "type": "integer",
+            "description": "Priority for edge evaluation (lower = higher priority)",
+            "minimum": 0
+          },
+          "label": {
+            "type": "string",
+            "description": "Human-readable label for the edge"
+          }
+        },
+        "required": ["from", "to"]
+      }
+    },
+    "entry_node": {
+      "type": "string",
+      "description": "ID of the first node to execute"
+    },
+    "exit_nodes": {
+      "type": "array",
+      "description": "IDs of terminal nodes (nodes with no outgoing edges)",
+      "items": {
+        "type": "string"
+      }
+    },
+    "cross_cutting": {
+      "type": "array",
+      "description": "Cross-cutting agents available throughout the flow",
+      "items": {
+        "type": "string"
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Additional flow metadata",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "teaching": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "summary": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "required": ["id", "name", "nodes", "edges", "entry_node"]
+}

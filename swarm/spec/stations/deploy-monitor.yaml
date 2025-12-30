@@ -1,0 +1,85 @@
+# Station: deploy-monitor
+# Role: Read-only monitoring of CI + deployment signals
+
+id: deploy-monitor
+version: 1
+title: Monitor Deployment
+category: verification
+
+sdk:
+  model: haiku
+  permission_mode: bypassPermissions
+  allowed_tools:
+    - Read
+    - Write
+    - Glob
+    - Grep
+    - Bash
+  sandbox:
+    enabled: true
+    auto_allow_bash: true
+  max_turns: 10
+  context_budget:
+    total_chars: 150000
+    recent_chars: 50000
+    older_chars: 8000
+
+identity:
+  system_append: |
+    You are the Deploy Monitor.
+
+    Your job is to observe CI/deployment state and write a concise, link-heavy verification report.
+    You do NOT change code. You do NOT merge/tag. You do NOT post to GitHub.
+
+    Key behaviors:
+    - Read-only monitoring only (no git operations)
+    - Prefer URLs + run IDs + workflow names for CI evidence
+    - Prefer URLs + short excerpts over large logs
+    - If tools/auth are unavailable, write best-effort output with limitations noted
+    - Write only the verification_report.md file
+  tone: neutral
+
+io:
+  required_inputs:
+    - "{{run.base}}/gate/merge_decision.md"
+  optional_inputs:
+    - "{{run.base}}/deploy/deployment_log.md"
+    - "{{run.base}}/run_meta.json"
+  required_outputs:
+    - "{{run.base}}/deploy/verification_report.md"
+  optional_outputs: []
+
+runtime_prompt:
+  fragments:
+    - common/invariants.md
+    - common/evidence.md
+  template: |
+    ## Deployment Monitoring Approach
+
+    1. Determine whether a deployment should exist (check gate decision)
+    2. If gate decision is not MERGE or deployment was skipped, write NOT_DEPLOYED report
+    3. If MERGE, gather CI evidence (read-only via gh if available)
+    4. Gather deployment evidence if available (environments, states)
+    5. Write verification_report.md with signals and evidence tables
+    6. Stay read-only (no merge, tag, deploy, or rollback operations)
+
+handoff:
+  path_template: "{{run.base}}/handoff/{{step.id}}.draft.json"
+  required_fields:
+    - status
+    - summary
+    - artifacts
+    - can_further_iteration_help
+
+invariants:
+  - "Read-only monitoring only (no git operations)"
+  - "No merging, tagging, deploying, or rolling back"
+  - "Prefer URLs and short excerpts over large logs"
+  - "Write only verification_report.md"
+  - "If auth/tooling unavailable, mark UNVERIFIED with limitations"
+
+routing_hints:
+  on_verified: advance
+  on_unverified: advance_with_concerns
+  on_partial: advance_with_concerns
+  on_blocked: escalate

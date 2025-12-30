@@ -1,15 +1,18 @@
-# Swarm Architecture Overview
+# Flow Studio Architecture
 
-**Status:** Phase 0 (teaching repo with single platform)
-**Last Updated:** 2025-11-28
+**Status:** Phase 3 (Self-Healing Specs, Intelligent Routing)
+**Last Updated:** 2025-12-29
 
-This document describes the swarm's overall architecture: what we have now (Phase 0), what we're planning (Phases 1–3), and how everything fits together.
+Flow Studio is a Python orchestrator that drives stepwise LLM execution through a 7-flow SDLC pipeline. It manages state, calls Claude Code SDK for each step, and uses LLM intelligence for routing decisions.
+
+For the operational philosophy, see [docs/AGOPS_MANIFESTO.md](./docs/AGOPS_MANIFESTO.md).
+For canonical vocabulary (station, step, navigator, worker), see [docs/LEXICON.md](./docs/LEXICON.md).
 
 ---
 
 ## High-Level Design
 
-The swarm is organized into **three layers**:
+The swarm is organized into **five layers**:
 
 ### 1. Spec Layer (`swarm/`)
 
@@ -17,347 +20,609 @@ The swarm is organized into **three layers**:
 
 - **`AGENTS.md`** – canonical agent registry (name, role, flows, color, description)
 - **`flows/flow-*.md`** – flow specifications (question, outputs, agents, orchestration)
-- **`CLAUDE.md`** – patterns, constraints, architectural decisions
+- **`packs/`** – portable flow + station bundles (JSON specs)
+- **`config/`** – registries (flow, pack, agent, runtime)
 - **`tools/validate_swarm.py`** – validator enforcing spec + platform constraints
 - **`runs/<run-id>/`** – concrete receipts from actual flow executions
 
-### 2. Adapter Layer (`.claude/` and future `.openai/`, `.gemini/`, etc.)
+### 2. Adapter Layer (`.claude/`)
 
 **Platform-specific** implementation of the spec.
-
-Currently:
 
 - `.claude/agents/*.md` – Claude Code agent definitions (YAML frontmatter + prompts)
 - `.claude/commands/flow-*.md` – slash command entrypoints
 - `.claude/skills/*/SKILL.md` – reusable capabilities
 
-Future (Phase 2+):
+Generated from `swarm/config/` + templates via `make gen-adapters`.
 
-- Generated from `swarm/config/` + templates, not hand-authored
-- One adapter layer per platform (Claude, OpenAI, Gemini, etc.)
+### 3. Runtime Layer (`swarm/runtime/`)
 
-### 3. Enforcement Layer (CI + pre-commit + branch rules)
+**Execution engine** for stepwise orchestration.
 
-**Operational** protection of the SDLC.
+- **`stepwise/`** – Step transaction types, orchestrator, routing
+- **`macro_navigator.py`** – Between-flow routing with constraint DSL
+- **`navigator.py`** – Within-flow routing (microloops, sidequests)
+- **`station_library.py`** – Station templates with tunable parameters
+- **`evolution.py`** – Policy-gated spec patches from Wisdom
+- **`fact_extraction.py`** – Structured fact markers from handoffs
+- **`resilient_db.py`** – Journal-first DuckDB with auto-rebuild
 
-- `.github/workflows/ci.yml` – CI validator + test jobs
-- `.pre-commit-config.yaml` – local pre-commit hooks
-- Branch protection rules – main requires passing checks
+### 4. API Layer (`swarm/api/`)
 
-(Operationalized by Flow 5 / `deploy-decider` agent)
+**REST + SSE interface** for Flow Studio UI.
 
----
+- **`routes/runs.py`** – Run management, start/stop/resume
+- **`routes/events.py`** – SSE streaming of run events
+- **`routes/boundary.py`** – Boundary review aggregation
+- **`routes/facts.py`** – Fact marker queries
+- **`routes/evolution.py`** – Spec evolution proposals
+- **`routes/db.py`** – DuckDB health and rebuild
 
-## Phase 0 – Current State (Teaching Repo)
+### 5. UI Layer (`swarm/tools/flow_studio_ui/`)
 
-**Scope:** Single platform (Claude Code), hand-maintained adapters.
+**Flow Studio** visualization and control.
 
-**Invariants:**
-
-- Spec layer (`swarm/`) is machine-readable (YAML + markdown).
-- Adapter layer (`.claude/`) is hand-authored.
-- Spec + adapter are kept in sync by human discipline + validator.
-
-**Validation:**
-
-- `validate_swarm.py` checks:
-  - Agent bijection (every AGENTS.md entry has a `.claude/agents` file)
-  - Frontmatter correctness (required fields, type validation, design constraints)
-  - Flow references (agents mentioned in flows exist)
-  - Skill existence (declared skills have SKILL.md files)
-  - RUN_BASE paths (no hardcoded paths, only `RUN_BASE/<flow>/`)
-
-**Flows:** 6 fully specified, implemented, and runnable locally.
-
-**Agents:** 48 (3 built-in Claude infra + 45 domain agents in `.claude/agents/`).
-
-**Enforcement:** CI (2 jobs) + pre-commit hook + branch protection (via Flow 5 verification).
+- **`src/run_control.ts`** – SSE-driven state management
+- **`src/components/InventoryCounts.ts`** – Real-time fact dashboard
+- **`src/components/BoundaryReview.ts`** – Assumption/decision review
+- **`src/components/FlowEditor.ts`** – Visual flow editing
+- **`src/domain.ts`** – Canonical TypeScript types
 
 ---
 
-## Phase 1 – Explicit Configuration (Optional, ~2–3 weeks)
+## Terminology: The Execution Hierarchy
 
-**Scope:** Add machine-readable config layer; validate bijection; prepare for generation.
+Understanding these terms prevents confusion between orchestration units and tool libraries.
 
-**New Artifacts:**
+### Core Concepts
 
-- `swarm/config/agents.yaml` – extracted from `AGENTS.md`
-- `swarm/config/flows.yaml` – extracted from `swarm/flows/flow-*.md`
-- `swarm/platforms/claude.yaml` – Claude profile (model defaults, frontmatter rules)
-- Optional: `swarm/config/requirements.yaml` – FR-001..014 + FR-OP-001..005 as config
+| Term | Definition | Example |
+|------|------------|---------|
+| **Flow** | SDLC phase (1 of 7) | Signal, Plan, Build, Review, Gate, Deploy, Wisdom |
+| **Step** | Position in a flow that executes a Station | "critique_tests" in Build flow |
+| **Station** | Reusable execution capability with explicit contracts | `code-critic` station with I/O, SDK, invariants |
+| **Subagent** | Helper callable *inside* a step via `Task` tool | `explore`, `plan-subagent`, or domain agents |
 
-**Validation Enhancements:**
+### The Hierarchy of Intelligence
 
-- Config ↔ registry bijection (agents.yaml ↔ AGENTS.md ↔ .claude/agents)
-- Flow ↔ agent references validated against config
-- New error type: "Spec drift" (detected via config mismatch)
-
-**Benefit:** Spec becomes programmatically accessible; generation becomes possible.
-
-**No generation yet** – just adding a "configuration layer" so Phase 2 has a clear input.
-
----
-
-## Phase 2 – Single-Platform Generation (~2–4 weeks after Phase 1)
-
-**Scope:** Automate Claude adapter generation; prove codegen works.
-
-**New Artifacts:**
-
-- `swarm/prompts/agents/*.md` – isolated prompt bodies (extracted from `.claude/agents/`)
-- `swarm/templates/claude/agent.md.j2` – Jinja2 template for agent files
-- `swarm/templates/claude/command.md.j2` – template for slash commands
-- Enhanced `swarm/tools/gen_adapters.py` – generator tool
-
-**Workflow:**
-
-1. Edit spec or prompt: `swarm/config/agents.yaml`, `swarm/prompts/agents/foo.md`
-2. Regenerate: `uv run swarm/tools/gen_adapters.py --platform claude`
-3. Validate: `uv run swarm/tools/validate_swarm.py` (detects stale or hand-edits)
-4. Commit: `.claude/agents/*.md` are now **build artifacts**, not sources
-
-**Key Invariant:** `.claude/agents/*.md` files get a `GENERATED` header; validator flags hand-edits.
-
-**Benefit:** Change an agent's prompt once, update multiple files atomically.
-
----
-
-## Phase 3 – Multi-Platform Scale (~4–8 weeks after Phase 2)
-
-**Scope:** Scale to N platforms (OpenAI, Gemini, etc.) without multiplying hand-work.
-
-**New Artifacts:**
-
-- `swarm/platforms/openai.yaml`, `swarm/platforms/gemini.yaml` – platform profiles
-- `swarm/templates/openai/agent.json.j2` – OpenAI-specific templates
-- `swarm/templates/gemini/…` – Gemini-specific templates
-- Enhanced `gen_adapters.py` – supports multiple platforms: `--platform claude openai gemini`
-
-**Scaling Benefit:**
-
-Adding a new platform is now:
-
-1. Write `swarm/platforms/<name>.yaml` (tool mappings, model aliases, syntax rules)
-2. Write `swarm/templates/<name>/*.j2` (prompt structure, frontmatter)
-3. Run: `uv run swarm/tools/gen_adapters.py --platform <name>`
-4. Done – all 48 agents + 6 flows + all flows automatically wired for the new platform
-
-No hand-editing of 45+ domain agent files per platform.
-
----
-
-## Architecture Decisions
-
-### Why Three Layers?
-
-1. **Spec** – describes *what* the swarm is, in a platform-agnostic way
-2. **Adapter** – describes *how* each platform implements it
-3. **Enforcement** – describes *how* we keep both honest
-
-Separating them lets you:
-
-- Change the spec without touching adapters (until regen)
-- Change adapter syntax without changing the spec
-- Add new platforms without redesigning the spec or enforcement
-
-### Why Hand-Maintain Adapters in Phase 0?
-
-- Demonstrates the full SDLC end-to-end with minimal tooling
-- Lets you understand what the spec is *actually saying* by seeing how it's implemented
-- Generation is an optimization, not a requirement
-- Deferring it keeps the teaching repo simple
-
-### Why Config in Phase 1?
-
-- Makes the spec machine-readable without breaking current workflows
-- Enables validation of spec ↔ impl bijection
-- Sets up Phase 2 generation with a clear input
-- Forces clarity (e.g., "what are the actual 45 agent keys?")
-
-### Why Generation in Phase 2?
-
-- Proves the pattern works at scale
-- Reduces hand-maintenance burden
-- Lets validator detect drift automatically
-- Natural stepping stone to Phase 3 multi-platform
-
----
-
-## Current Locations
-
-### Spec (`swarm/`)
+Both **Steps** and **Subagents** are smart—they're full Claude Code orchestrators. The hierarchy separates concerns by scope and responsibility.
 
 ```
-swarm/
-  AGENTS.md                          # Source of truth: agent registry
-  CLAUDE.md                          # Spec reference: flows, patterns, constraints
-  flows/
-    flow-signal.md, flow-plan.md, … # Flow 1–6 specifications
-  tools/
-    validate_swarm.py                # Two-layer validator
-  config/                            # Phase 1+ (empty for now)
-  platforms/                         # Phase 1+ (empty for now)
-  prompts/agents/                    # Phase 2+ (empty for now)
-  templates/                         # Phase 2+ (empty for now)
-  runs/<run-id>/                     # Actual execution receipts (git-tracked)
-  examples/                          # Curated demo runs
+┌─────────────────────────────────────────────────────────────┐
+│  Layer 1: ORCHESTRATOR (Python Kernel)                      │
+│  Role: The Director                                         │
+│  Scope: Entire Run                                          │
+│  Manages: Time, Disk, Budget, Graph topology                │
+│  Power: Spawns Steps, owns the event journal, never LLM     │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Layer 2: STEP (Claude SDK Session)                         │
+│  Role: The Manager                                          │
+│  Scope: Single Station objective                            │
+│  Manages: Logic, delegation, handoff synthesis              │
+│  Power: Full orchestrator, delegates to Subagents           │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Layer 3: SUBAGENT (Task Tool)                              │
+│  Role: The Specialist                                       │
+│  Scope: Specific mechanical operation                       │
+│  Manages: Token-heavy mechanics (file reads, searches)      │
+│  Power: Full orchestrator, returns distilled results        │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### Adapters (`.claude/`)
+**Context Sharding: The Key Insight**
+
+The hierarchy implements **context sharding**—distributing token load across isolated sessions:
+
+| Layer | Holds | Delegates |
+|-------|-------|-----------|
+| Orchestrator | Run topology, budget | Step execution |
+| Step | Logic, decisions, handoff | Mechanics to Subagents |
+| Subagent | Focused task | Nothing (leaf node) |
+
+**Why this matters:**
+- **Steps maintain logic** while Subagents burn tokens on mechanics (reading files, running commands)
+- **Steps don't get "drunk"** on grep output—the Subagent abstracts it away and returns distilled results
+- **Parallel Subagent calls** let a Step fan out work without context explosion
+- **Clean handoffs** preserve reasoning across the amnesia boundary
+
+### Routing Philosophy: Suggested Detours, Not Allowlists
+
+The V3 routing model treats routes as **hints, not constraints**. The Navigator has full off-road capability when the objective demands it.
+
+| Principle | Implementation |
+|-----------|----------------|
+| **Suggested detours** | SidequestCatalog offers pre-planned routes, but doesn't constrain |
+| **Off-road capable** | Can inject ad-hoc flows, create new steps when blocking |
+| **Always spec'd** | Even improvised moves produce artifacts and receipts |
+| **Goal-aligned** | Only deviate when standard path blocks the objective |
+
+**The Navigator's Decision Space:**
 
 ```
-.claude/
-  agents/
-    (45 agent files, e.g., requirements-author.md)
-  commands/flows/
-    (6 slash command entrypoints, e.g., flow-1-signal.md)
-  skills/
-    test-runner/SKILL.md
-    auto-linter/SKILL.md
-    policy-runner/SKILL.md
-  settings.json
+┌─────────────────────────────────────────────────────────────┐
+│                    Navigator Inputs                          │
+├─────────────────────────────────────────────────────────────┤
+│  1. Golden Path — standard outgoing edges (Build → Review)   │
+│  2. Sidequest Catalog — pre-planned detours for this node    │
+│  3. Forensics — evidence (git diff, test results, errors)    │
+│  4. Objective — what the run is trying to achieve            │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                   Routing Decisions                          │
+├─────────────────────────────────────────────────────────────┤
+│  CONTINUE      — Proceed on golden path                      │
+│  DETOUR        — Inject sidequest chain, return to path      │
+│  INJECT_FLOW   — Inject a named pack flow (e.g., Flow 8)     │
+│  INJECT_NODES  — Create ad-hoc spec-backed nodes             │
+│  EXTEND_GRAPH  — Propose graph patch for future runs         │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### Enforcement (`.github/` + `.pre-commit-config.yaml`)
+**Sidequest Catalog** (`swarm/runtime/sidequest_catalog.py`):
+- `clarifier` — resolve ambiguity
+- `env-doctor` — diagnose environment issues
+- `test-triage` — analyze failing tests
+- `security-audit` — review sensitive paths
+- `contract-check` — verify API contracts
+- `context-refresh` — reload missing information
+
+**Example Decision:**
+- *Scenario:* Tests failed with `ModuleNotFound`
+- *Forensics:* Stack trace shows missing dependency
+- *Catalog offers:* `env-doctor`
+- *Decision:* `DETOUR` to `env-doctor`, then return to golden path
+
+### GitHub Lifecycle (V3 vs V4)
+
+**V3 (Current): Synchronous Integration**
+- Flows 1-2: `gh-researcher` pulls issues/comments *during* the step
+- Flow 3: `repo-operator` pushes Draft PR *during* the step
+- Flow 4: `feedback-harvester` pulls PR comments *during* the step
+- The Orchestrator drives timing
+
+**V4 (Future Vision): Asynchronous Integration**
+- Webhooks push context to a living session as events arrive
+- Flows react to external events, not poll for them
+- Documented but not implemented in V3
+
+### Graph-Native Mutation: Nested Flow Injection
+
+The flow graph isn't static—it supports runtime mutation through a **Nested Graph Stack** model.
 
 ```
-.github/workflows/
-  ci.yml                             # Validator + test jobs (FR-OP-001/002)
-  swarm-validate.yml                 # Legacy single-job (kept for demo)
-.pre-commit-config.yaml              # Local validation hook (FR-OP-003)
-RUNBOOK.md                           # Enforcement documentation (FR-OP-005)
+┌─────────────────────────────────────────────────────────────┐
+│                   Graph Stack (Runtime)                      │
+├─────────────────────────────────────────────────────────────┤
+│  Level 0: Main SDLC Graph                                    │
+│           [Signal] → [Plan] → [Build] → [Review] → ...       │
+│                                  │                           │
+│                                  │ INJECT_FLOW (Flow 8)      │
+│                                  ▼                           │
+│  Level 1: Injected Flow 8 (Security Audit)                   │
+│           [scan] → [triage] → [remediate]                    │
+│                       │                                      │
+│                       │ INJECT_NODES (ad-hoc)                │
+│                       ▼                                      │
+│  Level 2: Ad-hoc Sidequest                                   │
+│           [fetch-cve-details] → [assess-impact]              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Stack Operations:**
+
+| Operation | Effect | Return Behavior |
+|-----------|--------|-----------------|
+| `PUSH` | Enter injected flow/nodes | Suspends parent graph position |
+| `POP` | Complete injected work | Resumes parent at injection point |
+| `INHERIT` | Child inherits parent's goal | Ensures alignment through nesting |
+
+**Recursive Goal Inheritance:**
+
+When Flow 3 (Build) injects Flow 8 (Security Audit):
+1. Flow 8 inherits Flow 3's objective context
+2. Flow 8's steps can access Flow 3's artifacts
+3. Flow 8's outputs feed back into Flow 3's decision space
+4. On completion, control returns to Flow 3's next step
+
+**Why This Matters:**
+- **Dynamic composition** — runs adapt to discovered requirements
+- **Artifact continuity** — injected flows contribute to the same receipt chain
+- **Bounded complexity** — stack depth limits prevent runaway injection
+
+### Parallelism Principle: Fan Out for Independence
+
+When operations are independent, **fan out to subagents in parallel**. This applies at both the Orchestrator and Step levels.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                 Step: Code Review                            │
+├─────────────────────────────────────────────────────────────┤
+│  Files to review: [auth.py, api.py, models.py, utils.py]     │
+│                                                              │
+│  Sequential (slow):                                          │
+│    review(auth) → review(api) → review(models) → review(utils)│
+│    Total time: 4 × T                                         │
+│                                                              │
+│  Parallel (fast):                                            │
+│    ┌─ review(auth) ──┐                                       │
+│    ├─ review(api) ───┤  All run simultaneously               │
+│    ├─ review(models) ┤                                       │
+│    └─ review(utils) ─┘                                       │
+│    Total time: ~T                                            │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**When to Parallelize:**
+
+| Parallel | Sequential |
+|----------|------------|
+| File reviews (independent) | Steps with dependencies |
+| Test runs (isolated) | Git operations (serial) |
+| Search queries (read-only) | Write operations (conflicts) |
+| Lint checks (per-file) | Build then test (ordered) |
+
+**Implementation:**
+- Subagents are ideal parallelism units (isolated context)
+- Use `Task` tool with multiple concurrent calls
+- Aggregate results in the parent Step
+- Handle partial failures gracefully
+
+---
+
+## v3.0 Architecture: The Cognitive Hierarchy
+
+The system separates concerns across distinct cognitive roles:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      Python Kernel                          │
+│  (Factory Foreman - manages Time, Disk, Budget)             │
+└─────────────────────────────────────────────────────────────┘
+                              │
+          ┌───────────────────┼───────────────────┐
+          ▼                   ▼                   ▼
+┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
+│    Navigator    │ │     Worker      │ │    Curator      │
+│ (Decide Path)   │ │   (Do Work)     │ │ (Pack Context)  │
+└─────────────────┘ └─────────────────┘ └─────────────────┘
+          │                   │                   │
+          └───────────────────┼───────────────────┘
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                       The Disk                              │
+│  (Ledger - events.jsonl, handoffs, artifacts)               │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                        DuckDB                               │
+│  (Visibility Layer - projection of journal)                 │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Role Definitions
+
+| Role | Responsibility | Optimization |
+|------|---------------|--------------|
+| **Worker** | Implement code, write tests, fix lint | Full autonomy, broad tools |
+| **Finalizer** | Summarize work, write handoff | Same-session (hot context) |
+| **Navigator** | Analyze state, choose next step | Fresh session, minimal context |
+| **Curator** | Select context for next station | Dedicated scoping logic |
+| **Auditor** | Scan evidence, reconcile claims | Python-driven (deterministic) |
+
+---
+
+## Component Deep Dive
+
+### Stepwise Orchestrator (`swarm/runtime/stepwise/`)
+
+The step transaction abstraction that encapsulates all inputs and outputs:
+
+```python
+@dataclass
+class StepTxnInput:
+    repo_root: Path
+    run_id: str
+    flow_key: str
+    step: StepDefinition
+    spec: RunSpec
+    history: List[Dict[str, Any]]
+    run_state: Optional[RunState]
+    routing_ctx: Optional[RoutingContext]
+
+@dataclass
+class StepTxnOutput:
+    step_id: str
+    status: str  # "succeeded" | "failed" | "skipped"
+    envelope: Optional[HandoffEnvelope]
+    routing_signal: Optional[RoutingSignal]
+    verification: Optional[VerificationResult]
+    events: List[RunEvent]
+```
+
+### MacroNavigator (`swarm/runtime/macro_navigator.py`)
+
+Between-flow routing with constraint DSL:
+
+```python
+# Constraint patterns
+"never deploy unless gate verdict is MERGE"
+"max 3 bounces from gate to build"
+"require human approval after flow 4"
+
+# Actions
+MacroAction.ADVANCE   # Go to next flow
+MacroAction.GOTO      # Non-sequential jump
+MacroAction.REPEAT    # Re-run same flow
+MacroAction.PAUSE     # Wait for human
+MacroAction.TERMINATE # End the run
+```
+
+### Resilient DB (`swarm/runtime/resilient_db.py`)
+
+Journal-first design with auto-rebuild:
+
+```python
+# The events.jsonl is the append-only journal (authoritative)
+# The DuckDB is a projection/cache that can be deleted and rebuilt
+
+db = get_resilient_db()
+stats = db.get_run_stats_safe(run_id)  # Never raises, returns None on error
+
+# Health check and rebuild
+health = db.get_health()
+if health.needs_rebuild:
+    db.rebuild()
+```
+
+### Evolution Engine (`swarm/runtime/evolution.py`)
+
+Policy-gated spec patches from Wisdom:
+
+```python
+@dataclass
+class EvolutionPatch:
+    id: str                    # "FLOW-PATCH-001"
+    target_file: str           # Relative path from repo root
+    patch_type: PatchType      # flow_spec, station_spec, agent_prompt
+    content: str               # Diff or JSON patch
+    confidence: ConfidenceLevel
+    reasoning: str
+    evidence: List[str]
+    human_review_required: bool
 ```
 
 ---
 
-## Validation Strategy
+## Storage Architecture
 
-`validate_swarm.py` has **two layers**:
+### Journal-First Design
 
-### Layer 1 – Platform Spec
+```
+swarm/runs/<run-id>/
+├── events.jsonl          # Append-only event journal (authoritative)
+├── run_state.json        # Current run state snapshot
+├── <flow>/
+│   ├── receipts/         # Step receipts
+│   ├── artifacts/        # Flow artifacts
+│   ├── llm/              # LLM transcripts
+│   └── handoffs/         # Step handoff envelopes
+└── db.duckdb             # Projection (can be deleted and rebuilt)
+```
 
-Checks that all files are valid inputs for Claude Code:
+### Event Types
 
-- YAML frontmatter parses
-- Required fields present: `name`, `description`, `model`
-- Field types correct: `skills` is a list, `model` in `{inherit, haiku, sonnet, opus}`
-- No syntax errors
+```python
+# Step events
+"step_start"    # {flow_key, step_id, station_id}
+"step_end"      # {flow_key, step_id, status, verified, progress}
 
-**Goal:** "Claude Code can plausibly run this."
+# Flow events
+"flow_completed"  # {flow_key, status}
 
-### Layer 2 – Swarm Design Constraints
+# Run events
+"run_completed"   # {status}
+"run_stopping"    # {}
+"run_stopped"     # {reason}
+"run_paused"      # {}
+"run_resumed"     # {}
 
-Enforces this repo's opinionated design:
+# Fact events
+"facts_updated"   # {flow_key, step_id, markers}
+```
 
-- Bijection: every agent key in `AGENTS.md` has a `.claude/agents/<key>.md`
-- Frontmatter: `name` matches filename; `color` matches role family; no `tools:` or `permissionMode:` in domain agents
-- References: flow specs only reference registered agents or built-ins
-- Skills: every skill declaration has a `.claude/skills/<name>/SKILL.md`
-- RUN_BASE: flow specs use `RUN_BASE/<flow>/` placeholders, not hardcoded paths
+---
 
-**Goal:** "This swarm's design invariants hold."
+## Pack System
+
+Packs are portable bundles of flows + stations:
+
+```
+swarm/packs/
+├── baseline/
+│   └── pack.yaml           # Pack manifest
+├── flows/
+│   ├── signal.json         # Flow 1 spec
+│   ├── plan.json           # Flow 2 spec
+│   ├── build.json          # Flow 3 spec
+│   ├── review.json         # Flow 4 spec
+│   ├── gate.json           # Flow 5 spec
+│   ├── deploy.json         # Flow 6 spec
+│   └── wisdom.json         # Flow 7 spec
+└── stations/
+    ├── workers.yaml        # Worker station templates
+    ├── critics.yaml        # Critic station templates
+    └── sidequests.yaml     # Sidequest station templates
+```
+
+### Station Templates
+
+```yaml
+# swarm/packs/stations/workers.yaml
+code-implementer:
+  model: sonnet
+  context_budget: 80000
+  tools: [Read, Write, Bash, Glob, Grep]
+  verification:
+    artifacts: [implementation.md, build_log.txt]
+    commands: ["npm run build"]
+  tunable:
+    max_iterations: 5
+    style_guide_path: null
+```
+
+---
+
+## Phase Evolution
+
+### Phase 0 (Complete) – Teaching Repo
+
+- Single platform (Claude Code)
+- Hand-maintained adapters
+- Manual validation
+
+### Phase 1 (Complete) – Explicit Configuration
+
+- Machine-readable config (`swarm/config/`)
+- Flow and agent registries
+- Bijection validation
+
+### Phase 2 (Complete) – Single-Platform Generation
+
+- `gen_adapters.py` generates `.claude/agents/*.md`
+- Prompts in `swarm/prompts/agents/`
+- Templates in `swarm/templates/claude/`
+
+### Phase 3 (Current) – Self-Healing Specs
+
+- Pack system for portable flows
+- MacroNavigator for intelligent routing
+- Evolution engine for spec patches
+- Resilient DB for journal-first storage
+- Fact extraction for marker system
 
 ---
 
 ## Key Patterns
 
-### Microloops (Flows 1 & 3)
+### The Amnesia Protocol
 
-Requirements author ⇄ critic, test author ⇄ critic, code author ⇄ critic.
+Every step starts fresh. No chat history accumulation.
 
-Orchestrator loops while critic signals `Status: UNVERIFIED` + `can_further_iteration_help: yes`.
+```
+Step N completes → Finalizer writes handoff.json
+                 → Curator selects context for Step N+1
+                 → Step N+1 starts with curated ContextPack
+```
 
-Stops when critic signals `Status: VERIFIED` or `Status: UNVERIFIED` + `can_further_iteration_help: no`.
+### Forensics Over Narrative
 
-### Agents Never Block
+The Sheriff (DiffScanner, TestParser) verifies claims:
 
-Agents always produce receipts, even if the receipt says "we hit a constraint and can't move forward."
+```python
+# Don't trust: "Tests passed!"
+# Verify: git diff --numstat, test_summary.json
 
-The only honest failure is "no receipt."
+forensics = DiffScanner.scan(repo_root)
+# Navigator routes based on forensics, not worker claims
+```
 
-### When to Use BLOCKED Status
+### Dynamic Navigation
 
-BLOCKED is reserved for **missing external dependencies**, not for ambiguity:
+The FlowGraph is the map; the Navigator traverses it with full routing authority:
 
-| Status | When to Use |
-|--------|-------------|
-| **VERIFIED** | Work adequate for purpose; assumptions documented |
-| **UNVERIFIED** | Work has issues but produced; assumptions document uncertainty |
-| **BLOCKED** | Cannot produce meaningful work due to missing inputs |
+```python
+# Navigator sees:
+# - FlowGraph (available paths + injected nodes)
+# - Forensics (physical state: git diff, test results)
+# - History (what's been tried, detour count)
+# - Objective (run goal for alignment check)
 
-**BLOCKED examples** (exceptional):
-- Receipt file missing entirely
-- Required input artifact does not exist
-- External service unreachable (in Flows 5-6)
+decision = navigator.route(
+    current_state=forensics,
+    graph_stack=active_graphs,
+    history=routing_history,
+    objective=run_objective,
+)
+# Returns: RoutingDecision with action and target
 
-**NOT BLOCKED** (use UNVERIFIED with assumptions instead):
-- Problem statement ambiguous → write best interpretation, document assumptions
-- Requirements vague → write testable versions, note gaps
-- Scope unclear → estimate based on stated info, list unknowns
+class RoutingDecision:
+    action: Literal["CONTINUE", "DETOUR", "INJECT_FLOW", "INJECT_NODES", "EXTEND_GRAPH"]
+    target: Optional[str]        # Flow key, sidequest ID, or node spec
+    reason: str                  # Why this route
+    artifacts: List[str]         # What this route will produce
+```
 
-The key test: **"Can I write something meaningful even with uncertainty?"**
-- If yes → UNVERIFIED + documented assumptions
-- If no (missing artifact) → BLOCKED
+**Routing Decision Types:**
 
-### Assumptive-but-Transparent Work
+| Decision | When Used | Example |
+|----------|-----------|---------|
+| `CONTINUE` | Golden path is clear | Build step 3 → Build step 4 |
+| `DETOUR` | Catalog sidequest fits | Test failure → `test-triage` |
+| `INJECT_FLOW` | Need full flow capabilities | Security concern → Flow 8 |
+| `INJECT_NODES` | Ad-hoc work needed | Missing CVE data → fetch nodes |
+| `EXTEND_GRAPH` | Pattern should be permanent | Propose new sidequest type |
 
-When facing ambiguity, agents:
-1. Make a reasonable assumption
-2. Document the assumption explicitly (what, why, impact if wrong)
-3. Note what would change if the assumption is wrong
-4. Proceed with work
+### The Shadow Fork
 
-This enables re-running flows with better inputs. Humans answer clarification questions at flow boundaries, not mid-flow. Each flow is designed to be **run again** with refined inputs.
+High trust requires isolation:
 
-### Critics Don't Fix
-
-Critics write harsh assessments with explicit status + routing hints.
-
-Implementers (authors, fixers) apply fixes based on critique.
-
-### One Spec, N Platforms (Phase 2+)
-
-After Phase 2 generation is working:
-
-- Edit `swarm/config/agents.yaml`, `swarm/prompts/agents/foo.md`, `swarm/platforms/claude.yaml`
-- Run `gen_adapters.py`
-- All `.claude/agents/*.md` files update automatically
-- Same prompt bodies, different frontmatter per platform
-
----
-
-## Phase 0 → Phase 1 Transition
-
-No code changes needed to start Phase 1. Just:
-
-1. Create `swarm/config/agents.yaml` (copy metadata from `AGENTS.md`)
-2. Create `swarm/config/flows.yaml` (copy structure from `swarm/flows/`)
-3. Create `swarm/platforms/claude.yaml` (describe Claude's profile)
-4. Extend `validate_swarm.py` to cross-check config ↔ registry ↔ files
-5. Update this document
-
-Everything else can stay the same.
+```
+upstream/main ──┐
+                │
+                ▼ (fork at T-0)
+           origin/feature-branch
+                │
+                ▼ (swarm works here)
+           Shadow Fork (isolated)
+                │
+                ▼ (Flow 8: Rebase)
+           upstream/main
+```
 
 ---
 
-## When to Move Forward
+## File Structure
 
-- **Phase 1:** When `swarm-alignment` Flow 6 (Wisdom) completes and you understand the teaching story
-- **Phase 2:** When you're tired of editing `.claude/agents/*.md` by hand and want automation
-- **Phase 3:** When a second platform (OpenAI, Gemini, etc.) needs support
+```
+.claude/
+  agents/              # 53 domain agent definitions (generated)
+  commands/flows/      # 7 slash commands
+  skills/              # 4 global skills
+  settings.json
 
-You can live in Phase 0 indefinitely; generation is always optional.
+swarm/
+  api/                 # FastAPI routes
+  config/              # Registries (flow, pack, agent, runtime)
+  flows/               # Flow specs (markdown)
+  packs/               # Portable flow + station bundles
+  prompts/             # Agent prompt templates
+  runtime/             # Execution engine
+    stepwise/          # Step transaction types
+    engines/           # LLM backends (Claude SDK, CLI, Gemini)
+  tools/               # Validation, generation, UI
+    flow_studio_ui/    # TypeScript UI
+  runs/                # Run artifacts (gitignored)
+  examples/            # Curated demo snapshots
+
+tests/                 # Python tests
+docs/                  # Documentation
+```
 
 ---
 
 ## References
 
-- `swarm/positioning.md` – design philosophy
-- `swarm/ARCHITECTURE_MULTI_PLATFORM.md` – detailed multi-platform RFC
-- `swarm/tools/validate_swarm.py` – validator implementation
-- `CLAUDE.md` – project-level instructions
-- `RUNBOOK.md` – operational procedures
-
----
-
-**Next step:** After Flow 6 completes, review this and decide: does Phase 1 make sense for your project?
+- [docs/AGOPS_MANIFESTO.md](./docs/AGOPS_MANIFESTO.md) – Operational philosophy
+- [docs/ROADMAP_3_0.md](./docs/ROADMAP_3_0.md) – v3.0 roadmap and next steps
+- [docs/STEPWISE_BACKENDS.md](./docs/STEPWISE_BACKENDS.md) – Engine configuration
+- [docs/FLOW_STUDIO.md](./docs/FLOW_STUDIO.md) – UI documentation
+- [CLAUDE.md](./CLAUDE.md) – Project instructions

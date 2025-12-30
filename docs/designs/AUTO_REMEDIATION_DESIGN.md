@@ -40,7 +40,7 @@ The selftest system already includes a suggestion engine (`selftest_suggest_reme
 
 ### Important Caveat: Out-of-Band Only
 
-Auto-remediation operates **entirely outside** the six SDLC flows (Signal, Plan, Build, Gate, Deploy, Wisdom). It is a standalone utility that:
+Auto-remediation operates **entirely outside** the seven SDLC flows (Signal, Plan, Build, Review, Gate, Deploy, Wisdom). It is a standalone utility that:
 
 - Runs **before** or **after** flows, never **during**
 - Fixes **tooling and governance** issues (lint, config sync, AC freshness), not **logic or design** issues
@@ -104,13 +104,13 @@ Create an **Auto-Remediation Executor** that:
 
 ## 2.5 Out-of-Band Execution Model
 
-This section clarifies how auto-remediation relates to the six SDLC flows and establishes boundaries that prevent interference with normal development workflows.
+This section clarifies how auto-remediation relates to the seven SDLC flows and establishes boundaries that prevent interference with normal development workflows.
 
-### 2.5.1 Relationship to the Six Flows
+### 2.5.1 Relationship to the Seven Flows
 
-Auto-remediation is **out-of-band**, operating OUTSIDE and INDEPENDENT of the six SDLC flows:
+Auto-remediation is **out-of-band**, operating OUTSIDE and INDEPENDENT of the seven SDLC flows:
 
-| Aspect | Six Flows (Signal → Wisdom) | Auto-Remediation |
+| Aspect | Seven Flows (Signal → Wisdom) | Auto-Remediation |
 |--------|----------------------------|------------------|
 | **Scope** | Feature development, bug fixes, design work | Tooling hygiene, governance alignment |
 | **Invocation** | `/flow-N-*` commands by developer or orchestrator | `make selftest-remediate` by developer or CI |
@@ -230,7 +230,7 @@ The out-of-band execution model provides these safety guarantees:
 4. **Reversibility**: Remediation changes are git-restorable; flow state unaffected
 5. **Opt-in**: Developers consciously invoke remediation; it never runs implicitly within flows
 
-**Design invariant**: If auto-remediation is broken, disabled, or unavailable, all six flows remain fully functional. The swarm's core value proposition (flows producing auditable artifacts) is preserved.
+**Design invariant**: If auto-remediation is broken, disabled, or unavailable, all seven flows remain fully functional. The swarm's core value proposition (flows producing auditable artifacts) is preserved.
 
 ---
 

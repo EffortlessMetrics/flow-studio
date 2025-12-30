@@ -1,6 +1,6 @@
 """Tests for Build flow stepwise routing logic.
 
-This module validates the orchestrator's `_route` method with synthetic step results
+This module validates the `route_step` function with synthetic step results
 and receipts. It proves the routing logic works for Build microloops without needing
 real LLM execution.
 
@@ -24,7 +24,7 @@ real LLM execution.
 
 - Uses synthetic step results (no real engine execution)
 - Uses synthetic receipts written to temp directories
-- Tests the `_route` method in isolation
+- Tests the `route_step` function directly from the stepwise routing module
 - Follows existing test patterns from test_gemini_stepwise_backend.py
 """
 
@@ -34,7 +34,7 @@ import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 from unittest.mock import MagicMock
 
 import pytest
@@ -51,12 +51,11 @@ from swarm.config.flow_registry import (
     StepRouting,
     TeachingNotes,
 )
-from swarm.runtime.orchestrator import GeminiStepOrchestrator
-from swarm.runtime.engines import GeminiStepEngine
+from swarm.runtime.stepwise import route_step, read_receipt_field
 
 
 # -----------------------------------------------------------------------------
-# Fixtures
+# Fixtures and Helpers
 # -----------------------------------------------------------------------------
 
 
@@ -68,18 +67,28 @@ def tmp_repo(tmp_path: Path) -> Path:
     return tmp_path
 
 
-@pytest.fixture
-def mock_engine(tmp_repo: Path) -> GeminiStepEngine:
-    """Create a mock step engine."""
-    engine = GeminiStepEngine(tmp_repo)
-    engine.stub_mode = True
-    return engine
+def make_receipt_reader(tmp_repo: Path) -> Callable[..., Optional[str]]:
+    """Create a receipt_reader callable bound to a repo root.
 
-
-@pytest.fixture
-def orchestrator(mock_engine: GeminiStepEngine, tmp_repo: Path) -> GeminiStepOrchestrator:
-    """Create an orchestrator for testing routing logic."""
-    return GeminiStepOrchestrator(engine=mock_engine, repo_root=tmp_repo)
+    Returns a function with signature:
+        (run_id, flow_key, step_id, agent_key, field_name) -> Optional[str]
+    """
+    def reader(
+        run_id: str,
+        flow_key: str,
+        step_id: str,
+        agent_key: str,
+        field_name: str,
+    ) -> Optional[str]:
+        return read_receipt_field(
+            repo_root=tmp_repo,
+            run_id=run_id,
+            flow_key=flow_key,
+            step_id=step_id,
+            agent_key=agent_key,
+            field_name=field_name,
+        )
+    return reader
 
 
 @pytest.fixture
@@ -228,7 +237,6 @@ class TestMicroloopRouting:
 
     def test_verified_exits_loop(
         self,
-        orchestrator: GeminiStepOrchestrator,
         build_flow_def: FlowDefinition,
         tmp_repo: Path,
     ) -> None:
@@ -253,17 +261,18 @@ class TestMicroloopRouting:
         critique_step = build_flow_def.steps[1]
         assert critique_step.id == "critique_tests"
 
-        # Call _route
+        # Call route_step
         loop_state: Dict[str, int] = {}
         result = {}  # Step result (not used for receipt-based routing)
 
-        next_step_id, reason = orchestrator._route(
+        next_step_id, reason = route_step(
             flow_def=build_flow_def,
             current_step=critique_step,
             result=result,
             loop_state=loop_state,
             run_id=run_id,
             flow_key="build",
+            receipt_reader=make_receipt_reader(tmp_repo),
         )
 
         # Should exit to next step (implement)
@@ -276,7 +285,6 @@ class TestMicroloopRouting:
 
     def test_unverified_can_help_loops_back(
         self,
-        orchestrator: GeminiStepOrchestrator,
         build_flow_def: FlowDefinition,
         tmp_repo: Path,
     ) -> None:
@@ -301,17 +309,18 @@ class TestMicroloopRouting:
         # Get the critique_tests step
         critique_step = build_flow_def.steps[1]
 
-        # Call _route with fresh loop state
+        # Call route_step with fresh loop state
         loop_state: Dict[str, int] = {}
         result = {}
 
-        next_step_id, reason = orchestrator._route(
+        next_step_id, reason = route_step(
             flow_def=build_flow_def,
             current_step=critique_step,
             result=result,
             loop_state=loop_state,
             run_id=run_id,
             flow_key="build",
+            receipt_reader=make_receipt_reader(tmp_repo),
         )
 
         # Should loop back to author_tests
@@ -330,7 +339,6 @@ class TestMicroloopRouting:
 
     def test_unverified_cannot_help_exits(
         self,
-        orchestrator: GeminiStepOrchestrator,
         build_flow_def: FlowDefinition,
         tmp_repo: Path,
     ) -> None:
@@ -355,17 +363,18 @@ class TestMicroloopRouting:
         # Get the critique_tests step
         critique_step = build_flow_def.steps[1]
 
-        # Call _route
+        # Call route_step
         loop_state: Dict[str, int] = {}
         result = {}
 
-        next_step_id, reason = orchestrator._route(
+        next_step_id, reason = route_step(
             flow_def=build_flow_def,
             current_step=critique_step,
             result=result,
             loop_state=loop_state,
             run_id=run_id,
             flow_key="build",
+            receipt_reader=make_receipt_reader(tmp_repo),
         )
 
         # Should exit to next step despite UNVERIFIED
@@ -378,7 +387,6 @@ class TestMicroloopRouting:
 
     def test_max_iterations_limits_loops(
         self,
-        orchestrator: GeminiStepOrchestrator,
         build_flow_def: FlowDefinition,
         tmp_repo: Path,
     ) -> None:
@@ -409,13 +417,14 @@ class TestMicroloopRouting:
         loop_state: Dict[str, int] = {loop_key: max_iter}
         result = {}
 
-        next_step_id, reason = orchestrator._route(
+        next_step_id, reason = route_step(
             flow_def=build_flow_def,
             current_step=critique_step,
             result=result,
             loop_state=loop_state,
             run_id=run_id,
             flow_key="build",
+            receipt_reader=make_receipt_reader(tmp_repo),
         )
 
         # Should exit to next step due to max iterations
@@ -437,8 +446,8 @@ class TestLinearRouting:
 
     def test_linear_routing_advances(
         self,
-        orchestrator: GeminiStepOrchestrator,
         build_flow_def: FlowDefinition,
+        tmp_repo: Path,
     ) -> None:
         """Linear routing advances to the specified next step.
 
@@ -452,17 +461,18 @@ class TestLinearRouting:
         assert author_step.routing is not None
         assert author_step.routing.kind == "linear"
 
-        # Call _route
+        # Call route_step
         loop_state: Dict[str, int] = {}
         result = {"status": "succeeded"}
 
-        next_step_id, reason = orchestrator._route(
+        next_step_id, reason = route_step(
             flow_def=build_flow_def,
             current_step=author_step,
             result=result,
             loop_state=loop_state,
             run_id=run_id,
             flow_key="build",
+            receipt_reader=make_receipt_reader(tmp_repo),
         )
 
         # Should advance to critique_tests
@@ -475,8 +485,8 @@ class TestLinearRouting:
 
     def test_linear_routing_flow_complete(
         self,
-        orchestrator: GeminiStepOrchestrator,
         build_flow_def: FlowDefinition,
+        tmp_repo: Path,
     ) -> None:
         """Final linear step with no next terminates the flow.
 
@@ -490,17 +500,18 @@ class TestLinearRouting:
         assert commit_step.routing is not None
         assert commit_step.routing.next is None
 
-        # Call _route
+        # Call route_step
         loop_state: Dict[str, int] = {}
         result = {"status": "succeeded"}
 
-        next_step_id, reason = orchestrator._route(
+        next_step_id, reason = route_step(
             flow_def=build_flow_def,
             current_step=commit_step,
             result=result,
             loop_state=loop_state,
             run_id=run_id,
             flow_key="build",
+            receipt_reader=make_receipt_reader(tmp_repo),
         )
 
         # Should return None to indicate flow complete
@@ -522,13 +533,12 @@ class TestLoopStateTracking:
 
     def test_loop_state_increments(
         self,
-        orchestrator: GeminiStepOrchestrator,
         build_flow_def: FlowDefinition,
         tmp_repo: Path,
     ) -> None:
         """Loop counter increments on each iteration.
 
-        Each call to _route that loops back should increment the counter.
+        Each call to route_step that loops back should increment the counter.
         """
         run_id = "test-loop-increment"
 
@@ -547,34 +557,36 @@ class TestLoopStateTracking:
         loop_key = "critique_tests:author_tests"
         loop_state: Dict[str, int] = {}
         result = {}
+        receipt_reader = make_receipt_reader(tmp_repo)
 
         # First iteration
-        next_step_id, reason = orchestrator._route(
+        next_step_id, reason = route_step(
             flow_def=build_flow_def,
             current_step=critique_step,
             result=result,
             loop_state=loop_state,
             run_id=run_id,
             flow_key="build",
+            receipt_reader=receipt_reader,
         )
 
         assert loop_state.get(loop_key) == 1, "First iteration should set count to 1"
 
         # Second iteration (simulate coming back to critique_tests)
-        next_step_id, reason = orchestrator._route(
+        next_step_id, reason = route_step(
             flow_def=build_flow_def,
             current_step=critique_step,
             result=result,
             loop_state=loop_state,
             run_id=run_id,
             flow_key="build",
+            receipt_reader=receipt_reader,
         )
 
         assert loop_state.get(loop_key) == 2, "Second iteration should increment to 2"
 
     def test_loop_state_independent_loops(
         self,
-        orchestrator: GeminiStepOrchestrator,
         build_flow_def: FlowDefinition,
         tmp_repo: Path,
     ) -> None:
@@ -609,33 +621,37 @@ class TestLoopStateTracking:
 
         loop_state: Dict[str, int] = {}
         result = {}
+        receipt_reader = make_receipt_reader(tmp_repo)
 
         # Iterate test loop twice
-        orchestrator._route(
+        route_step(
             flow_def=build_flow_def,
             current_step=critique_tests,
             result=result,
             loop_state=loop_state,
             run_id=run_id,
             flow_key="build",
+            receipt_reader=receipt_reader,
         )
-        orchestrator._route(
+        route_step(
             flow_def=build_flow_def,
             current_step=critique_tests,
             result=result,
             loop_state=loop_state,
             run_id=run_id,
             flow_key="build",
+            receipt_reader=receipt_reader,
         )
 
         # Iterate code loop once
-        orchestrator._route(
+        route_step(
             flow_def=build_flow_def,
             current_step=critique_code,
             result=result,
             loop_state=loop_state,
             run_id=run_id,
             flow_key="build",
+            receipt_reader=receipt_reader,
         )
 
         # Verify independent tracking
@@ -660,12 +676,11 @@ class TestRoutingEdgeCases:
 
     def test_no_routing_config_falls_back_to_linear(
         self,
-        orchestrator: GeminiStepOrchestrator,
         tmp_repo: Path,
     ) -> None:
         """Step with no routing config falls back to linear progression.
 
-        If a step has no routing attribute, the orchestrator should find
+        If a step has no routing attribute, route_step should find
         the next step by index.
         """
         run_id = "test-no-routing"
@@ -698,13 +713,14 @@ class TestRoutingEdgeCases:
         loop_state: Dict[str, int] = {}
         result = {}
 
-        next_step_id, reason = orchestrator._route(
+        next_step_id, reason = route_step(
             flow_def=flow,
             current_step=step1,
             result=result,
             loop_state=loop_state,
             run_id=run_id,
             flow_key="test",
+            receipt_reader=make_receipt_reader(tmp_repo),
         )
 
         assert next_step_id == "step2", (
@@ -716,7 +732,6 @@ class TestRoutingEdgeCases:
 
     def test_missing_receipt_loops_back(
         self,
-        orchestrator: GeminiStepOrchestrator,
         build_flow_def: FlowDefinition,
         tmp_repo: Path,
     ) -> None:
@@ -736,13 +751,14 @@ class TestRoutingEdgeCases:
         loop_state: Dict[str, int] = {}
         result = {}
 
-        next_step_id, reason = orchestrator._route(
+        next_step_id, reason = route_step(
             flow_def=build_flow_def,
             current_step=critique_step,
             result=result,
             loop_state=loop_state,
             run_id=run_id,
             flow_key="build",
+            receipt_reader=make_receipt_reader(tmp_repo),
         )
 
         # Should loop back since we can't verify exit condition

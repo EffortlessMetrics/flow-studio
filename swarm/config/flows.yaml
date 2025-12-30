@@ -24,26 +24,42 @@ flows:
     short_title: "Build"
     description: "Implement via adversarial microloops, build code and tests, self-verify, produce receipts"
 
-  - key: gate
+  - key: review
     index: 4
+    title: "Draft -> Ready"
+    short_title: "Review"
+    description: "Harvest PR feedback, cluster into actionable items, apply fixes, flip Draft to Ready"
+    is_sdlc: false  # WIP - agents not yet defined
+    is_wip: true
+
+  - key: gate
+    index: 5
     title: "Code -> Artifact"
     short_title: "Gate"
     description: "Pre-merge gate, audit receipts, check contracts/security/policy, recommend merge or bounce"
 
   - key: deploy
-    index: 5
+    index: 6
     title: "Artifact -> Prod"
     short_title: "Deploy"
     description: "Move approved artifact to production, execute deployment, verify health, create audit trail"
 
   - key: wisdom
-    index: 6
+    index: 7
     title: "Prod -> Wisdom"
     short_title: "Wisdom"
     description: "Analyze artifacts, detect regressions, extract learnings, close feedback loops"
 
+  - key: reset
+    index: 8
+    title: "Reset (Utility)"
+    short_title: "Reset"
+    description: "Branch synchronization, cleanup, and run archiving. Injected when work branch diverges from upstream."
+    is_sdlc: false  # Utility flow, not part of core SDLC sequence
+    is_utility: true
+
   - key: stepwise-demo
-    index: 7
+    index: 9
     title: "Stepwise Demo (Testing)"
     short_title: "Stepwise"
     description: "A 10-step demo flow for testing stepwise execution backends"

@@ -1,0 +1,194 @@
+# Flow: 4-review
+# Purpose: Draft -> Ready: Harvest PR feedback, apply fixes, flip Draft to Ready
+
+id: 4-review
+version: 1
+title: "Flow 4 - Review"
+description: |
+  The Finishing School. Flow 3 built the house; Flow 4 does the punch list.
+  Harvest all PR feedback (bots + humans), cluster into Work Items, apply fixes,
+  checkpoint often, and flip Draft PR to Ready when review is complete.
+
+defaults:
+  context_pack:
+    include_upstream_artifacts: true
+    include_previous_envelopes: true
+    max_envelopes: 8
+    include_scent_trail: true
+  sdk_overrides: {}
+
+# Macro-level flow routing
+on_complete:
+  next_flow: 5-gate
+  reason: "Review complete; proceed to verification gate"
+
+on_failure:
+  next_flow: 3-build
+  reason: "Review found issues requiring code changes; bounce to Build"
+
+steps:
+  # Step 1: Create PR if needed
+  - id: create_pr
+    station: pr-creator
+    objective: |
+      Ensure Draft PR exists; create if missing.
+      Capture PR number for downstream agents.
+      Idempotent: skip if PR already exists.
+    inputs:
+      - build/build_receipt.json
+    outputs:
+      - review/pr_creation_status.md
+    routing:
+      kind: linear
+      next: harvest
+    teaching:
+      highlight: true
+      note: "PR creation: ensure Draft PR exists for feedback"
+
+  # Step 2: Harvest feedback
+  - id: harvest
+    station: pr-feedback-harvester
+    objective: |
+      Pull all bot/human feedback from PR.
+      Grab partial CI failures if already failing.
+      Non-blocking: return immediately with available feedback.
+    inputs:
+      - review/pr_creation_status.md
+    outputs:
+      - review/pr_feedback.md
+      - review/pr_feedback_raw.json
+    routing:
+      kind: linear
+      next: cluster
+    teaching:
+      highlight: true
+      note: "Feedback harvesting: grab all available bot/human feedback"
+
+  # Step 3: Cluster feedback into work items
+  - id: cluster
+    station: review-worklist-writer
+    objective: |
+      Cluster feedback into actionable Work Items (by file/theme).
+      50 comments -> 5-10 Work Items with stable RW-NNN IDs.
+      Group markdown nits into single RW-MD-SWEEP.
+      Categorize by severity (CRITICAL/MAJOR/MINOR/INFO).
+    inputs:
+      - review/pr_feedback.md
+      - review/pr_feedback_raw.json
+    outputs:
+      - review/review_worklist.md
+      - review/review_worklist.json
+    routing:
+      kind: linear
+      next: worklist_loop
+    teaching:
+      highlight: true
+      note: "Worklist clustering: 50 comments -> 5-10 actionable items"
+
+  # Step 4: Worklist loop (unbounded)
+  - id: worklist_loop
+    station: review-worklist-writer
+    objective: |
+      Unbounded microloop: pull next batch, route to fix-lane agent,
+      update worklist, checkpoint, repeat until complete.
+      Exit when pending_blocking == 0 or stuck_signal == true.
+    inputs:
+      - review/review_worklist.json
+      - plan/adr.md
+      - plan/ac_matrix.md
+    outputs:
+      - review/review_worklist.json
+      - review/review_actions.md
+    routing:
+      kind: microloop
+      loop_target: worklist_loop
+      next: close_pr
+      exit_on:
+        status:
+          - VERIFIED
+          - verified
+      max_iterations: 50
+    teaching:
+      highlight: true
+      note: "WORKLIST LOOP: iteratively resolve items until complete"
+
+  # Step 5: Close the loop
+  - id: close_pr
+    station: pr-status-manager
+    objective: |
+      Post resolution checklist to PR.
+      Flip Draft to Ready if review complete.
+      Keep Draft if incomplete with documented remaining items.
+    inputs:
+      - review/review_worklist.json
+      - review/review_actions.md
+    outputs:
+      - review/pr_status.md
+    routing:
+      kind: linear
+      next: cleanup
+    teaching:
+      note: "PR status: flip Draft to Ready when review complete"
+
+  # Step 6: Cleanup and write receipt
+  - id: cleanup
+    station: review-cleanup
+    objective: |
+      Write review_receipt.json, reseal build receipt if code changed.
+      Update index.json with review status.
+    inputs:
+      - review/review_worklist.json
+      - review/review_actions.md
+      - build/build_receipt.json
+    outputs:
+      - review/review_receipt.json
+      - review/cleanup_report.md
+    routing:
+      kind: linear
+      next: sanitize
+    teaching:
+      note: "Cleanup: seal the review receipt"
+
+  # Step 7: Sanitize secrets
+  - id: sanitize
+    station: secrets-sanitizer
+    objective: |
+      Publish gate: scan for secrets/hygiene.
+      Emit Gate Result block for orchestrator routing.
+    inputs:
+      - review/review_receipt.json
+    outputs:
+      - review/secrets_scan.md
+      - review/secrets_status.json
+    routing:
+      kind: linear
+      next: finalize
+    teaching:
+      note: "Secrets gate: scan before commit/push"
+
+  # Step 8: Finalize
+  - id: finalize
+    station: build-cleanup
+    objective: |
+      Final commit and push gated on secrets-sanitizer result.
+      Update GitHub issue board.
+    inputs:
+      - review/secrets_status.json
+    outputs:
+      - review/git_status.md
+    routing:
+      kind: terminal
+    teaching:
+      note: "Finalize: commit and update GitHub"
+
+cross_cutting_stations:
+  - policy-analyst
+  - risk-analyst
+  - clarifier
+  - repo-operator
+  - test-author
+  - code-implementer
+  - fixer
+  - doc-writer
+  - test-executor
+  - design-optioneer

@@ -1,0 +1,100 @@
+# Tool Profile Registry
+#
+# Defines tool access profiles for stations. Each profile specifies which
+# tools are available to stations of that class.
+#
+# IMPORTANT: These profiles are informational in high-trust mode (bypassPermissions).
+# The SDK gives full toolbox access; these define intended tool surfaces for:
+# 1. Documentation of station capabilities
+# 2. Future SDK support for tool restrictions
+# 3. Audit/compliance logging
+#
+# Tool Categories:
+# - Read-class: Read, Grep, Glob (read-only filesystem access)
+# - Write-class: Write, Edit (filesystem modification)
+# - Exec-class: Bash (command execution)
+# - Meta-class: Task, TodoWrite (orchestration/planning)
+
+profiles:
+  # Read-only access for exploratory/analysis tasks
+  read_only:
+    description: "Read-only filesystem access for analysis and exploration"
+    tools:
+      - Read
+      - Grep
+      - Glob
+    use_cases:
+      - "Signal analysis"
+      - "Context loading"
+      - "Code exploration"
+
+  # Standard worker profile for implementation tasks
+  read_write:
+    description: "Read and write access for implementation tasks"
+    tools:
+      - Read
+      - Write
+      - Edit
+      - Grep
+      - Glob
+    use_cases:
+      - "Code implementation"
+      - "Test authoring"
+      - "Documentation writing"
+
+  # Full access for complex orchestration
+  full_access:
+    description: "Full tool access including command execution and orchestration"
+    tools:
+      - Read
+      - Write
+      - Edit
+      - Bash
+      - Grep
+      - Glob
+      - Task
+      - TodoWrite
+    use_cases:
+      - "Infrastructure operations"
+      - "Git workflows"
+      - "Complex multi-step tasks"
+
+  # Critic profile - read plus critique writing
+  critic:
+    description: "Read access plus ability to write critique files"
+    tools:
+      - Read
+      - Grep
+      - Glob
+      - Write
+    use_cases:
+      - "Code review"
+      - "Test critique"
+      - "Design review"
+
+  # Reporter profile - similar to critic but focused on reports
+  reporter:
+    description: "Read access plus ability to write reports and summaries"
+    tools:
+      - Read
+      - Grep
+      - Glob
+      - Write
+    use_cases:
+      - "Report generation"
+      - "Summary writing"
+      - "Audit documentation"
+
+# Station category to profile mapping (defaults)
+# Stations with sdk.tool_profile="inherit" use these defaults
+category_defaults:
+  shaping: read_only       # Signal normalization, exploration
+  spec: read_write         # Requirements, BDD authoring
+  design: read_write       # ADR, interface design
+  implementation: read_write  # Code, test implementation
+  critic: critic           # Review and critique
+  verification: read_only  # Gate checks, auditing
+  analytics: read_only     # Pattern analysis, metrics
+  reporter: reporter       # Report generation
+  infra: full_access       # Git, CI operations
+  router: read_only        # Routing decisions (minimal tools)

@@ -1,0 +1,1302 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://flowstudio.dev/schemas/flow_graph.schema.json",
+  "title": "FlowGraphSpec",
+  "description": "Orchestration graph specification for Flow Studio. Maps 1:1 to React Flow node/edge format while supporting stepwise execution, policy enforcement, and subflow composition. The routing system is NON-RESTRICTIVE: policies define suggestions and defaults, not hard constraints. The orchestrator uses five routing decisions: CONTINUE (follow default path), DETOUR (temporary off-path visit), INJECT_FLOW (insert sub-flow), INJECT_NODES (insert specific nodes), and EXTEND_GRAPH (permanent graph modification).",
+  "type": "object",
+  "required": ["id", "version", "title", "flow_number", "nodes", "edges"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "Unique graph identifier (kebab-case, e.g., 'build-flow')",
+      "examples": ["signal-flow", "build-flow", "gate-flow"]
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Graph specification version for change tracking and compatibility"
+    },
+    "title": {
+      "type": "string",
+      "maxLength": 120,
+      "description": "Human-readable title for the flow graph"
+    },
+    "flow_number": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 99,
+      "description": "Flow number. Main SDLC flows use 1-7 (Signal, Plan, Build, Review, Gate, Deploy, Wisdom). Utility flows MUST use 8+ (e.g., 8=Reset). The autopilot only executes flows 1-7 in sequence; utility flows (8+) are injected on-demand based on their injection_trigger."
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 1000,
+      "description": "Detailed description of the flow's purpose and behavior"
+    },
+    "charter": {
+      "$ref": "#/definitions/FlowCharter",
+      "description": "The flow's constitution: goal, exit criteria, and non-goals. Injected into Navigator prompts to enforce contextual discipline."
+    },
+    "nodes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/GraphNode"
+      },
+      "description": "Nodes in the graph (maps to React Flow Node[])"
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/GraphEdge"
+      },
+      "description": "Edges connecting nodes (maps to React Flow Edge[])"
+    },
+    "policy": {
+      "$ref": "#/definitions/GraphPolicy",
+      "description": "Execution policy: detours, injections, escalation rules"
+    },
+    "subflows": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Subflow"
+      },
+      "description": "Collapsible subflows for complex step groupings"
+    },
+    "defaults": {
+      "$ref": "#/definitions/GraphDefaults",
+      "description": "Default settings inherited by all nodes"
+    },
+    "on_complete": {
+      "$ref": "#/definitions/FlowTransition",
+      "description": "Transition when flow completes successfully"
+    },
+    "on_failure": {
+      "$ref": "#/definitions/FlowTransition",
+      "description": "Transition when flow fails or bounces"
+    },
+    "metadata": {
+      "$ref": "#/definitions/GraphMetadata",
+      "description": "Additional metadata for tooling and visualization"
+    }
+  },
+  "definitions": {
+    "GraphNode": {
+      "type": "object",
+      "required": ["node_id", "template_id"],
+      "properties": {
+        "node_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "description": "Unique node identifier within this graph"
+        },
+        "template_id": {
+          "type": "string",
+          "description": "Reference to station template (e.g., 'test-author', 'code-critic')"
+        },
+        "params": {
+          "$ref": "#/definitions/NodeParams",
+          "description": "Template parameters for this node instance"
+        },
+        "overrides": {
+          "$ref": "#/definitions/NodeOverrides",
+          "description": "Settings that override template defaults"
+        },
+        "ui": {
+          "$ref": "#/definitions/NodeUI",
+          "description": "Visual presentation settings for React Flow"
+        },
+        "suggested_sidequests": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/SuggestedSidequest" },
+          "description": "Sidequests that are commonly useful from this node. These are suggestions—the orchestrator may take unlisted sidequests if handoff signals warrant them."
+        }
+      },
+      "additionalProperties": false
+    },
+    "SuggestedSidequest": {
+      "type": "object",
+      "required": ["station_id", "typical_trigger"],
+      "description": "A suggested sidequest (DETOUR or INJECT) that is commonly useful from this node position.",
+      "properties": {
+        "station_id": {
+          "type": "string",
+          "description": "Station to detour/inject (e.g., 'clarifier', 'risk-analyst')"
+        },
+        "typical_trigger": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Sentence describing when this sidequest is typically triggered (e.g., 'When requirements have ambiguous scope')"
+        },
+        "routing_type": {
+          "type": "string",
+          "enum": ["DETOUR", "INJECT_NODES", "INJECT_FLOW"],
+          "default": "DETOUR",
+          "description": "Routing decision type for this sidequest"
+        },
+        "priority": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 50,
+          "description": "Preference when multiple sidequests are valid. Higher = more preferred."
+        }
+      },
+      "additionalProperties": false
+    },
+    "NodeParams": {
+      "type": "object",
+      "description": "Template instantiation parameters",
+      "properties": {
+        "objective": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "Step-specific objective (overrides station default)"
+        },
+        "scope": {
+          "type": "string",
+          "description": "Scope constraint (e.g., 'AC-001..AC-003')"
+        },
+        "inputs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Additional input artifacts beyond station defaults"
+        },
+        "outputs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Step-specific output artifacts"
+        },
+        "context": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Arbitrary context passed to the template"
+        }
+      },
+      "additionalProperties": false
+    },
+    "NodeOverrides": {
+      "type": "object",
+      "description": "Override station template settings",
+      "properties": {
+        "sdk": {
+          "$ref": "#/definitions/SdkOverride",
+          "description": "SDK configuration overrides"
+        },
+        "identity": {
+          "type": "object",
+          "properties": {
+            "system_append": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "Additional system prompt text"
+            },
+            "tone": {
+              "type": "string",
+              "enum": ["neutral", "analytical", "critical", "supportive"],
+              "description": "Communication tone override"
+            }
+          },
+          "additionalProperties": false
+        },
+        "handoff": {
+          "type": "object",
+          "properties": {
+            "required_fields": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Additional required handoff fields"
+            }
+          },
+          "additionalProperties": false
+        },
+        "invariants": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Additional invariants for this node"
+        }
+      },
+      "additionalProperties": false
+    },
+    "SdkOverride": {
+      "type": "object",
+      "description": "SDK configuration overrides for this node",
+      "properties": {
+        "model": {
+          "type": "string",
+          "enum": ["haiku", "sonnet", "opus", "inherit"],
+          "description": "Model tier override"
+        },
+        "max_turns": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50,
+          "description": "Maximum conversation turns"
+        },
+        "allowed_tools": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Explicit tool allowlist"
+        },
+        "denied_tools": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Explicit tool denylist"
+        },
+        "context_budget": {
+          "$ref": "#/definitions/ContextBudget",
+          "description": "Context budget overrides"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ContextBudget": {
+      "type": "object",
+      "properties": {
+        "total_chars": {
+          "type": "integer",
+          "minimum": 10000,
+          "maximum": 1000000,
+          "description": "Total character budget"
+        },
+        "recent_chars": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 500000,
+          "description": "Recent context character budget"
+        },
+        "older_chars": {
+          "type": "integer",
+          "minimum": 500,
+          "maximum": 100000,
+          "description": "Older context character budget"
+        }
+      },
+      "additionalProperties": false
+    },
+    "NodeUI": {
+      "type": "object",
+      "description": "React Flow visual configuration",
+      "properties": {
+        "position": {
+          "type": "object",
+          "required": ["x", "y"],
+          "properties": {
+            "x": { "type": "number", "description": "X coordinate in canvas" },
+            "y": { "type": "number", "description": "Y coordinate in canvas" }
+          },
+          "additionalProperties": false,
+          "description": "Fixed position (if not using auto-layout)"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["step", "agent", "artifact", "subflow", "decision", "join"],
+          "default": "step",
+          "description": "Node type for rendering"
+        },
+        "label": {
+          "type": "string",
+          "maxLength": 50,
+          "description": "Display label (defaults to template_id)"
+        },
+        "color": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "description": "Background color (hex format)"
+        },
+        "icon": {
+          "type": "string",
+          "description": "Icon identifier for node decoration"
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 50,
+          "maximum": 400,
+          "description": "Node width in pixels"
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 30,
+          "maximum": 200,
+          "description": "Node height in pixels"
+        },
+        "collapsed": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether subflow is initially collapsed"
+        },
+        "hidden": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether node is initially hidden"
+        },
+        "teaching": {
+          "type": "object",
+          "properties": {
+            "highlight": {
+              "type": "boolean",
+              "default": false,
+              "description": "Emphasize in teaching mode"
+            },
+            "note": {
+              "type": "string",
+              "maxLength": 500,
+              "description": "Teaching note for this node"
+            }
+          },
+          "additionalProperties": false
+        },
+        "handles": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "type": "array",
+              "items": { "$ref": "#/definitions/HandleSpec" },
+              "description": "Source handles for outgoing edges"
+            },
+            "target": {
+              "type": "array",
+              "items": { "$ref": "#/definitions/HandleSpec" },
+              "description": "Target handles for incoming edges"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Custom handle positions for edges"
+        }
+      },
+      "additionalProperties": false
+    },
+    "HandleSpec": {
+      "type": "object",
+      "required": ["id", "position"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Handle identifier for edge connections"
+        },
+        "position": {
+          "type": "string",
+          "enum": ["top", "right", "bottom", "left"],
+          "description": "Handle position on node"
+        },
+        "label": {
+          "type": "string",
+          "description": "Optional label for the handle"
+        }
+      },
+      "additionalProperties": false
+    },
+    "GraphEdge": {
+      "type": "object",
+      "required": ["edge_id", "from", "to"],
+      "properties": {
+        "edge_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "description": "Unique edge identifier within this graph"
+        },
+        "from": {
+          "type": "string",
+          "description": "Source node_id"
+        },
+        "to": {
+          "type": "string",
+          "description": "Target node_id"
+        },
+        "from_handle": {
+          "type": "string",
+          "description": "Source handle ID (if using custom handles)"
+        },
+        "to_handle": {
+          "type": "string",
+          "description": "Target handle ID (if using custom handles)"
+        },
+        "condition": {
+          "$ref": "#/definitions/EdgeCondition",
+          "description": "Conditional routing logic"
+        },
+        "priority": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 50,
+          "description": "Edge evaluation priority (higher = first)"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["sequence", "loop", "branch", "detour", "injection", "subflow", "fork", "join"],
+          "default": "sequence",
+          "description": "Edge semantic type. 'fork' triggers parallel execution; 'join' aggregates parallel results."
+        },
+        "ui": {
+          "$ref": "#/definitions/EdgeUI",
+          "description": "Visual presentation for React Flow"
+        },
+        "fork_config": {
+          "$ref": "#/definitions/ForkConfig",
+          "description": "Configuration for fork edges (parallel execution)"
+        },
+        "join_config": {
+          "$ref": "#/definitions/JoinConfig",
+          "description": "Configuration for join edges (aggregating parallel results)"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ForkConfig": {
+      "type": "object",
+      "required": ["targets"],
+      "description": "Configuration for parallel execution (fork edge)",
+      "properties": {
+        "targets": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 2,
+          "description": "Node IDs to execute in parallel"
+        },
+        "execution_policy": {
+          "type": "string",
+          "enum": ["concurrent", "batch"],
+          "default": "concurrent",
+          "description": "'concurrent' runs all at once; 'batch' runs in configurable batches"
+        },
+        "batch_size": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of parallel branches per batch (for 'batch' policy)"
+        },
+        "isolation": {
+          "type": "string",
+          "enum": ["shared", "isolated"],
+          "default": "isolated",
+          "description": "'shared' allows branches to see each other's artifacts; 'isolated' gives each branch its own context"
+        },
+        "failure_policy": {
+          "type": "string",
+          "enum": ["continue_all", "fail_fast", "best_effort"],
+          "default": "continue_all",
+          "description": "'continue_all' runs all regardless of failures; 'fail_fast' stops on first failure; 'best_effort' continues but marks fork as partial"
+        }
+      },
+      "additionalProperties": false
+    },
+    "JoinConfig": {
+      "type": "object",
+      "required": ["strategy"],
+      "description": "Configuration for aggregating parallel results (join edge)",
+      "properties": {
+        "strategy": {
+          "type": "string",
+          "enum": ["all_complete", "all_verified", "any_verified", "first_complete", "quorum"],
+          "default": "all_complete",
+          "description": "How to aggregate parallel results"
+        },
+        "quorum_count": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of branches that must complete for quorum strategy"
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 7200,
+          "description": "Maximum time to wait for branches to complete"
+        },
+        "merge_artifacts": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to merge artifacts from all branches into unified context"
+        },
+        "merge_concerns": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to merge concerns from all branches"
+        },
+        "aggregate_status": {
+          "type": "string",
+          "enum": ["worst", "best", "majority"],
+          "default": "worst",
+          "description": "How to determine final status: 'worst' takes lowest status, 'best' takes highest, 'majority' takes mode"
+        }
+      },
+      "additionalProperties": false
+    },
+    "EdgeCondition": {
+      "type": "object",
+      "description": "Condition for edge traversal",
+      "properties": {
+        "field": {
+          "type": "string",
+          "description": "Handoff field to evaluate (e.g., 'status', 'tests_passed')"
+        },
+        "operator": {
+          "type": "string",
+          "enum": ["equals", "not_equals", "in", "not_in", "contains", "gt", "lt", "gte", "lte", "matches"],
+          "default": "equals",
+          "description": "Comparison operator"
+        },
+        "value": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "boolean" },
+            { "type": "number" },
+            { "type": "array", "items": { "type": "string" } }
+          ],
+          "description": "Value to compare against"
+        },
+        "expression": {
+          "type": "string",
+          "description": "CEL or JSONPath expression for complex conditions"
+        }
+      },
+      "additionalProperties": false
+    },
+    "EdgeUI": {
+      "type": "object",
+      "description": "React Flow edge visual configuration",
+      "properties": {
+        "label": {
+          "type": "string",
+          "maxLength": 50,
+          "description": "Edge label text"
+        },
+        "style": {
+          "type": "string",
+          "enum": ["solid", "dashed", "dotted"],
+          "default": "solid",
+          "description": "Line style"
+        },
+        "animated": {
+          "type": "boolean",
+          "default": false,
+          "description": "Animate edge (useful for active paths)"
+        },
+        "color": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "description": "Edge color (hex format)"
+        },
+        "width": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 10,
+          "default": 2,
+          "description": "Line width in pixels"
+        },
+        "marker_end": {
+          "type": "string",
+          "enum": ["arrow", "arrowclosed", "none"],
+          "default": "arrowclosed",
+          "description": "End marker type"
+        },
+        "curve_type": {
+          "type": "string",
+          "enum": ["bezier", "straight", "step", "smoothstep"],
+          "default": "bezier",
+          "description": "Curve rendering style"
+        }
+      },
+      "additionalProperties": false
+    },
+    "GraphPolicy": {
+      "type": "object",
+      "description": "Execution policy for the flow graph. NOTE: The routing system is non-restrictive by design. Policies define suggestions and defaults, not hard constraints. The orchestrator decides routing based on handoff signals.",
+      "properties": {
+        "suggested_detours": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/DetourPolicy" },
+          "description": "Suggested off-path transitions. These are recommendations, not restrictions - the orchestrator may take unlisted detours if handoff signals warrant them."
+        },
+        "suggested_injections": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/InjectionPolicy" },
+          "description": "Suggested stations that can be injected mid-flow. These are recommendations - the orchestrator may inject unlisted stations based on runtime needs."
+        },
+        "routing_decisions": {
+          "$ref": "#/definitions/RoutingDecisionConfig",
+          "description": "Configuration for how the orchestrator interprets routing decisions from handoff signals."
+        },
+        "max_depth": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "default": 10,
+          "description": "Maximum subflow nesting depth"
+        },
+        "max_loop_iterations": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50,
+          "default": 5,
+          "description": "Default max iterations for microloops"
+        },
+        "escalation": {
+          "$ref": "#/definitions/EscalationPolicy",
+          "description": "Rules for escalation to human/other flows"
+        },
+        "timeout": {
+          "$ref": "#/definitions/TimeoutPolicy",
+          "description": "Timeout settings for the flow"
+        },
+        "retry": {
+          "$ref": "#/definitions/RetryPolicy",
+          "description": "Retry behavior for failed nodes"
+        },
+        "invariants": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Global invariants applied to all nodes"
+        }
+      },
+      "additionalProperties": false
+    },
+    "DetourPolicy": {
+      "type": "object",
+      "required": ["from_nodes", "to_station"],
+      "description": "Suggested detour configuration. This is a RECOMMENDATION, not a restriction. The orchestrator may take detours not listed here based on runtime signals. Routing decision type: DETOUR.",
+      "properties": {
+        "from_nodes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Node IDs where this detour is commonly useful. The orchestrator may trigger detours from unlisted nodes if warranted."
+        },
+        "to_station": {
+          "type": "string",
+          "description": "Station to detour to (e.g., 'clarifier', 'risk-analyst')"
+        },
+        "condition": {
+          "$ref": "#/definitions/EdgeCondition",
+          "description": "Suggested condition for the detour. The orchestrator may override based on handoff signals."
+        },
+        "return_to": {
+          "type": "string",
+          "enum": ["source", "next", "specified"],
+          "default": "next",
+          "description": "Where to return after detour: 'source' = back to triggering node, 'next' = proceed to next node, 'specified' = go to return_node"
+        },
+        "return_node": {
+          "type": "string",
+          "description": "Specific node to return to (when return_to='specified')"
+        },
+        "max_uses": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Suggested maximum times this detour should be taken per run. This is a guideline, not a hard limit."
+        },
+        "priority": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 50,
+          "description": "Preference when multiple detours are valid. Higher = more preferred."
+        }
+      },
+      "additionalProperties": false
+    },
+    "InjectionPolicy": {
+      "type": "object",
+      "required": ["station_id"],
+      "description": "Suggested injection configuration. This is a RECOMMENDATION, not a restriction. The orchestrator may inject stations not listed here based on runtime needs. Routing decision types: INJECT_NODES (for single stations) or INJECT_FLOW (for sub-flows).",
+      "properties": {
+        "station_id": {
+          "type": "string",
+          "description": "Station that can be injected (e.g., 'clarifier', 'test-author')"
+        },
+        "inject_after": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Node IDs after which injection is commonly useful. The orchestrator may inject at unlisted positions if warranted."
+        },
+        "inject_before": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Node IDs before which injection is commonly useful. The orchestrator may inject at unlisted positions if warranted."
+        },
+        "condition": {
+          "$ref": "#/definitions/EdgeCondition",
+          "description": "Suggested condition for injection. The orchestrator may override based on handoff signals."
+        },
+        "one_shot": {
+          "type": "boolean",
+          "default": false,
+          "description": "Suggestion that this station should only be injected once per run. This is a guideline, not a hard limit."
+        },
+        "injection_type": {
+          "type": "string",
+          "enum": ["INJECT_NODES", "INJECT_FLOW"],
+          "default": "INJECT_NODES",
+          "description": "Routing decision type: INJECT_NODES for single station, INJECT_FLOW for entire sub-flow"
+        },
+        "priority": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 50,
+          "description": "Preference when multiple injections are valid. Higher = more preferred."
+        }
+      },
+      "additionalProperties": false
+    },
+    "EscalationPolicy": {
+      "type": "object",
+      "description": "Rules for escalating to humans or other flows",
+      "properties": {
+        "on_blocked": {
+          "type": "string",
+          "enum": ["human_review", "bounce_to_flow", "terminate", "continue_with_concerns"],
+          "default": "continue_with_concerns",
+          "description": "Action when BLOCKED status encountered"
+        },
+        "bounce_target_flow": {
+          "type": "string",
+          "description": "Flow ID for bounce (when on_blocked='bounce_to_flow')"
+        },
+        "max_unverified_streak": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "default": 3,
+          "description": "Max consecutive UNVERIFIED before escalation"
+        },
+        "escalate_on_unverified_streak": {
+          "type": "string",
+          "enum": ["human_review", "bounce_to_flow", "continue"],
+          "default": "continue",
+          "description": "Action when max_unverified_streak exceeded"
+        },
+        "human_notification": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean", "default": true },
+            "channels": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Notification channels (e.g., 'github-issue', 'slack')"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "TimeoutPolicy": {
+      "type": "object",
+      "properties": {
+        "node_timeout_seconds": {
+          "type": "integer",
+          "minimum": 60,
+          "maximum": 7200,
+          "default": 600,
+          "description": "Per-node timeout in seconds"
+        },
+        "flow_timeout_seconds": {
+          "type": "integer",
+          "minimum": 300,
+          "maximum": 86400,
+          "default": 3600,
+          "description": "Total flow timeout in seconds"
+        },
+        "on_timeout": {
+          "type": "string",
+          "enum": ["fail", "skip", "retry", "escalate"],
+          "default": "fail",
+          "description": "Action on timeout"
+        }
+      },
+      "additionalProperties": false
+    },
+    "RetryPolicy": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable automatic retries"
+        },
+        "max_attempts": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5,
+          "default": 2,
+          "description": "Maximum retry attempts"
+        },
+        "backoff_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 300,
+          "default": 30,
+          "description": "Delay between retries"
+        },
+        "retryable_errors": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Error types that trigger retry"
+        }
+      },
+      "additionalProperties": false
+    },
+    "RoutingDecisionConfig": {
+      "type": "object",
+      "description": "Configuration for orchestrator routing decisions. The routing system is non-restrictive: these are interpretation guidelines, not hard rules. The orchestrator uses handoff signals (status, recommended_next, concerns) to determine the best routing decision.",
+      "properties": {
+        "decision_vocabulary": {
+          "type": "object",
+          "description": "Documentation of the five routing decisions the orchestrator can make. This is informational - the orchestrator always has access to all decision types.",
+          "properties": {
+            "CONTINUE": {
+              "type": "string",
+              "const": "Follow the default edge to the next node in sequence. Used when status=VERIFIED or work proceeds normally.",
+              "description": "CONTINUE: Follow default path"
+            },
+            "DETOUR": {
+              "type": "string",
+              "const": "Temporarily visit a station not on the main path, then return. Used for cross-cutting concerns (clarifier, risk-analyst). Return point is typically 'next' or 'source'.",
+              "description": "DETOUR: Temporary off-path visit"
+            },
+            "INJECT_FLOW": {
+              "type": "string",
+              "const": "Insert an entire sub-flow at the current position. Used when complex multi-step work is needed (e.g., inject the test microloop).",
+              "description": "INJECT_FLOW: Insert sub-flow"
+            },
+            "INJECT_NODES": {
+              "type": "string",
+              "const": "Insert one or more specific nodes at the current position. Lighter than INJECT_FLOW - for adding a single station or small sequence.",
+              "description": "INJECT_NODES: Insert specific nodes"
+            },
+            "EXTEND_GRAPH": {
+              "type": "string",
+              "const": "Permanently modify the graph structure by adding new nodes/edges. Used for dynamic adaptation based on discovered requirements.",
+              "description": "EXTEND_GRAPH: Permanent graph modification"
+            }
+          },
+          "additionalProperties": false
+        },
+        "default_decision": {
+          "type": "string",
+          "enum": ["CONTINUE", "DETOUR", "INJECT_FLOW", "INJECT_NODES", "EXTEND_GRAPH"],
+          "default": "CONTINUE",
+          "description": "Default routing decision when handoff signals are ambiguous"
+        },
+        "decision_precedence": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["CONTINUE", "DETOUR", "INJECT_FLOW", "INJECT_NODES", "EXTEND_GRAPH"]
+          },
+          "default": ["CONTINUE", "DETOUR", "INJECT_NODES", "INJECT_FLOW", "EXTEND_GRAPH"],
+          "description": "Preference order when multiple decisions are valid. Earlier = preferred."
+        },
+        "signal_interpretation": {
+          "type": "object",
+          "description": "How handoff signals map to routing decisions. These are defaults that can be overridden by explicit recommended_next in handoffs.",
+          "properties": {
+            "on_verified": {
+              "type": "string",
+              "enum": ["CONTINUE", "DETOUR", "INJECT_FLOW", "INJECT_NODES", "EXTEND_GRAPH"],
+              "default": "CONTINUE",
+              "description": "Default decision when status=VERIFIED"
+            },
+            "on_unverified_can_iterate": {
+              "type": "string",
+              "enum": ["CONTINUE", "DETOUR", "INJECT_FLOW", "INJECT_NODES", "EXTEND_GRAPH"],
+              "default": "CONTINUE",
+              "description": "Default decision when status=UNVERIFIED and can_further_iteration_help=yes (typically loop back)"
+            },
+            "on_unverified_cannot_iterate": {
+              "type": "string",
+              "enum": ["CONTINUE", "DETOUR", "INJECT_FLOW", "INJECT_NODES", "EXTEND_GRAPH"],
+              "default": "CONTINUE",
+              "description": "Default decision when status=UNVERIFIED and can_further_iteration_help=no (proceed with concerns documented)"
+            },
+            "on_blocked": {
+              "type": "string",
+              "enum": ["CONTINUE", "DETOUR", "INJECT_FLOW", "INJECT_NODES", "EXTEND_GRAPH"],
+              "default": "DETOUR",
+              "description": "Default decision when status=BLOCKED (typically detour to clarifier)"
+            },
+            "on_concerns": {
+              "type": "string",
+              "enum": ["CONTINUE", "DETOUR", "INJECT_FLOW", "INJECT_NODES", "EXTEND_GRAPH"],
+              "default": "DETOUR",
+              "description": "Default decision when concerns array is non-empty (typically detour to risk-analyst)"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "Subflow": {
+      "type": "object",
+      "required": ["subflow_id", "title", "entry_node", "exit_nodes"],
+      "description": "A collapsible group of nodes",
+      "properties": {
+        "subflow_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "description": "Unique subflow identifier"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 80,
+          "description": "Display title when collapsed"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Subflow purpose description"
+        },
+        "entry_node": {
+          "type": "string",
+          "description": "Node ID where subflow begins"
+        },
+        "exit_nodes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "description": "Node IDs where subflow can exit"
+        },
+        "contained_nodes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "All node IDs within this subflow"
+        },
+        "ui": {
+          "type": "object",
+          "properties": {
+            "color": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$",
+              "description": "Background color when collapsed"
+            },
+            "collapsed_by_default": {
+              "type": "boolean",
+              "default": false,
+              "description": "Start collapsed in UI"
+            },
+            "position": {
+              "type": "object",
+              "properties": {
+                "x": { "type": "number" },
+                "y": { "type": "number" }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "policy": {
+          "type": "object",
+          "properties": {
+            "allow_external_entry": {
+              "type": "boolean",
+              "default": false,
+              "description": "Allow edges from outside to non-entry nodes"
+            },
+            "allow_external_exit": {
+              "type": "boolean",
+              "default": false,
+              "description": "Allow edges to outside from non-exit nodes"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "GraphDefaults": {
+      "type": "object",
+      "description": "Default settings for all nodes in the graph",
+      "properties": {
+        "context_pack": {
+          "type": "object",
+          "properties": {
+            "include_upstream_artifacts": {
+              "type": "boolean",
+              "default": true,
+              "description": "Include artifacts from upstream flows"
+            },
+            "include_previous_envelopes": {
+              "type": "boolean",
+              "default": true,
+              "description": "Include handoff envelopes from previous steps"
+            },
+            "max_envelopes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 12,
+              "description": "Maximum envelopes to include"
+            },
+            "include_scent_trail": {
+              "type": "boolean",
+              "default": true,
+              "description": "Include scent trail for context"
+            }
+          },
+          "additionalProperties": false
+        },
+        "sdk": {
+          "$ref": "#/definitions/SdkOverride",
+          "description": "Default SDK settings for all nodes"
+        }
+      },
+      "additionalProperties": false
+    },
+    "FlowTransition": {
+      "type": "object",
+      "description": "Transition to another flow. For utility flows, next_flow can be 'return' (resume caller) or 'pause' (wait for human). For main SDLC flows, next_flow should be the spec ID (e.g., '4-gate').",
+      "properties": {
+        "next_flow": {
+          "type": "string",
+          "description": "Target flow ID. For main SDLC flows: spec ID format (e.g., '4-gate'). For utility flows: 'return' to resume the interrupted flow, or 'pause' to wait for human intervention."
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Reason for transition"
+        },
+        "condition": {
+          "$ref": "#/definitions/EdgeCondition",
+          "description": "Optional condition for transition"
+        },
+        "pass_artifacts": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Artifacts to pass to next flow"
+        }
+      },
+      "additionalProperties": false
+    },
+    "FlowCharter": {
+      "type": "object",
+      "required": ["goal", "exit_criteria"],
+      "description": "The flow's constitution. Injected into Navigator prompts to enforce contextual discipline and prevent scope creep.",
+      "properties": {
+        "goal": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "The single outcome this flow must achieve (e.g., 'Produces verified code that satisfies the AC Matrix')"
+        },
+        "question": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "The question this flow answers (e.g., 'Does implementation match design?')"
+        },
+        "exit_criteria": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "description": "Conditions that must be true for the flow to complete successfully"
+        },
+        "non_goals": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Explicitly out-of-scope activities. Helps the Navigator reject irrelevant detours."
+        },
+        "prime_directive": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "The Navigator's constitution for this flow (e.g., 'Maximize passing tests. Minimize changes. Only detach from Golden Path if build is blocked.')"
+        }
+      },
+      "additionalProperties": false
+    },
+    "GraphMetadata": {
+      "type": "object",
+      "description": "Additional metadata for tooling. Includes utility flow configuration for flows that are injected on-demand rather than being part of the main SDLC sequence.",
+      "properties": {
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation timestamp"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update timestamp"
+        },
+        "author": {
+          "type": "string",
+          "description": "Graph author or creator"
+        },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Classification tags"
+        },
+        "documentation_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Link to detailed documentation"
+        },
+        "react_flow_version": {
+          "type": "string",
+          "description": "Target React Flow version for compatibility"
+        },
+        "cross_cutting_stations": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Stations available globally in this flow"
+        },
+        "is_utility_flow": {
+          "type": "boolean",
+          "default": false,
+          "description": "True for utility flows that are injected on-demand (e.g., reset, rebase). Utility flows are NOT part of the main 1-7 autopilot sequence. When true: (1) injection_trigger should be defined, (2) on_complete.next_flow should be 'return' or 'pause', not a flow spec ID, (3) flow_number should be >= 8."
+        },
+        "injection_trigger": {
+          "type": "string",
+          "description": "Condition that triggers injection of this utility flow. Examples: 'upstream_diverged', 'lint_failure', 'security_concern', 'dependency_update'. Required when is_utility_flow=true. The orchestrator watches for these signals and injects the utility flow when the condition is met."
+        },
+        "utility_flow_category": {
+          "type": "string",
+          "enum": ["git_maintenance", "code_quality", "security", "dependency", "cleanup", "recovery"],
+          "description": "Category of utility flow for grouping and discovery. Helps the orchestrator suggest appropriate utility flows."
+        },
+        "can_be_skipped": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether this utility flow can be skipped by user preference. Some utility flows (e.g., security-critical) may be mandatory."
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "id": "build-flow",
+      "version": 1,
+      "title": "Flow 3 - Build",
+      "flow_number": 3,
+      "description": "Transform design artifacts into working code via adversarial microloops",
+      "nodes": [
+        {
+          "node_id": "load_context",
+          "template_id": "context-loader",
+          "params": {
+            "objective": "Assemble the working set for implementation",
+            "inputs": ["plan/adr.md", "plan/api_contracts.yaml"],
+            "outputs": ["build/subtask_context_manifest.json"]
+          },
+          "ui": {
+            "type": "step",
+            "label": "Load Context",
+            "position": { "x": 100, "y": 100 },
+            "teaching": {
+              "highlight": true,
+              "note": "Heavy context loading: surface all relevant code"
+            }
+          }
+        },
+        {
+          "node_id": "author_tests",
+          "template_id": "test-author",
+          "params": {
+            "objective": "Write tests based on BDD scenarios"
+          },
+          "ui": {
+            "type": "step",
+            "label": "Write Tests",
+            "position": { "x": 100, "y": 200 }
+          }
+        },
+        {
+          "node_id": "critique_tests",
+          "template_id": "test-critic",
+          "params": {
+            "objective": "Review test quality and coverage"
+          },
+          "ui": {
+            "type": "step",
+            "label": "Critique Tests",
+            "position": { "x": 100, "y": 300 }
+          }
+        }
+      ],
+      "edges": [
+        {
+          "edge_id": "e1-context-to-tests",
+          "from": "load_context",
+          "to": "author_tests",
+          "type": "sequence",
+          "ui": { "style": "solid" }
+        },
+        {
+          "edge_id": "e2-tests-to-critique",
+          "from": "author_tests",
+          "to": "critique_tests",
+          "type": "sequence",
+          "ui": { "style": "solid" }
+        },
+        {
+          "edge_id": "e3-loop-back",
+          "from": "critique_tests",
+          "to": "author_tests",
+          "type": "loop",
+          "priority": 60,
+          "condition": {
+            "field": "status",
+            "operator": "equals",
+            "value": "UNVERIFIED"
+          },
+          "ui": {
+            "style": "dashed",
+            "label": "UNVERIFIED",
+            "color": "#f59e0b"
+          }
+        }
+      ],
+      "policy": {
+        "max_loop_iterations": 3,
+        "escalation": {
+          "on_blocked": "continue_with_concerns",
+          "max_unverified_streak": 3
+        },
+        "suggested_injections": [
+          {
+            "station_id": "clarifier",
+            "inject_after": ["load_context", "author_tests", "critique_tests"],
+            "injection_type": "INJECT_NODES"
+          }
+        ],
+        "routing_decisions": {
+          "default_decision": "CONTINUE",
+          "signal_interpretation": {
+            "on_verified": "CONTINUE",
+            "on_unverified_can_iterate": "CONTINUE",
+            "on_blocked": "DETOUR"
+          }
+        }
+      },
+      "subflows": [
+        {
+          "subflow_id": "test-microloop",
+          "title": "Test Microloop",
+          "description": "Author/critic loop for test quality",
+          "entry_node": "author_tests",
+          "exit_nodes": ["critique_tests"],
+          "contained_nodes": ["author_tests", "critique_tests"],
+          "ui": {
+            "color": "#fef3c7",
+            "collapsed_by_default": false
+          }
+        }
+      ],
+      "defaults": {
+        "context_pack": {
+          "include_upstream_artifacts": true,
+          "max_envelopes": 12
+        }
+      },
+      "on_complete": {
+        "next_flow": "4-review",
+        "reason": "Build complete; proceed to PR review"
+      },
+      "on_failure": {
+        "next_flow": "2-plan",
+        "reason": "Implementation issues may require design changes"
+      }
+    }
+  ]
+}

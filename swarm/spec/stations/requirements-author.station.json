@@ -1,0 +1,96 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "requirements-author",
+  "version": 1,
+  "title": "Requirements Author",
+  "category": "spec",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_write",
+    "allowed_tools": ["Read", "Write", "Grep", "Glob"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": false,
+      "excluded_commands": ["git", "gh", "rm", "mv"]
+    },
+    "max_turns": 15,
+    "context_budget": {
+      "total_chars": 180000,
+      "recent_chars": 60000,
+      "older_chars": 12000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Requirements Author. Write functional + non-functional requirements from the problem statement. You author requirements. You do not critique. You do not perform git ops. Requirements are contracts - if a stranger can't turn a requirement into a deterministic test without asking follow-ups, it's not done.",
+    "longform_ref": "prompts/agentic_steps/requirements-author.md",
+    "tone": "neutral"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md",
+      "fragments/common/lane_discipline.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md",
+      "fragments/output/machine_summary.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "signal/problem_statement.md"
+    ],
+    "optional_inputs": [
+      "signal/requirements_critique.md"
+    ],
+    "required_outputs": [
+      "signal/requirements.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/signal/requirements.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "can_further_iteration_help",
+      "proposed_next_step"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "signal/requirements.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nWrite functional + non-functional requirements from problem statement.\n\n## Context\n\n{{#each inputs}}\n- {{this}}\n{{/each}}\n\n{{#if critique_exists}}\n## Critique to Address\n\nTreat CRITICAL and MAJOR items from requirements_critique.md as your worklist.\n{{/if}}\n\n## Output\n\n- `{{run.base}}/signal/requirements.md`\n\n## Requirements Format\n\n### Functional Requirements (REQ)\n- One behavior per REQ\n- Use 'shall'\n- Acceptance criteria as atomic list: `- AC-1: ...`, `- AC-2: ...`\n\n### Non-Functional Requirements (NFR)\n- ID format: `NFR-<DOMAIN>-<NNN>` (SEC, PERF, REL, OPS, COMP)\n- Must be measurable or verifiable\n- Include measurement methods: `- MET-1: ...`, `- MET-2: ...`"
+  },
+  "invariants": [
+    "No git ops - no commit/push/checkout",
+    "Write only your output file - no temp files, no edits to other artifacts",
+    "No secrets - no tokens/keys/credentials in requirements",
+    "No design - write 'what' not 'how', ADR owns 'how'",
+    "No critique - write requirements, requirements-critic evaluates them",
+    "NFR IDs must be typed: NFR-<DOMAIN>-<NNN> (SEC, PERF, REL, OPS, COMP)",
+    "Each REQ must have atomic AC markers: - AC-1: ..., - AC-2: ...",
+    "Each NFR must have MET markers: - MET-1: ..., - MET-2: ...",
+    "State transitions in problem_statement.md require matching REQ items for migration logic"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "loop",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

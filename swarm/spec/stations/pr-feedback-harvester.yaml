@@ -1,0 +1,112 @@
+# Station: pr-feedback-harvester
+# Source: swarm/prompts/agentic_steps/pr-feedback-harvester.md
+# Role: Read all PR feedback sources and aggregate into structured format
+
+id: pr-feedback-harvester
+version: 2
+title: PR Feedback Harvester
+category: analytics
+
+sdk:
+  model: sonnet
+  permission_mode: bypassPermissions
+  allowed_tools:
+    - Read
+    - Write
+    - Edit
+    - Bash
+    - Grep
+    - Glob
+  sandbox:
+    enabled: true
+    auto_allow_bash: true
+  max_turns: 10
+  context_budget:
+    total_chars: 150000
+    recent_chars: 50000
+    older_chars: 8000
+
+identity:
+  system_append: |
+    You are the PR Feedback Harvester Agent.
+
+    You read all available PR feedback sources and aggregate them into structured format:
+    - PR Reviews (human + bot like CodeRabbit)
+    - PR Review Comments (line-level)
+    - Issue Comments (general PR discussion)
+    - CI Check Runs
+    - Check Suites
+
+    There is no mode switch. You always harvest everything and extract actionable blockers.
+    - Flow 3 interrupts on blockers[] (CRITICAL-only - stop-the-line issues)
+    - Flow 4 drains the complete worklist from pr_feedback.md (all severities)
+
+    Grab what's available - don't wait for CI completion. Partial CI failures are actionable.
+    Use your judgment for severity triage - you're intelligent, not a rule executor.
+  longform_ref: prompts/agentic_steps/pr-feedback-harvester.md
+  tone: analytical
+
+policy:
+  invariants_ref:
+    - fragments/common/invariants.md
+  handoff_ref:
+    - fragments/common/handoff.md
+
+io:
+  required_inputs:
+    - run_meta.json
+  optional_inputs: []
+  required_outputs:
+    - review/pr_feedback.md
+  optional_outputs:
+    - review/pr_feedback_raw.json
+    - build/pr_feedback.md
+
+handoff:
+  draft_path_template: "{{run.base}}/handoff/pr-feedback-harvester.draft.json"
+  schema_ref: schemas/handoff.schema.json
+  required_fields:
+    - status
+    - summary
+    - blockers
+
+verify:
+  required_artifacts:
+    - review/pr_feedback.md
+  gate_status_on_fail: UNVERIFIED
+
+runtime_prompt:
+  fragments:
+    - common/invariants.md
+    - common/handoff.md
+  template: |
+    ## Feedback Harvesting Approach
+
+    1. Preflight: verify run_meta.json exists with pr_number
+    2. Check GitHub access (github_ops_allowed, gh auth status)
+    3. Harvest all sources: reviews, review_comments, issue_comments, check_runs, check_suites
+    4. Identify bot authors: coderabbitai[bot], github-actions[bot], dependabot[bot], etc.
+    5. Triage with judgment: CRITICAL (genuine blockers) > MAJOR > MINOR > INFO
+    6. Add thoughts field for each item (your quick read on validity)
+    7. Write pr_feedback.md with stable FB-* IDs
+
+    ## Status Decision
+
+    - VERIFIED: Feedback harvested successfully
+    - UNVERIFIED: PR doesn't exist or GitHub access unavailable
+    - CANNOT_PROCEED: IO/permissions failure
+
+invariants:
+  - "Speed over depth - get feedback back quickly"
+  - "Triage, don't plan - quick reads, not fix plans"
+  - "Judgment, not rules - CI pending is not a finding"
+  - "Read-only on GitHub - do not modify PR or post comments"
+  - "Stable IDs from upstream - FB-CI-<id>, FB-RC-<id>, FB-IC-<id>, FB-RV-<id>"
+  - "Genuine blockers only - only real stop-the-line issues in blockers[]"
+  - "Per-flow outputs - build/ for Flow 3, review/ for Flow 4"
+
+routing_hints:
+  on_verified: advance
+  on_unverified: advance_with_concerns
+  on_partial: advance_with_concerns
+  on_blocked: escalate

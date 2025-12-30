@@ -1,0 +1,88 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "reset-resolve-conflicts",
+  "version": 1,
+  "title": "Reset: Resolve Conflicts",
+  "category": "infra",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "full_access",
+    "allowed_tools": ["Read", "Write", "Edit", "Bash", "Grep", "Glob"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": true,
+      "excluded_commands": ["rm -rf", "git push --force", "git reset --hard", "git clean -fd"]
+    },
+    "max_turns": 20,
+    "context_budget": {
+      "total_chars": 150000,
+      "recent_chars": 60000,
+      "older_chars": 15000
+    }
+  },
+  "identity": {
+    "system_append": "You are executing the Resolve Conflicts step in Flow 8 (Reset). Your task is to resolve merge/rebase conflicts using safe, mechanical strategies. Complex conflicts that require design decisions should pause for human review. NEVER make arbitrary choices when both sides have significant changes.",
+    "longform_ref": "prompts/steps/reset/resolve_conflicts.md",
+    "tone": "analytical"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "reset/sync_report.md"
+    ],
+    "optional_inputs": [
+      "reset/diagnose_report.md"
+    ],
+    "required_outputs": [
+      "reset/conflict_resolution.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/reset/conflict_resolution.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "can_further_iteration_help"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "reset/conflict_resolution.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nResolve merge/rebase conflicts using safe, mechanical strategies.\n\n## Safe Resolution Strategies\n\n1. **Trivial conflicts**: Whitespace, formatting, import order\n2. **Additive conflicts**: Both sides add different things - combine them\n3. **One-sided changes**: One side modified, one side didn't - take the modification\n\n## Pause Conditions\n\nIf any of these apply, set status=UNVERIFIED and request human review:\n- Both sides have significant semantic changes to same code\n- Conflict involves business logic or API contracts\n- Resolution requires understanding intent beyond the code\n\n## Constraints\n\n- Mechanical resolution only - no design decisions\n- NEVER make arbitrary \"pick ours\" or \"pick theirs\" for complex conflicts\n- Document every resolution with rationale\n\n## Output\n\nWrite {{run.base}}/reset/conflict_resolution.md with resolution details and any unresolved conflicts."
+  },
+  "invariants": [
+    "Mechanical conflict resolution only - no design decisions",
+    "NEVER make arbitrary choices for complex conflicts",
+    "Pause for human review if both sides have significant semantic changes",
+    "Document every resolution with clear rationale",
+    "Safe Bash only - no destructive commands",
+    "If conflicts cannot be safely resolved, set UNVERIFIED status"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "loop",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

@@ -148,10 +148,10 @@ class TestModelRegistry:
         from swarm.config.model_registry import list_known_models, get_model_spec
 
         models = list_known_models()
-        assert "claude-sonnet-4" in models
-        assert "gemini-1.5-flash" in models
+        assert "claude-sonnet-4-5-20250929" in models
+        assert "gemini-3-flash-preview" in models
 
-        claude = get_model_spec("claude-sonnet-4")
+        claude = get_model_spec("claude-sonnet-4-5-20250929")
         assert claude is not None
         assert claude.context_tokens == 200000
 
@@ -159,14 +159,14 @@ class TestModelRegistry:
         """context_chars should be tokens * 4."""
         from swarm.config.model_registry import get_model_spec
 
-        model = get_model_spec("claude-sonnet-4")
+        model = get_model_spec("claude-sonnet-4-5-20250929")
         assert model.context_chars == model.context_tokens * 4
 
     def test_budget_computation_for_200k_model(self):
         """200k token model computes correct budgets."""
         from swarm.config.model_registry import compute_model_budgets
 
-        budgets = compute_model_budgets("claude-sonnet-4")
+        budgets = compute_model_budgets("claude-sonnet-4-5-20250929")
         # 200k tokens * 4 chars = 800k chars * 0.25 = 200k chars
         assert budgets["context_budget_chars"] == 200000
         # 800k * 0.075 = 60k
@@ -178,7 +178,7 @@ class TestModelRegistry:
         """1M token model computes larger budgets."""
         from swarm.config.model_registry import compute_model_budgets
 
-        budgets = compute_model_budgets("gemini-1.5-flash")
+        budgets = compute_model_budgets("gemini-3-flash-preview")
         # 1M tokens * 4 chars = 4M chars * 0.25 = 1M chars
         assert budgets["context_budget_chars"] == 1048576
 
@@ -318,7 +318,7 @@ class TestPriorityAwarePromptBuilding:
             extra={},
         )
 
-        prompt, truncation_info = engine._build_prompt(ctx)
+        prompt, truncation_info, _ = engine._build_prompt(ctx)
 
         # CRITICAL items (code-implementer, merge-decider) should be in prompt
         assert "s2" in prompt  # code-implementer
@@ -366,7 +366,7 @@ class TestPriorityAwarePromptBuilding:
             extra={},
         )
 
-        prompt, _ = engine._build_prompt(ctx)
+        prompt, _, _ = engine._build_prompt(ctx)
 
         # Find positions in prompt - chronological order should be maintained
         pos_1 = prompt.find("step_1")

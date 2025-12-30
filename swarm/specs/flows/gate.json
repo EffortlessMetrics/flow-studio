@@ -1,0 +1,106 @@
+{
+  "$schema": "../schemas/flow_graph.schema.json",
+  "id": "gate",
+  "name": "Gate",
+  "version": "1.0.0",
+  "nodes": [
+    {
+      "id": "receipt",
+      "agents": ["receipt-checker"],
+      "role": "Verify build_receipt.json completeness -> receipt_audit.md.",
+      "objective": "Validate build artifacts are complete",
+      "teaching_note": "Gate checkpoint: verify all build artifacts exist and receipt is well-formed.",
+      "teaching_highlight": true,
+      "inputs": ["RUN_BASE/build/build_receipt.json", "RUN_BASE/build/self_review.md"],
+      "outputs": ["RUN_BASE/gate/receipt_audit.md"]
+    },
+    {
+      "id": "contract",
+      "agents": ["contract-enforcer"],
+      "role": "Check API changes versus contracts -> contract_audit.md.",
+      "objective": "Verify implementation matches API contracts",
+      "teaching_note": "Verify implementation matches api_contracts.yaml from Plan.",
+      "teaching_highlight": true,
+      "inputs": ["RUN_BASE/gate/receipt_audit.md", "RUN_BASE/plan/api_contracts.yaml", "RUN_BASE/build/impl_changes_summary.md"],
+      "outputs": ["RUN_BASE/gate/contract_audit.md"]
+    },
+    {
+      "id": "security",
+      "agents": ["security-scanner"],
+      "role": "Run SAST and secret scans -> security_audit.md.",
+      "objective": "Check for security vulnerabilities",
+      "teaching_note": "Security checkpoint: SAST, secret detection, dependency check.",
+      "teaching_highlight": true,
+      "inputs": ["RUN_BASE/gate/receipt_audit.md", "RUN_BASE/build/impl_changes_summary.md", "src/**"],
+      "outputs": ["RUN_BASE/gate/security_audit.md"]
+    },
+    {
+      "id": "coverage",
+      "agents": ["coverage-enforcer"],
+      "role": "Verify test coverage meets thresholds -> coverage_audit.md.",
+      "objective": "Validate test coverage against plan",
+      "teaching_note": "Coverage checkpoint: verify test coverage against thresholds from test_plan.md.",
+      "teaching_highlight": true,
+      "inputs": ["RUN_BASE/gate/receipt_audit.md", "RUN_BASE/plan/test_plan.md", "RUN_BASE/build/test_changes_summary.md"],
+      "outputs": ["RUN_BASE/gate/coverage_audit.md"]
+    },
+    {
+      "id": "gate_fix",
+      "agents": ["gate-fixer"],
+      "role": "Apply mechanical fixes only -> gate_fix_summary.md.",
+      "objective": "Apply lint/format fixes only",
+      "teaching_note": "MECHANICAL ONLY: lint, format, docstrings, typos, changelog. NO logic changes.",
+      "teaching_highlight": true,
+      "inputs": ["RUN_BASE/gate/receipt_audit.md", "RUN_BASE/gate/contract_audit.md", "RUN_BASE/gate/security_audit.md", "RUN_BASE/gate/coverage_audit.md"],
+      "outputs": ["RUN_BASE/gate/gate_fix_summary.md"]
+    },
+    {
+      "id": "merge_decision",
+      "agents": ["merge-decider"],
+      "role": "Synthesize all checks into merge decision -> merge_decision.md.",
+      "objective": "Produce MERGE/BOUNCE/ESCALATE decision",
+      "teaching_note": "Final gate: produce MERGE/BOUNCE/ESCALATE based on all audits.",
+      "teaching_highlight": true,
+      "inputs": ["RUN_BASE/gate/receipt_audit.md", "RUN_BASE/gate/contract_audit.md", "RUN_BASE/gate/security_audit.md", "RUN_BASE/gate/coverage_audit.md", "RUN_BASE/gate/gate_fix_summary.md"],
+      "outputs": ["RUN_BASE/gate/merge_decision.md"]
+    }
+  ],
+  "edges": [
+    {
+      "from": "receipt",
+      "to": "contract",
+      "kind": "next"
+    },
+    {
+      "from": "contract",
+      "to": "security",
+      "kind": "next"
+    },
+    {
+      "from": "security",
+      "to": "coverage",
+      "kind": "next"
+    },
+    {
+      "from": "coverage",
+      "to": "gate_fix",
+      "kind": "next"
+    },
+    {
+      "from": "gate_fix",
+      "to": "merge_decision",
+      "kind": "next"
+    }
+  ],
+  "entry_node": "receipt",
+  "exit_nodes": ["merge_decision"],
+  "cross_cutting": ["policy-analyst", "risk-analyst", "gh-reporter"],
+  "metadata": {
+    "title": "Flow 4 - Code -> Artifact (Gate)",
+    "description": "Pre-merge gate - audit receipts, check contracts/security/policy; recommend merge or bounce.",
+    "teaching": {
+      "title": "Code to Artifact: The Pre-Merge Quality Gate",
+      "summary": "The Gate is where automated audits catch issues before merge. Critically, the Gate only applies MECHANICAL fixes (lint, format, typos). Logic/design issues bounce back to Build or Plan. This keeps the gate fast and objective."
+    }
+  }
+}

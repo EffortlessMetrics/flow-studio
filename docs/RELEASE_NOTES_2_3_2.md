@@ -18,7 +18,7 @@ If you're landing here for the first time, this is the version to pin to:
 - **Flow Studio v1** with async loading and operator/observer modes
 - **Wisdom scaffolding** for cross-run learning extraction
 
-This version represents a complete, tested implementation of the 6-flow SDLC pattern.
+This version represents a complete, tested implementation of the 7-flow SDLC pattern.
 Treat `main` and `v2.3.2` as immutable except for critical bugfixes, doc errata, or security issues.
 
 ### Announcement (Copy-Paste Ready)

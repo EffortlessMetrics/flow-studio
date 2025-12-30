@@ -182,7 +182,7 @@ app.run(debug=True)
 ## Integration with Full Swarm
 
 This template extracts the visualization layer from Flow Studio. For the
-complete SDLC framework with 6 flows and 48 agents, see:
+complete SDLC framework with 7 flows and 56 agents, see:
 
 https://github.com/EffortlessMetrics/flow-studio
 

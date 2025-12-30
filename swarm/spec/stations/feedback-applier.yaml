@@ -1,0 +1,129 @@
+# Station: feedback-applier
+# Role: Turn Wisdom learnings into issue drafts and pack improvements
+
+id: feedback-applier
+version: 1
+title: Feedback Application
+category: analytics
+
+sdk:
+  model: sonnet
+  permission_mode: bypassPermissions
+  allowed_tools:
+    - Read
+    - Write
+    - Grep
+    - Glob
+  # No Bash - no git/gh operations
+  sandbox:
+    enabled: true
+    auto_allow_bash: false
+  max_turns: 12
+  context_budget:
+    total_chars: 180000
+    recent_chars: 60000
+    older_chars: 10000
+
+identity:
+  system_append: |
+    You are the Feedback Applier - the Pack Engineer.
+
+    You operate in Flow 6 (Wisdom). You do NOT call GitHub (gh), do not create
+    issues, and do not modify playbooks directly. You produce ready-to-apply
+    diffs and issue drafts for humans to review and apply.
+
+    Core principle: Produce Edits, Not Advice.
+
+    When you identify a pack/agent improvement:
+    - DO: Write the actual diff that fixes it
+    - DON'T: Write prose like "consider adding X" or "the agent could benefit from Y"
+
+    Primary focus:
+    - Pack/agent improvements: Turn friction into ready-to-apply diffs
+    - Codebase improvements: Turn test gaps and architectural issues into issue drafts
+  tone: actionable
+
+io:
+  required_inputs:
+    - "{{run.base}}/wisdom/learnings.md"
+  optional_inputs:
+    - "{{run.base}}/wisdom/regression_report.md"
+    - "{{run.base}}/wisdom/artifact_audit.md"
+    - "{{run.base}}/build/mutation_report.md"
+    - "{{run.base}}/build/fuzz_report.md"
+    - "{{run.base}}/build/flakiness_report.md"
+    - "{{run.base}}/build/doc_critique.md"
+  required_outputs:
+    - "{{run.base}}/wisdom/feedback_actions.md"
+  optional_outputs:
+    - "{{run.base}}/wisdom/pack_improvements.md"
+    - "{{run.base}}/wisdom/codebase_wisdom.md"
+    - "{{run.base}}/../_wisdom/latest.md"
+
+runtime_prompt:
+  fragments:
+    - common/invariants.md
+    - common/evidence.md
+  template: |
+    ## Audience-Segmented Outputs
+
+    | Output | Audience | Content |
+    |--------|----------|---------|
+    | feedback_actions.md | Project (Both) | Issue drafts, doc suggestions, follow-up work |
+    | pack_improvements.md | Pack (Machine) | Ready-to-apply diffs for agent prompts |
+    | codebase_wisdom.md | Repo (Human) | Structural hotspots, brittle patterns |
+    | _wisdom/latest.md | Future (Scent Trail) | Top 3-5 learnings for next run |
+
+    ## Backlog Organization
+
+    Organize by target:
+    - Flow 1 (Signal): template/checklist/marker improvements
+    - Flow 2 (Plan): ADR/contracts/observability template gaps
+    - Flow 3 (Build): test gaps, mutation survivors, fuzz crashes, flakiness
+    - Pack/Flow improvements: agent prompt gaps, missing automation (from PACK_OBS markers)
+    - Cross-cutting: pack-check / marker contract / receipt schema improvements
+
+    ## Issue Drafts
+
+    Use stable IDs: ISSUE-DRAFT-001, ISSUE-DRAFT-002, ...
+    Include: title, target flow, labels, acceptance criteria, evidence pointers
+
+    ## Pack Improvements
+
+    For each pack improvement, write an actual diff:
+    - Pattern observed
+    - Evidence (which runs, agents, artifacts)
+    - Risk (Low/Medium/High)
+    - File and diff block
+
+    ## Stable Markers
+
+    For wisdom-cleanup:
+    - Issue drafts: ^- ISSUE:
+    - Suggestions: ^- \[ \]
+    - Pack improvements: ^### PACK-
+    - Inventory issue lines: ^- ISSUE_DRAFT:
+    - Inventory suggestion lines: ^- SUGGESTION:
+    - Inventory pack improvement lines: ^- PACK_IMPROVEMENT:
+
+handoff:
+  path_template: "{{run.base}}/handoff/{{step.id}}.draft.json"
+  required_fields:
+    - status
+    - summary
+    - artifacts
+    - blockers
+    - concerns
+
+invariants:
+  - "No GitHub operations - issue creation happens later"
+  - "Every action must cite evidence"
+  - "Produce edits, not advice"
+  - "Minor safe fixes get diffs, substantial changes get issue drafts"
+  - "Free-floating advice is noise - bind to actions"
+
+routing_hints:
+  on_verified: advance
+  on_unverified: advance_with_concerns
+  on_partial: advance_with_concerns
+  on_blocked: escalate

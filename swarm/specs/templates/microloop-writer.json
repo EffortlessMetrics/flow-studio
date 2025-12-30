@@ -1,0 +1,52 @@
+{
+  "id": "microloop-writer",
+  "name": "Microloop Writer",
+  "description": "Writer agent in a microloop pattern. Produces artifacts that will be critiqued by a paired critic. Continues iterating until VERIFIED or no further improvement possible.",
+  "category": "microloop",
+  "station_id": "requirements-author",
+  "version": 1,
+  "default_objective": "Write {{artifact_type}} based on {{source_input}}. Produce clear, complete content that addresses all requirements.",
+  "parameters": [
+    {
+      "name": "artifact_type",
+      "type": "string",
+      "required": true,
+      "default": "requirements document",
+      "title": "Artifact Type",
+      "description": "What type of artifact to produce (e.g., requirements, test plan, code)"
+    },
+    {
+      "name": "source_input",
+      "type": "string",
+      "required": true,
+      "default": "upstream context and specifications",
+      "title": "Source Input",
+      "description": "What to base the writing on"
+    },
+    {
+      "name": "quality_focus",
+      "type": "string",
+      "required": false,
+      "default": "completeness and clarity",
+      "title": "Quality Focus",
+      "description": "Primary quality attributes to optimize for"
+    }
+  ],
+  "routing_defaults": {
+    "kind": "microloop",
+    "on_verified": "advance",
+    "on_unverified": "loop",
+    "max_iterations": 5
+  },
+  "io_schema": {
+    "additional_inputs": [],
+    "additional_outputs": []
+  },
+  "ui": {
+    "icon": "pencil",
+    "color": "#4A90D9",
+    "palette_group": "Microloop",
+    "palette_order": 10
+  },
+  "tags": ["microloop", "writer", "iterative"]
+}

@@ -1,0 +1,136 @@
+# Station: flow-historian
+# Role: Compile timeline and calculate Developer Lead Time (DevLT)
+
+id: flow-historian
+version: 1
+title: Flow Timeline Compilation
+category: analytics
+
+sdk:
+  model: haiku
+  permission_mode: bypassPermissions
+  allowed_tools:
+    - Read
+    - Write
+    - Grep
+    - Glob
+    - Bash
+  sandbox:
+    enabled: true
+    auto_allow_bash: true
+    excluded_commands:
+      - git push
+      - git reset --hard
+  max_turns: 10
+  context_budget:
+    total_chars: 150000
+    recent_chars: 50000
+    older_chars: 8000
+
+identity:
+  system_append: |
+    You are the Flow Historian.
+
+    Your job is to compile a reconstructable timeline of what happened in this run
+    AND calculate Developer Lead Time (DevLT): how much human attention did this
+    run actually require?
+
+    Two responsibilities:
+    1. Timeline: Which flows ran, what receipts/decisions were produced, which commits were made
+    2. DevLT: Estimate human attention (not wall clock time) based on observable evidence
+
+    This is postmortem infrastructure: be precise, don't guess.
+    History is a receipt. If you don't have evidence, say "unknown".
+  tone: neutral
+
+io:
+  required_inputs:
+    - "{{run.base}}/run_meta.json"
+  optional_inputs:
+    - "{{run.base}}/../index.json"
+    - "{{run.base}}/signal/signal_receipt.json"
+    - "{{run.base}}/plan/plan_receipt.json"
+    - "{{run.base}}/build/build_receipt.json"
+    - "{{run.base}}/gate/gate_receipt.json"
+    - "{{run.base}}/deploy/deploy_receipt.json"
+    - "{{run.base}}/wisdom/wisdom_receipt.json"
+    - "{{run.base}}/plan/adr.md"
+    - "{{run.base}}/gate/merge_decision.md"
+    - "{{run.base}}/deploy/deployment_decision.md"
+    - "{{run.base}}/signal/"
+    - "{{run.base}}/plan/"
+    - "{{run.base}}/build/"
+    - "{{run.base}}/gate/"
+    - "{{run.base}}/deploy/"
+  required_outputs:
+    - "{{run.base}}/wisdom/flow_history.json"
+  optional_outputs: []
+
+runtime_prompt:
+  fragments:
+    - common/invariants.md
+    - common/evidence.md
+  template: |
+    ## Event Types (Bounded Vocabulary)
+
+    Events must use type from this closed set:
+    - flow_observed (a flow directory exists / artifacts found)
+    - receipt_written (a *_receipt.json exists)
+    - decision_recorded (ADR / merge decision / deployment verdict)
+    - secrets_gated (secrets_status.json exists)
+    - repo_checkpointed (repo-operator evidence exists; record commit_sha if available)
+    - gh_activity_recorded (gh_issue_status / gh_report_status evidence exists)
+    - artifact_observed (optional, for notable artifacts not covered above)
+
+    ## DevLT Calculation
+
+    DevLT answers: "How much human attention did this run require?"
+
+    Observable evidence:
+    - run_meta.json timestamps
+    - Git commit timestamps
+    - Flow receipt timestamps (generated_at)
+    - Human interaction markers
+
+    Output fields:
+    - flow_started_at, flow_completed_at
+    - machine_duration_sec
+    - human_checkpoint_count
+    - estimated_human_attention_min
+    - estimation_basis (explanation)
+
+    ## Output Format
+
+    Write to wisdom/flow_history.json:
+    - schema_version (integer)
+    - run_id, generated_at
+    - machine_summary (pack-standard fields)
+    - sources (list of artifact paths used)
+    - flows (per-flow summary objects)
+    - events (ordered list)
+    - counts (events_captured, flows_documented, missing_flows)
+    - devlt (DevLT calculation)
+    - handoff (pack-standard)
+
+handoff:
+  path_template: "{{run.base}}/handoff/{{step.id}}.draft.json"
+  required_fields:
+    - status
+    - summary
+    - artifacts
+    - blockers
+    - concerns
+
+invariants:
+  - "Read-only - no repo mutations"
+  - "No git/gh side effects"
+  - "If you don't have evidence, say unknown"
+  - "Use stable event type vocabulary"
+  - "DevLT must be present even if estimated"
+  - "Timestamps must have t_source attribution"
+
+routing_hints:
+  on_verified: advance
+  on_unverified: advance_with_concerns
+  on_partial: advance_with_concerns
+  on_blocked: escalate

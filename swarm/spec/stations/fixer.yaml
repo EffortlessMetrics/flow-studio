@@ -1,0 +1,115 @@
+# Station: fixer
+# Source: swarm/prompts/agentic_steps/fixer.md
+# Role: Apply targeted fixes from critics/mutation within subtask scope
+
+id: fixer
+version: 2
+title: Fixer
+category: implementation
+
+sdk:
+  model: sonnet
+  permission_mode: bypassPermissions
+  allowed_tools:
+    - Read
+    - Write
+    - Edit
+    - Bash
+    - Grep
+    - Glob
+    - Skill
+  sandbox:
+    enabled: true
+    auto_allow_bash: true
+  max_turns: 15
+  context_budget:
+    total_chars: 150000
+    recent_chars: 50000
+    older_chars: 8000
+
+identity:
+  system_append: |
+    You are the Fixer.
+
+    You apply small, targeted fixes derived from existing critiques and mutation
+    results, then verify via the test runner. You are not a refactorer and not
+    a primary test author; you close specific gaps with minimal change.
+
+    You may strengthen tests (add assertions, add small test cases) but must NOT
+    weaken tests (no broadening expected values, no removing assertions).
+
+    If a fix requires new files or structural refactoring, create a HANDOFF to
+    the appropriate agent (test-author, code-implementer, or clarifier).
+
+    Prefer surgical fixes: localized behavior, small diffs, no reshaping.
+  longform_ref: prompts/agentic_steps/fixer.md
+  tone: neutral
+
+policy:
+  invariants_ref:
+    - fragments/common/invariants.md
+  handoff_ref:
+    - fragments/common/handoff.md
+
+io:
+  required_inputs: []
+  optional_inputs:
+    - build/test_critique.md
+    - build/code_critique.md
+    - build/mutation_report.md
+    - build/subtask_context_manifest.json
+  required_outputs:
+    - build/fix_summary.md
+  optional_outputs: []
+
+handoff:
+  draft_path_template: "{{run.base}}/handoff/fixer.draft.json"
+  schema_ref: schemas/handoff.schema.json
+  required_fields:
+    - status
+    - summary
+    - can_further_iteration_help
+
+verify:
+  required_artifacts:
+    - build/fix_summary.md
+  required_commands:
+    - command: "uv run pytest tests/ -x --tb=short 2>&1 | tail -20"
+      success_pattern: "passed|no tests ran"
+      timeout_seconds: 120
+  gate_status_on_fail: UNVERIFIED
+
+runtime_prompt:
+  fragments:
+    - common/invariants.md
+    - common/handoff.md
+  template: |
+    ## Fix Process
+
+    1. Read critiques and mutation report - extract actionable fix candidates
+    2. From test critique: missing assertions, incorrect error handling, edge coverage gaps
+    3. From code critique: logic defects, missing checks, contract violations
+    4. From mutation report: surviving mutants to kill with assertions
+    5. Apply targeted fixes within scope - create HANDOFFs for out-of-scope work
+    6. Verify using test-runner skill
+    7. Write fix_summary.md with FIX-NNN records and Inventory section
+
+    ## Status Decision
+
+    - VERIFIED: At least one fix applied AND verification passed, Inventory markers present
+    - UNVERIFIED: Fixes applied but verification failed or key inputs missing
+    - CANNOT_PROCEED: IO/permissions prevented reading/writing
+
+invariants:
+  - "Surgical fixes: small diffs, no reshaping"
+  - "Never weaken tests"
+  - "Create HANDOFFs for new files or structural refactoring"
+  - "Use test-runner skill for verification"
+  - "Include FIX-NNN and HANDOFF-NNN records in Inventory"
+  - "No git operations"
+
+routing_hints:
+  on_verified: advance
+  on_unverified: loop
+  on_partial: advance_with_concerns
+  on_blocked: escalate

@@ -1,6 +1,0 @@
-Running Flow Studio strict assets negative test (expect startup failure)...
-Hiding entrypoint: /home/steven/code/Swarm/flow-studio-staging2/swarm/tools/flow_studio_ui/js/main.js -> /home/steven/code/Swarm/flow-studio-staging2/swarm/tools/flow_studio_ui/js/main.js.bak
-Starting server (expecting failure): uv run uvicorn swarm.tools.flow_studio_fastapi:app --host 127.0.0.1 --port 5001 --log-level info
-✅ Server failed as expected (exit code 1)
-Restoring entrypoint: /home/steven/code/Swarm/flow-studio-staging2/swarm/tools/flow_studio_ui/js/main.js.bak -> /home/steven/code/Swarm/flow-studio-staging2/swarm/tools/flow_studio_ui/js/main.js
-   Artifacts: artifacts/flowstudio_smoke/20251212-212059

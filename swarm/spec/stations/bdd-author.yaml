@@ -1,0 +1,125 @@
+# Station: bdd-author
+# Source: swarm/prompts/agentic_steps/bdd-author.md
+# Role: Convert requirements into executable BDD scenarios with strict traceability
+
+id: bdd-author
+version: 2
+title: Author BDD Scenarios
+category: spec
+
+sdk:
+  model: sonnet
+  permission_mode: bypassPermissions
+  allowed_tools:
+    - Read
+    - Write
+    - Edit
+    - Grep
+    - Glob
+  sandbox:
+    enabled: true
+    auto_allow_bash: false
+  max_turns: 15
+  context_budget:
+    total_chars: 180000
+    recent_chars: 60000
+    older_chars: 10000
+
+identity:
+  system_append: |
+    You are the BDD Author.
+
+    You convert requirements.md into executable specifications (BDD) with strict
+    traceability. Each scenario has exactly one primary @REQ-### tag. Every REQ
+    has at least one scenario OR an explicit entry in verification_notes.md.
+
+    Default to domain-level steps unless requirements explicitly specify an interface.
+    Write scenarios that survive refactors without becoming vague.
+  longform_ref: prompts/agentic_steps/bdd-author.md
+  tone: neutral
+
+policy:
+  invariants_ref:
+    - fragments/common/invariants.md
+    - fragments/common/evidence.md
+  handoff_ref:
+    - fragments/common/handoff.md
+
+io:
+  required_inputs:
+    - signal/requirements.md
+  optional_inputs:
+    - signal/problem_statement.md
+    - signal/requirements_critique.md
+    - signal/open_questions.md
+    - signal/bdd_critique.md
+  required_outputs:
+    - signal/features/*.feature
+    - signal/example_matrix.md
+    - signal/verification_notes.md
+  optional_outputs:
+    - signal/open_questions.md
+
+handoff:
+  draft_path_template: "{{run.base}}/handoff/bdd-author.draft.json"
+  schema_ref: schemas/handoff.schema.json
+  required_fields:
+    - status
+    - summary
+    - artifacts
+    - can_further_iteration_help
+
+verify:
+  required_artifacts:
+    - signal/example_matrix.md
+    - signal/verification_notes.md
+  gate_status_on_fail: UNVERIFIED
+
+runtime_prompt:
+  fragments:
+    - common/invariants.md
+    - common/evidence.md
+    - common/handoff.md
+  template: |
+    ## BDD Writing Approach
+
+    1. Build coverage plan - extract all REQ-### identifiers
+    2. Address prior critique first if bdd_critique.md exists
+    3. Write feature files with strict traceability:
+       - Each scenario has exactly one primary @REQ-### tag
+       - Use domain-level steps (not interface-coupled) by default
+       - Include happy path + edge/error scenarios per REQ
+    4. Write verification_notes.md for non-behavioral requirements
+    5. Write example_matrix.md showing coverage
+    6. Self-check: no orphan scenarios, no REQ without coverage
+
+    ## Traceability Rules
+
+    - @REQ-### tag immediately above Scenario: line
+    - Multi-REQ only with justification comment
+    - Feature-level tags do NOT count for traceability
+
+    ## Portability Contract
+
+    Good (domain-level):
+      Given a registered user exists
+      When the user authenticates with valid credentials
+      Then an access token is issued
+
+    Bad (interface-coupled without requirement basis):
+      Given a POST request to /api/v1/auth/login
+      Then the response status is 200
+
+invariants:
+  - "Each scenario has exactly one primary @REQ-### tag"
+  - "Every REQ has scenario coverage OR verification_notes entry"
+  - "No vague Thens - observable outputs/state only"
+  - "Domain-level steps unless requirement specifies interface"
+  - "No secrets in scenarios"
+  - "No git ops"
+
+routing_hints:
+  on_verified: advance
+  on_unverified: loop
+  on_partial: advance_with_concerns
+  on_blocked: escalate

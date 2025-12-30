@@ -1,0 +1,9 @@
+# Auto-bootstrapped from swarm/AGENTS.md
+key: process-analyst
+flows:
+  - wisdom
+category: analytics
+color: orange
+source: project/user
+short_role: "Flow efficiency, iterations, bounces → process_analysis.md, friction_log.md."
+model: inherit

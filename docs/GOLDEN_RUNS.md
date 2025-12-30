@@ -57,7 +57,7 @@ Golden runs live in `swarm/examples/<scenario>/` and are committed to version co
 **Start with**: `health-check`
 
 **Key takeaways**:
-- All 6 flows produce artifacts in their respective directories
+- All 7 flows produce artifacts in their respective directories
 - Each artifact has a defined shape and purpose
 - Receipts (especially `build_receipt.json`) tie everything together
 - Gate produces a clear merge recommendation
@@ -106,7 +106,7 @@ Golden runs live in `swarm/examples/<scenario>/` and are committed to version co
 
 ### 1. health-check (Complete Baseline)
 
-> Complete end-to-end demonstration of all 6 flows in the industrial agentic SDLC swarm.
+> Complete end-to-end demonstration of all 7 flows in the industrial agentic SDLC swarm.
 
 **Scenario**: Implement a simple health-check endpoint through all SDLC flows.
 
@@ -386,7 +386,7 @@ swarm-selftest-baseline/
 
 ### 6. swarm-alignment (Complete Governance Verification)
 
-> Complete governance verification run demonstrating all 6 flows with canonical directory naming.
+> Complete governance verification run demonstrating all 7 flows with canonical directory naming.
 
 **Scenario**: Self-referential governance validation - the swarm validates its own configuration through all SDLC flows.
 
@@ -566,7 +566,7 @@ If your orchestrator can produce these artifacts in this structure, it is compat
 # 1. Clear the example
 rm -rf swarm/examples/health-check/{signal,plan,build,gate,operate,reports}
 
-# 2. Run all 6 flows with a new run ID
+# 2. Run all 7 flows with a new run ID
 /flow-1-signal health-check-v2 "Add a health-check endpoint"
 /flow-2-plan health-check-v2
 /flow-3-build health-check-v2
@@ -658,12 +658,12 @@ This matrix shows which examples have wisdom summaries generated.
 | `health-check` | Yes | Complete 4-flow example |
 | `health-check-missing-tests` | No | **Teaching**: demonstrates missing test artifact |
 | `health-check-no-gate-decision` | No | **Teaching**: demonstrates incomplete gate |
-| `health-check-risky-deploy` | Yes | Complete 6-flow with risk management |
+| `health-check-risky-deploy` | Yes | Complete 7-flow with risk management |
 | `stepwise-claude` | Yes | Two-flow stepwise (signal + plan) |
 | `stepwise-build-claude` | Yes | Three-flow stepwise (signal + plan + build) |
 | `stepwise-gate-claude` | Yes | Four-flow stepwise |
 | `stepwise-deploy-claude` | Yes | Five-flow stepwise |
-| `stepwise-sdlc-claude` | Yes | Full 6-flow SDLC |
+| `stepwise-sdlc-claude` | Yes | Full 7-flow SDLC |
 | `stepwise-build-gemini` | Yes | Gemini backend comparison |
 | `stepwise-gemini` | Yes | Gemini two-flow |
 | `swarm-selftest-baseline` | No | **Metadata**: baseline config, not a run |

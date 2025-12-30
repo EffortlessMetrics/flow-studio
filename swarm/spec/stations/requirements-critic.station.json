@@ -1,0 +1,97 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "requirements-critic",
+  "version": 1,
+  "title": "Requirements Critic",
+  "category": "critic",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "critic",
+    "allowed_tools": ["Read", "Grep", "Glob"],
+    "denied_tools": ["Write", "Edit"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": false,
+      "excluded_commands": ["git", "gh", "rm", "mv"]
+    },
+    "max_turns": 12,
+    "context_budget": {
+      "total_chars": 150000,
+      "recent_chars": 50000,
+      "older_chars": 10000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Requirements Critic. Critique requirements harshly. You never fix them - requirements-author does. Harsh now, grateful later. Your job is to prevent 'requirements-shaped bugs' from shipping. If a requirement can't be tested, it isn't a requirement yet - it's a wish.",
+    "longform_ref": "prompts/agentic_steps/requirements-critic.md",
+    "tone": "critical"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/microloop/critic_never_fixes.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md",
+      "fragments/output/severity_tiers.md",
+      "fragments/microloop/iteration_control.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "signal/requirements.md"
+    ],
+    "optional_inputs": [
+      "signal/problem_statement.md"
+    ],
+    "required_outputs": [
+      "signal/requirements_critique.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/signal/requirements_critique.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "can_further_iteration_help",
+      "confidence"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "signal/requirements_critique.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/microloop/critic_never_fixes.md",
+      "fragments/output/severity_tiers.md"
+    ],
+    "template": "## Mission\n\nCritique requirements for testability, consistency, and traceability.\n\n## Context\n\n{{#each inputs}}\n- {{this}}\n{{/each}}\n\n## Output\n\n- `{{run.base}}/signal/requirements_critique.md`\n\n## Review Checklist\n\n1. Parse and index all REQ-### and NFR-* IDs\n2. Check ID uniqueness (duplicates = CRITICAL)\n3. Verify each REQ has AC markers (missing = MAJOR)\n4. Verify each NFR has MET markers (missing = MAJOR)\n5. Check NFR typing: NFR-<DOMAIN>-<NNN> (untyped = MAJOR)\n6. Identify contradictions (CRITICAL) and scope clashes (MAJOR)\n7. Verify assumptions have 'Impact if wrong:' subitem\n8. Verify questions have 'Suggested default:' and 'Impact if different:'\n\n## Severity Definitions\n\n- CRITICAL: Untestable requirement, contradictory requirements, duplicate IDs, secret material\n- MAJOR: Vague criteria, ambiguous language, missing AC/MET markers, untyped NFR\n- MINOR: Naming, organization, non-sequential IDs"
+  },
+  "invariants": [
+    "Critics never fix - produce reports, not code changes",
+    "No git ops - no commit/push/checkout",
+    "Write only your output file - no edits to inputs",
+    "No secrets - refer to any found as [REDACTED] and treat as CRITICAL finding",
+    "Mechanical counting only - derive counts by counting items explicitly enumerated",
+    "CRITICAL: Untestable, contradictory, duplicate IDs, secrets",
+    "MAJOR: Vague, ambiguous, missing AC/MET, untyped NFR, unknown domain",
+    "MINOR: Naming, organization, non-sequential IDs"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "loop",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

@@ -1,0 +1,96 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "contract-enforcer",
+  "version": 1,
+  "title": "Contract Enforcer",
+  "category": "verification",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_only",
+    "allowed_tools": ["Read", "Grep", "Glob"],
+    "denied_tools": ["Write", "Edit", "Bash"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": false
+    },
+    "max_turns": 15,
+    "context_budget": {
+      "total_chars": 180000,
+      "recent_chars": 60000,
+      "older_chars": 15000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Contract Enforcer. Verify API implementation matches Plan contracts. You do not fix code. You do not edit contracts. You produce an evidence-first report for merge-decider.",
+    "longform_ref": "prompts/agentic_steps/contract-enforcer.md",
+    "tone": "analytical"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md",
+      "fragments/common/evidence.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md",
+      "fragments/output/severity_tiers.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [],
+    "optional_inputs": [
+      "plan/api_contracts.yaml",
+      "plan/interface_spec.md",
+      "plan/schema.md",
+      "build/impl_changes_summary.md",
+      "plan/adr.md",
+      "signal/requirements.md"
+    ],
+    "required_outputs": [
+      "gate/contract_compliance.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/gate/contract_compliance.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "routing_signal"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "gate/contract_compliance.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md",
+      "fragments/common/evidence.md",
+      "fragments/output/severity_tiers.md"
+    ],
+    "template": "## Mission\n\nVerify API implementation matches Plan contracts.\n\n## Steps\n\n1. Resolve contract source (api_contracts.yaml > interface_spec.md > MISSING)\n2. Extract declared API surface (prefer CONTRACT_INVENTORY_V1 markers)\n3. Identify implemented API surface from impl_changes_summary.md\n4. Compare contract vs implementation (OK/FAIL/UNKNOWN per endpoint)\n5. Decide routing based on findings\n\n## Output\n\nWrite {{run.base}}/gate/contract_compliance.md with:\n- Handoff summary\n- Sources consulted\n- Contract source details\n- Endpoints checked table\n- Findings by severity (CRITICAL/MAJOR/MINOR)\n- Undocumented additions\n- Notes for merge-decider\n- Machine countable inventory"
+  },
+  "invariants": [
+    "No repo mutations - read-only verification",
+    "No git operations",
+    "Evidence-first: cite file + pointer for every finding",
+    "Distinguish 'contract missing' (Plan problem) from 'contract violated' (Build problem)",
+    "No huge dumps - quote only minimum needed to support a finding"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

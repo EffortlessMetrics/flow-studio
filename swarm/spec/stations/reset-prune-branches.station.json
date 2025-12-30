@@ -1,0 +1,86 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "reset-prune-branches",
+  "version": 1,
+  "title": "Reset: Prune Branches",
+  "category": "infra",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "full_access",
+    "allowed_tools": ["Read", "Bash", "Grep", "Glob", "Write"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": true,
+      "excluded_commands": ["rm -rf", "git push --force", "git reset --hard", "git clean -fd", "git branch -D"]
+    },
+    "max_turns": 10,
+    "context_budget": {
+      "total_chars": 100000,
+      "recent_chars": 40000,
+      "older_chars": 10000
+    }
+  },
+  "identity": {
+    "system_append": "You are executing the Prune Branches step in Flow 8 (Reset). Your task is to clean up stale remote-tracking branches and merged local branches. NEVER delete protected branches (main, master, develop, release/*, hotfix/*). NEVER delete the current branch. Use safe delete (-d) ONLY, never force delete (-D).",
+    "longform_ref": "prompts/steps/reset/prune_branches.md",
+    "tone": "neutral"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [],
+    "optional_inputs": [
+      "reset/diagnose_report.md",
+      "reset/restore_report.md"
+    ],
+    "required_outputs": [
+      "reset/prune_report.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/reset/prune_report.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "reset/prune_report.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nClean up stale remote-tracking branches and merged local branches.\n\n## Procedure\n\n1. Prune stale remote-tracking refs: `git remote prune origin`\n2. Find merged local branches: `git branch --merged origin/main`\n3. For each merged branch:\n   - Skip if protected (main, master, develop, release/*, hotfix/*)\n   - Skip if current branch\n   - Safe delete: `git branch -d <branch>` (NOT -D)\n\n## Protected Branches\n\nNEVER delete these branches:\n- main, master (production)\n- develop (integration)\n- release/* (release prep)\n- hotfix/* (critical fixes)\n- Current checked-out branch\n\n## Constraints\n\n- Use safe delete (-d) ONLY, never force delete (-D)\n- -d fails if branch has unmerged changes (this is intentional safety)\n- Log all deletions and skips to prune_report.md\n\n## Output\n\nWrite {{run.base}}/reset/prune_report.md with pruning summary."
+  },
+  "invariants": [
+    "NEVER delete protected branches (main, master, develop, release/*, hotfix/*)",
+    "NEVER delete the current checked-out branch",
+    "Use safe delete (-d) ONLY, never force delete (-D)",
+    "If -d fails (unmerged), log and skip - do NOT escalate to -D",
+    "Log all deletions with branch names and merge status",
+    "Safe Bash only - no destructive commands"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

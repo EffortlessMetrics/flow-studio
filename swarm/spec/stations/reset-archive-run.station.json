@@ -1,0 +1,85 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "reset-archive-run",
+  "version": 1,
+  "title": "Reset: Archive Run",
+  "category": "infra",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "full_access",
+    "allowed_tools": ["Read", "Bash", "Grep", "Glob", "Write"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": true,
+      "excluded_commands": ["git push --force", "git reset --hard", "git clean -fd"]
+    },
+    "max_turns": 10,
+    "context_budget": {
+      "total_chars": 100000,
+      "recent_chars": 40000,
+      "older_chars": 10000
+    }
+  },
+  "identity": {
+    "system_append": "You are executing the Archive Run step in Flow 8 (Reset). Your task is to archive old run artifacts to prevent accumulation. Archive before delete - never permanently delete without archiving first. Use timestamped archive directories for traceability.",
+    "longform_ref": "prompts/steps/reset/archive_run.md",
+    "tone": "neutral"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [],
+    "optional_inputs": [
+      "run_meta.json"
+    ],
+    "required_outputs": [
+      "reset/archive_report.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/reset/archive_report.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "reset/archive_report.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nArchive old run artifacts to prevent accumulation and maintain repository hygiene.\n\n## Procedure\n\n1. Identify runs older than retention period (default: 7 days)\n2. For each old run:\n   - Create timestamped archive: `swarm/runs/_archive/<date>/<run-id>/`\n   - Move artifacts to archive (mv, not cp+rm)\n3. Verify archive integrity\n4. Remove empty run directories\n\n## Archive Structure\n\n```\nswarm/runs/_archive/\n  2024-01-15/\n    run-abc123/\n      signal/\n      plan/\n      ...\n```\n\n## Constraints\n\n- Archive before delete - never permanently delete without archiving\n- Use mv for atomic moves when possible\n- Preserve directory structure in archive\n- Log all archived runs\n\n## Output\n\nWrite {{run.base}}/reset/archive_report.md with archive summary."
+  },
+  "invariants": [
+    "Archive before delete - never permanently delete without archiving first",
+    "Use timestamped archive directories for traceability",
+    "Preserve directory structure in archive",
+    "Use mv for atomic moves when possible",
+    "Log all archived runs with timestamps and sizes",
+    "Do not archive the current run (only old runs)"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

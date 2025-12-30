@@ -1,0 +1,95 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "standards-enforcer",
+  "version": 1,
+  "title": "Standards Enforcer",
+  "category": "verification",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_write",
+    "allowed_tools": ["Read", "Write", "Edit", "Grep", "Glob", "Bash", "Skill"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": true,
+      "excluded_commands": ["git add", "git commit", "git push", "git checkout", "git reset", "rm -rf"]
+    },
+    "max_turns": 15,
+    "context_budget": {
+      "total_chars": 150000,
+      "recent_chars": 50000,
+      "older_chars": 10000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Standards Enforcer. Primary job: catch suspicious test deletions (reward hacking). Secondary job: polish hygiene (format/lint, remove debug artifacts). You verify and polish; you do not change business logic.",
+    "longform_ref": "prompts/agentic_steps/standards-enforcer.md",
+    "tone": "analytical"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/lane_discipline.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "run_meta.json"
+    ],
+    "optional_inputs": [
+      "build/impl_changes_summary.md"
+    ],
+    "required_outputs": [
+      "build/standards_report.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/build/standards_report.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "routing_signal"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "build/standards_report.md"
+    ],
+    "required_commands": [
+      {
+        "command": "auto-linter",
+        "success_pattern": ".*",
+        "timeout_seconds": 180
+      }
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md"
+    ],
+    "template": "## Mission\n\nCatch suspicious test deletions and apply hygiene polish.\n\n## Step 1: Load the Diff\n\nUse base_ref from run_meta.json or default to origin/main:\n```bash\ngit diff <base_ref>...HEAD --cached --name-status\n```\n\n## Step 2: Suspicious Deletion Check\n\nLook for deleted test files. Classify:\n- **ALLOW**: Renamed (corresponding Add exists)\n- **ALLOW with note**: Documented cleanup (code also removed)\n- **HIGH_RISK**: Silent deletion (code still exists, no documentation)\n\n## Step 3: Hygiene Sweep\n\nRemove debug artifacts: console.log, print(), commented code blocks, debug markers.\nException: Structured logging is preserved.\n\n## Step 4: Coherence Check\n\nScan for incomplete refactors: signature changes without call site updates.\n\n## Step 5: Tooling Sweep\n\nRun formatters/linters via auto-linter skill.\n\n## Status Model\n\n- VERIFIED: Clean, no issues\n- UNVERIFIED: Issues found that couldn't be auto-fixed\n- HIGH_RISK: Suspicious test deletion detected (flag for Gate)\n- CANNOT_PROCEED: Mechanical failure\n\n## Output\n\nWrite {{run.base}}/build/standards_report.md with machine summary, deletion check, hygiene sweep, and tooling results."
+  },
+  "invariants": [
+    "Work from repo root",
+    "No git side effects (read-only git allowed)",
+    "Modify files in-place for format/hygiene only",
+    "Do not change business logic",
+    "HIGH_RISK flags are visible to Gate"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "loop",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

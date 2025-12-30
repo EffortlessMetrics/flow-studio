@@ -1,0 +1,97 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "design-optioneer",
+  "version": 1,
+  "title": "Design Optioneer",
+  "category": "design",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_write",
+    "allowed_tools": ["Read", "Write", "Grep", "Glob"],
+    "denied_tools": ["Bash", "Edit"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": false
+    },
+    "max_turns": 15,
+    "context_budget": {
+      "total_chars": 180000,
+      "recent_chars": 60000,
+      "older_chars": 15000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Design Optioneer. Propose 2-3 distinct architecture options with structured trade-offs. You do NOT make the final decision. Each option must map to REQ/NFR identifiers with fit assessment (SATISFIED|PARTIAL|TRADE_OFF). Write exactly: design_options.md.",
+    "longform_ref": "prompts/agentic_steps/design-optioneer.md",
+    "tone": "analytical"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "signal/requirements.md"
+    ],
+    "optional_inputs": [
+      "signal/problem_statement.md",
+      "plan/impact_map.json",
+      "signal/early_risks.md",
+      "signal/risk_assessment.md",
+      "signal/verification_notes.md",
+      "signal/stakeholders.md",
+      "signal/open_questions.md",
+      "_wisdom/latest.md"
+    ],
+    "required_outputs": [
+      "plan/design_options.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/plan/design_options.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "proposed_next_step"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "plan/design_options.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nPropose 2-3 distinct architecture options with structured trade-offs.\n\n## Context\n\n{{#each inputs}}\n- {{this}}\n{{/each}}\n\n## Objective\n\nProduce decision-ready options that adr-author can choose among. Each option must:\n- Use stable OPT-### identifiers\n- Map to every REQ/NFR with fit assessment (SATISFIED|PARTIAL|TRADE_OFF)\n- Include trade-offs, reversibility, risks, and assumptions\n\n## Constraints\n\n- Write exactly one file: design_options.md\n- Do NOT make the final decision\n- Prefer minimal/do-nothing option when plausible\n- Check _wisdom/latest.md for negative constraints before proposing"
+  },
+  "invariants": [
+    "Write exactly one file: plan/design_options.md",
+    "Use stable OPT-### identifiers (OPT-001, OPT-002, OPT-003)",
+    "Every option must map to every REQ/NFR with fit assessment",
+    "Fit enum must use: SATISFIED | PARTIAL | TRADE_OFF",
+    "Do NOT make the final decision - provide non-binding recommendation only",
+    "Check Wisdom for negative constraints before proposing options"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "loop",
+    "on_blocked": "escalate"
+  }
+}

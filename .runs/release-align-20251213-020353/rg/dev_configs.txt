@@ -1,4 +1,0 @@
-tests/test_frontmatter.py:303:def test_model_value_case_sensitive(temp_repo, run_validator):
-tests/test_flow_studio_ui_ids.py:600:    def test_mode_toggle_buttons_by_uiid(self):
-tests/test_selftest_api_contract_coherence.py:599:    def test_status_selftest_mode_matches_summary(self, fastapi_client):
-tests/test_context_budget_guardrails.py:158:    def test_model_context_chars_computation(self):

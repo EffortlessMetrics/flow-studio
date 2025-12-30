@@ -32,20 +32,17 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from swarm.config.flow_registry import get_sdlc_flow_keys  # noqa: E402
+from swarm.flowstudio.schema import StepStatusEnum  # noqa: E402
+
+# Canonical step artifact status - imported from flowstudio.schema
+# Aliased as StepStatus for backward compatibility within this module
+StepStatus = StepStatusEnum
 
 
 class ArtifactStatus(str, Enum):
     """Status of a single artifact."""
     PRESENT = "present"
     MISSING = "missing"
-
-
-class StepStatus(str, Enum):
-    """Aggregate status of a step based on its artifacts."""
-    COMPLETE = "complete"      # All required artifacts present
-    PARTIAL = "partial"        # Some required missing, some present
-    MISSING = "missing"        # No required artifacts present
-    NOT_APPLICABLE = "n/a"     # No required artifacts defined
 
 
 class FlowStatus(str, Enum):

@@ -1,0 +1,378 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://flowstudio.dev/schemas/station.schema.json",
+  "title": "StationSpec",
+  "description": "A station specification defines the contract and runtime profile for a stepwise execution role.",
+  "type": "object",
+  "required": ["id", "version", "title", "category", "sdk", "identity", "io", "handoff"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "Unique station identifier (kebab-case)"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Station spec version for traceability"
+    },
+    "title": {
+      "type": "string",
+      "maxLength": 80,
+      "description": "Human-readable station title"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "shaping",
+        "spec",
+        "design",
+        "implementation",
+        "critic",
+        "verification",
+        "analytics",
+        "reporter",
+        "infra",
+        "router"
+      ],
+      "description": "Role family for grouping and color assignment"
+    },
+    "sdk": {
+      "$ref": "#/definitions/SdkBlock",
+      "description": "Claude SDK runtime configuration"
+    },
+    "identity": {
+      "$ref": "#/definitions/IdentityBlock",
+      "description": "Station identity for system prompt"
+    },
+    "policy": {
+      "$ref": "#/definitions/PolicyBlock",
+      "description": "Policy references for invariants and handoff rules"
+    },
+    "io": {
+      "$ref": "#/definitions/IoBlock",
+      "description": "Input/Output contract"
+    },
+    "handoff": {
+      "$ref": "#/definitions/HandoffBlock",
+      "description": "Handoff contract and output structure"
+    },
+    "verify": {
+      "$ref": "#/definitions/VerifyBlock",
+      "description": "Optional verification requirements for this station"
+    },
+    "runtime_prompt": {
+      "$ref": "#/definitions/RuntimePromptBlock",
+      "description": "Template for user prompt construction"
+    },
+    "invariants": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Hard rules this station must follow (injected as constraints)"
+    },
+    "routing_hints": {
+      "$ref": "#/definitions/RoutingHintsBlock",
+      "description": "Default routing behavior (can be overridden by flow step)"
+    }
+  },
+  "definitions": {
+    "SdkBlock": {
+      "type": "object",
+      "required": ["model"],
+      "properties": {
+        "model": {
+          "type": "string",
+          "enum": ["haiku", "sonnet", "opus", "inherit"],
+          "description": "Model tier to use"
+        },
+        "permission_mode": {
+          "type": "string",
+          "enum": ["default", "bypassPermissions", "planMode"],
+          "default": "bypassPermissions",
+          "description": "Permission handling mode"
+        },
+        "allowed_tools": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "Read",
+              "Write",
+              "Edit",
+              "Bash",
+              "Grep",
+              "Glob",
+              "Task",
+              "TodoWrite",
+              "AskUserQuestion",
+              "NotebookEdit",
+              "Skill"
+            ]
+          },
+          "description": "Tools this station may use (explicit list)"
+        },
+        "tool_profile": {
+          "type": "string",
+          "enum": [
+            "read_only",
+            "read_write",
+            "full_access",
+            "critic",
+            "reporter"
+          ],
+          "description": "Predefined tool profile (alternative to allowed_tools)"
+        },
+        "denied_tools": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Tools explicitly denied"
+        },
+        "sandbox": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "Enable sandbox mode for Bash commands"
+            },
+            "auto_allow_bash": {
+              "type": "boolean",
+              "default": true,
+              "description": "Auto-approve Bash commands in sandbox"
+            },
+            "excluded_commands": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Bash commands to deny even in sandbox"
+            }
+          },
+          "additionalProperties": false
+        },
+        "max_turns": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50,
+          "default": 12,
+          "description": "Maximum conversation turns before forcing exit"
+        },
+        "include_partial_messages": {
+          "type": "boolean",
+          "default": false,
+          "description": "Include partial/streaming messages in conversation"
+        },
+        "context_budget": {
+          "type": "object",
+          "properties": {
+            "total_chars": {
+              "type": "integer",
+              "default": 200000,
+              "description": "Total character budget for context"
+            },
+            "recent_chars": {
+              "type": "integer",
+              "default": 60000,
+              "description": "Character budget for recent context"
+            },
+            "older_chars": {
+              "type": "integer",
+              "default": 10000,
+              "description": "Character budget for older context"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "IdentityBlock": {
+      "type": "object",
+      "required": ["system_append"],
+      "properties": {
+        "system_append": {
+          "type": "string",
+          "maxLength": 2000,
+          "description": "Short identity text appended to system prompt (max 2000 chars)"
+        },
+        "longform_ref": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_./-]+$",
+          "description": "Path to longer identity document (relative to swarm/spec/)"
+        },
+        "tone": {
+          "type": "string",
+          "enum": ["neutral", "analytical", "critical", "supportive"],
+          "default": "neutral",
+          "description": "Communication tone for this station"
+        }
+      },
+      "additionalProperties": false
+    },
+    "PolicyBlock": {
+      "type": "object",
+      "properties": {
+        "invariants_ref": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_./-]+$"
+          },
+          "description": "Paths to invariant files (relative to swarm/spec/)"
+        },
+        "handoff_ref": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_./-]+$"
+          },
+          "description": "Paths to handoff policy files (relative to swarm/spec/)"
+        }
+      },
+      "additionalProperties": false
+    },
+    "IoBlock": {
+      "type": "object",
+      "properties": {
+        "required_inputs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Artifacts that MUST exist before step runs (relative to run_base)"
+        },
+        "optional_inputs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Artifacts to read if available"
+        },
+        "required_outputs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Artifacts that MUST be produced"
+        },
+        "optional_outputs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Artifacts that MAY be produced"
+        }
+      },
+      "additionalProperties": false
+    },
+    "HandoffBlock": {
+      "type": "object",
+      "required": ["required_fields"],
+      "properties": {
+        "draft_path_template": {
+          "type": "string",
+          "default": "{{run.base}}/handoff/{{step.id}}.draft.json",
+          "description": "Where to write handoff draft"
+        },
+        "schema_ref": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_./-]+$",
+          "description": "Path to JSON schema for handoff validation (relative to swarm/spec/schemas/)"
+        },
+        "required_fields": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "status",
+              "summary",
+              "artifacts",
+              "can_further_iteration_help",
+              "proposed_next_step",
+              "confidence",
+              "blockers",
+              "routing_signal",
+              "file_changes"
+            ]
+          },
+          "description": "Fields that MUST be in handoff"
+        }
+      },
+      "additionalProperties": false
+    },
+    "VerifyBlock": {
+      "type": "object",
+      "description": "Optional verification requirements for this station",
+      "properties": {
+        "required_artifacts": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Artifacts that must exist for verification to pass"
+        },
+        "required_commands": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["command", "success_pattern"],
+            "properties": {
+              "command": {
+                "type": "string",
+                "description": "Command to run for verification"
+              },
+              "success_pattern": {
+                "type": "string",
+                "description": "Regex pattern that indicates success"
+              },
+              "timeout_seconds": {
+                "type": "integer",
+                "default": 60,
+                "description": "Command timeout in seconds"
+              }
+            },
+            "additionalProperties": false
+          },
+          "description": "Commands that must succeed for verification"
+        },
+        "gate_status_on_fail": {
+          "type": "string",
+          "enum": ["UNVERIFIED", "BLOCKED"],
+          "default": "UNVERIFIED",
+          "description": "Status to set if verification fails"
+        }
+      },
+      "additionalProperties": false
+    },
+    "RuntimePromptBlock": {
+      "type": "object",
+      "properties": {
+        "fragments": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Fragment paths to include (relative to swarm/spec/fragments/)"
+        },
+        "template": {
+          "type": "string",
+          "description": "Mustache-style template with {{variable}} placeholders"
+        }
+      },
+      "additionalProperties": false
+    },
+    "RoutingHintsBlock": {
+      "type": "object",
+      "properties": {
+        "on_verified": {
+          "type": "string",
+          "enum": ["advance", "complete"],
+          "description": "Action when status is VERIFIED"
+        },
+        "on_unverified": {
+          "type": "string",
+          "enum": ["loop", "advance_with_concerns", "block"],
+          "description": "Action when status is UNVERIFIED"
+        },
+        "on_partial": {
+          "type": "string",
+          "enum": ["loop", "advance_with_concerns"],
+          "description": "Action when status is PARTIAL"
+        },
+        "on_blocked": {
+          "type": "string",
+          "enum": ["escalate", "terminate"],
+          "description": "Action when status is BLOCKED"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

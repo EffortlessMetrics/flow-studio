@@ -66,8 +66,10 @@ def __getattr__(name: str):
     """Lazy import for service to avoid circular dependencies."""
     if name == "RunService":
         from .service import RunService
+
         return RunService
     if name == "get_run_service":
         from .service import get_run_service
+
         return get_run_service
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

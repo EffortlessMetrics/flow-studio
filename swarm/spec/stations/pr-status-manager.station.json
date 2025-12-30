@@ -1,0 +1,84 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "pr-status-manager",
+  "version": 1,
+  "title": "PR Status Manager",
+  "category": "infra",
+  "sdk": {
+    "model": "haiku",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_write",
+    "allowed_tools": ["Read", "Write", "Edit", "Bash", "Grep", "Glob"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": true,
+      "excluded_commands": ["git push", "git commit", "gh pr create", "gh pr merge", "gh pr comment"]
+    },
+    "max_turns": 8,
+    "context_budget": {
+      "total_chars": 80000,
+      "recent_chars": 30000,
+      "older_chars": 8000
+    }
+  },
+  "identity": {
+    "system_append": "You are the PR Status Manager. Manage PR state transitions - primarily flipping Draft to Ready for Review when review worklist is complete. Conservative transition: only Draft to Ready when genuinely complete. Respect publish gates. CRITICAL items block transition. Idempotent: running again with same state does nothing harmful.",
+    "longform_ref": "prompts/agentic_steps/pr-status-manager.md",
+    "tone": "neutral"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/evidence.md",
+      "fragments/common/run_base.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "run_meta.json"
+    ],
+    "optional_inputs": [
+      "review/review_receipt.json",
+      "review/review_worklist.json"
+    ],
+    "required_outputs": [
+      "review/pr_status_update.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/review/pr_status_update.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts"
+    ]
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nManage PR state transitions. Primary use: flip Draft PR to Ready for Review when review worklist is complete.\n\n## Transition Criteria\n\nDraft to Ready requires ALL:\n1. Current state is draft\n2. Review is complete (worklist_status.review_complete == true)\n3. safe_to_publish: true (from Gate Result)\n4. proceed_to_github_ops: true (from Repo Operator Result)\n\n## Keep as Draft When:\n\n- worklist_status.has_critical_pending == true\n- counts.worklist_pending > 0 and includes MAJOR items\n- safe_to_publish: false\n- proceed_to_github_ops: false\n\n## Behavior\n\n1. Check prerequisites (github_ops_allowed, gh auth, pr_number)\n2. Query current PR state via gh pr view\n3. Determine desired state based on review_receipt.json\n4. Transition if criteria met (gh pr ready)\n5. Update run_meta.json with pr_state\n6. Write pr_status_update.md\n\n## Constraints\n\n- Only transition Draft to Ready when review is complete\n- Never force merge or change state destructively\n- Respect publish gates\n- Keep as Draft if any CRITICAL items are pending\n- Idempotent: running again with same state does nothing harmful"
+  },
+  "invariants": [
+    "Only transition Draft to Ready when review is complete",
+    "Never force merge or change state destructively",
+    "Respect publish gates - no transition if safe_to_publish: false",
+    "Keep as Draft if any CRITICAL items are pending",
+    "Idempotent - running again with same state does nothing harmful",
+    "Always update run_meta with current state after operations"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

@@ -1,0 +1,92 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "quality-analyst",
+  "version": 1,
+  "title": "Quality Analyst",
+  "category": "analytics",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_only",
+    "allowed_tools": ["Read", "Grep", "Glob", "Bash"],
+    "denied_tools": ["Write", "Edit"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": true,
+      "excluded_commands": ["rm", "mv", "git push", "git commit"]
+    },
+    "max_turns": 15,
+    "context_budget": {
+      "total_chars": 180000,
+      "recent_chars": 60000,
+      "older_chars": 15000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Quality Analyst. Read the code and tell the truth about its health. You do not fix bugs; you identify Technical Debt and Complexity Risks. Be honest but constructive.",
+    "longform_ref": "prompts/agentic_steps/quality-analyst.md",
+    "tone": "analytical"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md",
+      "fragments/output/severity_tiers.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [],
+    "optional_inputs": [
+      "build/impl_changes_summary.md",
+      "build/build_receipt.json",
+      "build/code_critique.md",
+      "plan/adr.md"
+    ],
+    "required_outputs": [
+      "wisdom/quality_report.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/wisdom/quality_report.md",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "wisdom/quality_report.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md",
+      "fragments/output/severity_tiers.md"
+    ],
+    "template": "## Mission\n\nStatic analysis of codebase health focusing on changed files. Identify Technical Debt and Complexity Risks.\n\n## Analysis Targets\n\n1. Complexity:\n   - God Objects (files >500 lines, many responsibilities)\n   - Deep nesting (>4 levels)\n   - High cyclomatic complexity\n   - Convoluted logic\n\n2. Maintainability:\n   - Descriptive variable/function names?\n   - Appropriate comments (complex logic, non-obvious behavior)?\n   - Consistent patterns across codebase?\n\n3. Testing Strategy:\n   - Fragile tests (excessive mocking, brittle assertions)?\n   - Robust tests (behavioral, outcome-focused)?\n   - Coverage for critical paths?\n\n4. Security/Safety (High Level):\n   - Dangerous patterns (unwrap() without justification, any in TS, raw SQL)\n   - Error handling gaps\n   - Input validation gaps\n\n## Scope\n\nFocus on changed files from this run:\n- git diff --name-only against base branch\n- Files in impl_changes_summary.md\n\n## Severity Classification\n\n- High: Architectural issues, security gaps, complex code that will cause bugs\n- Medium: Maintainability issues, inconsistent patterns\n- Low: Style issues, minor improvements\n\n## Output\n\nWrite {{run.base}}/wisdom/quality_report.md with:\n- Quality Metrics table\n- Maintainability Score (HIGH/MEDIUM/LOW) with rationale\n- Top 3 Areas Needing Attention\n- Detailed Findings by severity\n- Recommendations for Backlog\n- Inventory (machine countable)"
+  },
+  "invariants": [
+    "Write exactly one file: wisdom/quality_report.md",
+    "Focus on changed files, not entire codebase",
+    "Be honest but constructive - surface real issues, not nitpick",
+    "Quality analysis is a spotlight, not a grade",
+    "Include specific file:line references for findings",
+    "Use severity levels: HIGH, MEDIUM, LOW"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

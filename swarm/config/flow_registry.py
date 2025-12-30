@@ -383,6 +383,25 @@ def get_flow_order() -> List[str]:
     return get_flow_keys()
 
 
+def get_flow_spec_id(flow_key: str) -> str:
+    """Get the spec ID for a flow key (e.g., "build" -> "3-build").
+
+    This is the canonical function for mapping flow keys to spec IDs.
+    Use this instead of inline dictionaries.
+
+    Args:
+        flow_key: The flow key (signal, plan, build, review, gate, deploy, wisdom).
+
+    Returns:
+        The spec ID in the format "{index}-{key}" (e.g., "3-build").
+        If the flow key is not found, returns the flow_key unchanged.
+    """
+    flow_index = get_flow_index(flow_key)
+    if flow_index == 99:  # Unknown flow key
+        return flow_key
+    return f"{flow_index}-{flow_key}"
+
+
 def get_sdlc_flow_keys() -> List[str]:
     """Get list of SDLC flow keys only (excluding demo/test flows)."""
     return _get_registry().sdlc_flow_keys

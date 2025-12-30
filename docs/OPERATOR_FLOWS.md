@@ -37,7 +37,7 @@ This single command:
 4. Starts Flow Studio at `http://localhost:5000`
 
 **What you get:**
-- Stepwise demo run with all 6 flows (stub mode, no LLM costs)
+- Stepwise demo run with all 7 flows (stub mode, no LLM costs)
 - Flow Studio visualization
 - Demo links printed to console
 
@@ -65,7 +65,7 @@ Then open `http://localhost:5000/?run=demo-health-check&mode=operator`
 
 | Artifact | Location | Description |
 |----------|----------|-------------|
-| Demo run | `swarm/runs/demo-health-check/` | Pre-populated artifacts for all 6 flows |
+| Demo run | `swarm/runs/demo-health-check/` | Pre-populated artifacts for all 7 flows |
 | Flow visualization | `http://localhost:5000` | Interactive graph of flows, steps, agents |
 | Example scenarios | `swarm/examples/` | Golden examples for comparison |
 

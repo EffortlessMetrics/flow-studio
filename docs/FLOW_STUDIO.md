@@ -13,9 +13,10 @@
 - [SELFTEST_SYSTEM.md](./SELFTEST_SYSTEM.md) — How Flow Studio fits into selftest
 - [VALIDATION_RULES.md](./VALIDATION_RULES.md) — What the governance gate enforces (FR-001–FR-005)
 - [CONTEXT_BUDGETS.md](./CONTEXT_BUDGETS.md) — How input context budgets and priority-aware truncation work
+- [LEXICON.md](./LEXICON.md) — Canonical vocabulary (station, step, navigator, worker)
 
 Flow Studio is the visual learning interface for the swarm SDLC. It renders
-flows, steps, and agents as an interactive graph, letting you understand how
+flows, steps, and stations as an interactive graph, letting you understand how
 the swarm works without reading every spec file.
 
 **UX v1.0 Changelog** (December 2025):
@@ -82,7 +83,7 @@ Three steps to see the swarm in action:
    - Click the **Artifacts tab** to see what each flow produced
    - Click the **SDLC bar** at the top to see progress across all flows
 
-**After 10 minutes**, you'll understand how flows, steps, and agents relate.
+**After 10 minutes**, you'll understand how flows, steps, and stations relate.
 For a guided tour, see below.
 
 ---
@@ -104,7 +105,7 @@ make flow-studio
 
 **Explanation:**
 
-- `make demo-run` populates `swarm/runs/demo-run/` with artifacts for all 6 flows
+- `make demo-run` populates `swarm/runs/demo-run/` with artifacts for all 7 flows
 - `make flow-studio` starts the FastAPI server on port 5000
 - The URL parameters:
   - `run=demo-run` loads the demo run artifacts
@@ -208,10 +209,10 @@ browser.
 
 ### 5–15 min: Explore the SDLC Bar
 
-1. Look at the **SDLC bar** at the top — 6 boxes for 6 flows
+1. Look at the **SDLC bar** at the top — 7 boxes for 7 flows
 2. All should be green (DONE) for the health-check run
 3. Click each flow in the bar to switch views
-4. Notice how Build (Flow 3) is the heaviest — most steps and agents
+4. Notice how Build (Flow 3) is the heaviest — most steps and stations
 
 ### 15–30 min: Walk the Build Flow
 
@@ -219,7 +220,7 @@ browser.
 2. Switch to **Artifacts** view (toggle in the details panel)
 3. See the artifacts this flow produced: `test_summary.md`, `build_receipt.json`
 4. Switch back to **Steps/Agents** view
-5. Click step nodes (teal) to see their role and agents
+5. Click step nodes (teal) to see their role and stations
 6. Click agent nodes (colored) to see their category and model
 
 ### 30–45 min: Try a Failure Scenario
@@ -239,7 +240,7 @@ browser.
 
 **After one hour**, you understand:
 
-- How flows, steps, and agents relate
+- How flows, steps, and stations relate
 - How to read artifact status
 - How to diagnose failures via the UI
 - How to compare runs
@@ -335,7 +336,7 @@ The wisdom summary displays key metrics from Flow 6 analysis:
 | **Regressions Found** | Number of regressions detected vs previous runs |
 | **Learnings Count** | Extractable learnings identified for future runs |
 | **Feedback Actions** | Suggested improvements or pattern updates |
-| **Issues Created** | GitHub issues opened by wisdom agents |
+| **Issues Created** | GitHub issues opened by wisdom stations |
 
 ### Flow Status Summary
 
@@ -346,7 +347,7 @@ The wisdom view shows per-flow status and loop counts:
 
 ### Labels and Key Artifacts
 
-- **Labels**: Classification tags applied by wisdom agents (e.g., `clean-run`, `no-regressions`, `needs-review`)
+- **Labels**: Classification tags applied by wisdom stations (e.g., `clean-run`, `no-regressions`, `needs-review`)
 - **Key Artifacts**: Links to the most important wisdom outputs:
   - `wisdom/artifact_audit.md` — Artifact presence and completeness audit
   - `wisdom/regressions.md` — Regression analysis
@@ -386,7 +387,7 @@ This section maps Flow Studio UI elements to decisions. Use this when reviewing 
 
 ### SDLC Bar States
 
-The SDLC bar at the top shows progress across all 6 flows. Each flow box can be:
+The SDLC bar at the top shows progress across all 7 flows. Each flow box can be:
 
 | State | Visual | Meaning | Action |
 |-------|--------|---------|--------|
@@ -436,7 +437,7 @@ Each FR (Functional Requirement) has its own badge:
 
 Agent nodes in the graph are colored by role family:
 
-| Color | Family | Example agents |
+| Color | Family | Example stations |
 |-------|--------|----------------|
 | **Green** | Implementation | code-implementer, test-author |
 | **Red** | Critic/Review | code-critic, test-critic |
@@ -500,10 +501,10 @@ runs (swarm/runs/<run-id>/)
 
 | Surface | Purpose |
 |---------|---------|
-| **Sidebar flows** | List of all 6 flows; click to load |
+| **Sidebar flows** | List of all 7 flows; click to load |
 | **Graph** | Cytoscape visualization showing steps → agents |
 | **Details panel** | Info for selected step or agent |
-| **SDLC bar** | Run progress across all 6 flows |
+| **SDLC bar** | Run progress across all 7 flows |
 | **Run selector** | Switch between active runs and examples |
 
 ### Node Types in the Graph
@@ -522,7 +523,7 @@ Flow Studio.
 
 ### View 1: A Complete Run
 
-See a happy-path run with all 6 flows completed:
+See a happy-path run with all 7 flows completed:
 
 ```text
 http://localhost:5000/?run=demo-health-check&tab=run
@@ -968,6 +969,272 @@ allowing end-to-end testing of the orchestrator without LLM costs.
 
 ---
 
+## Off-Road Visualization
+
+Flow Studio visualizes runs where the navigator has gone "off-road"—deviating from the pre-defined flow graph to handle edge cases, inject sidequests, or adapt to runtime conditions.
+
+### Understanding Off-Road Navigation
+
+The swarm follows a "High Trust" model where the flow graph defines **suggestions**, not **constraints**. When the navigator encounters a situation not handled by the golden path, it can:
+
+- **Inject a detour**: Route to a sidequest station and return to the main path
+- **Inject a new node**: Add a station not in the original flow spec
+- **Inject an entire flow**: Pause the current flow, run a different flow, then resume
+- **Skip a step**: Bypass a step when preconditions aren't met
+
+All off-road decisions are logged with rationale for human review.
+
+### Off-Road Badge
+
+When a run includes off-road routing decisions, Flow Studio shows an **"Off-road"** badge in several locations:
+
+| Location | Badge Appearance | Meaning |
+|----------|------------------|---------|
+| **Run History** | Red "Off-road" badge | This run deviated from the golden path |
+| **SDLC Bar** | Yellow highlight on flow | This flow included routing deviations |
+| **Step Node** | Dashed border + icon | This step was injected or is a detour |
+| **Timeline** | Orange event marker | Off-road routing decision occurred here |
+
+### Quick Links to Off-Road Artifacts
+
+When viewing an off-road run, the Run Detail modal provides quick links to:
+
+- **Injected Spec Artifacts**: The spec files that were dynamically generated or selected
+- **Routing Rationale**: The navigator's explanation for why it went off-road
+- **Return Points**: Where the execution returned to the main flow
+
+### Visual Distinction by Routing Type
+
+Different off-road patterns have distinct visual treatments:
+
+| Pattern | Border Style | Icon | Color |
+|---------|--------------|------|-------|
+| **Normal Step** | Solid | None | Teal |
+| **DETOUR** | Dashed | `↩️` (return arrow) | Orange |
+| **INJECT_FLOW** | Double | `📦` (package) | Purple |
+| **INJECT_NODE** | Dotted | `➕` (plus) | Blue |
+
+---
+
+## Routing Events
+
+Flow Studio displays routing-related events in the Events Timeline. These events provide visibility into the navigator's decision-making process.
+
+### Core Routing Events
+
+| Event Kind | When Emitted | Payload |
+|------------|--------------|---------|
+| `routing_decision` | After each step completes | `{next_step_id, route_type, confidence, reason}` |
+| `routing_offroad` | When navigator deviates from golden path | `{golden_path_step, actual_step, rationale, return_address}` |
+| `flow_injected` | When a new flow is started mid-run | `{parent_flow, injected_flow, trigger_step, resume_point}` |
+| `node_injected` | When a new node is added to current flow | `{flow_key, node_spec, position, rationale}` |
+| `graph_extended` | When navigator proposes spec changes | `{proposals: [{patch_type, target, diff}]}` |
+
+### Event Timeline Filtering
+
+In the Run Detail modal, use the **Event Filter** dropdown to focus on routing events:
+
+- **All Events**: Show everything
+- **Routing Only**: Show only `routing_*` events
+- **Off-road Only**: Show only deviations from golden path
+- **Flow Transitions**: Show `flow_start`, `flow_completed`, `flow_injected`
+
+### Reading Routing Event Payloads
+
+The `routing_offroad` event payload contains critical diagnostic information:
+
+```json
+{
+  "ts": "2025-12-15T10:00:05Z",
+  "kind": "routing_offroad",
+  "flow_key": "build",
+  "step_id": "S4",
+  "payload": {
+    "golden_path_step": "code-critic",
+    "actual_step": "security-scanner",
+    "route_type": "DETOUR",
+    "rationale": "Detected potential SQL injection pattern; routing to security scan before critic review",
+    "return_address": "code-critic",
+    "confidence": 0.85,
+    "evaluated_conditions": [
+      "has_db_queries == true",
+      "security_scan_recent == false"
+    ],
+    "tie_breaker_used": false
+  }
+}
+```
+
+### UIID Selectors for Routing Events
+
+| Selector | Purpose |
+|----------|---------|
+| `[data-uiid="flow_studio.modal.run_detail.events.filter.routing"]` | Routing filter option |
+| `[data-uiid="flow_studio.modal.run_detail.events.item.offroad"]` | Off-road event row |
+| `[data-uiid="flow_studio.sidebar.run_history.item.badge.offroad"]` | Off-road badge in run list |
+
+---
+
+## Flow Stack Visualization
+
+When the navigator injects a flow mid-execution (e.g., Flow 3 injects Flow 8 for rebasing), Flow Studio visualizes the **flow execution stack**.
+
+### What is the Flow Stack?
+
+The flow stack tracks nested flow execution:
+
+```
+Stack when Flow 3 injects Flow 8:
+┌─────────────────────────────┐
+│ Flow 8 (Rebase)  [ACTIVE]   │ <- Currently executing
+├─────────────────────────────┤
+│ Flow 3 (Build)   [PAUSED]   │ <- Waiting for Flow 8 to complete
+│   at step: code-implementer │
+│   return_on: flow_completed │
+└─────────────────────────────┘
+```
+
+When Flow 8 completes, the orchestrator pops the stack and resumes Flow 3 at the return point.
+
+### Stack Visualization in the UI
+
+**SDLC Bar**:
+- Active flow: Blue pulsing highlight
+- Paused flows: Gray with "stacked" icon (`📚`)
+- Stack depth indicator: Shows `+N` badge when flows are stacked
+
+**Flow Sidebar**:
+- Paused flows show "(paused)" suffix
+- Active flow shows "(running)" suffix
+- Click a paused flow to view its state at pause time
+
+**Inspector Panel**:
+- When viewing a paused flow, shows "Paused at step {step_id}"
+- Shows "Will resume when {condition}"
+- Links to the flow that caused the pause
+
+### Stack State in Run Detail Modal
+
+The Run Detail modal includes a **Stack** tab showing:
+
+| Field | Description |
+|-------|-------------|
+| **Current Depth** | Number of flows on the stack (1 = normal, 2+ = nested) |
+| **Active Flow** | The flow currently executing |
+| **Paused Flows** | List of paused flows with their pause points |
+| **Max Depth Reached** | Historical maximum stack depth during this run |
+
+### Stack Events
+
+| Event Kind | When Emitted | Payload |
+|------------|--------------|---------|
+| `stack_push` | When a flow is paused and new flow injected | `{paused_flow, paused_step, injected_flow}` |
+| `stack_pop` | When an injected flow completes | `{completed_flow, resumed_flow, resumed_step}` |
+| `stack_overflow_prevented` | When max depth (3) would be exceeded | `{attempted_flow, current_depth, action_taken}` |
+
+### Safety: Stack Depth Limits
+
+The orchestrator enforces a maximum stack depth of 3 to prevent unbounded recursion:
+
+1. **Depth 1**: Normal flow execution
+2. **Depth 2**: One injected flow (e.g., Build → Rebase)
+3. **Depth 3**: Emergency recovery only (e.g., Rebase → HotfixPrep)
+
+If injection would exceed depth 3, the orchestrator:
+- Emits `stack_overflow_prevented` event
+- Continues on current path with `needs_human: true`
+- Logs warning for human review
+
+### UIID Selectors for Stack Visualization
+
+| Selector | Purpose |
+|----------|---------|
+| `[data-uiid="flow_studio.sdlc_bar.flow.stacked"]` | Flow with stacked indicator |
+| `[data-uiid="flow_studio.sdlc_bar.stack_depth"]` | Stack depth badge |
+| `[data-uiid="flow_studio.sidebar.flow_list.item.paused"]` | Paused flow in sidebar |
+| `[data-uiid="flow_studio.modal.run_detail.stack"]` | Stack tab in run detail |
+| `[data-uiid="flow_studio.modal.run_detail.stack.depth"]` | Stack depth display |
+
+---
+
+## Suggested vs Taken Detours
+
+Flow Studio distinguishes between what the navigator **suggested** at each decision point and what path was **actually taken**.
+
+### The Suggestion Model
+
+At each routing decision point, the navigator may evaluate multiple possible paths:
+
+1. **Golden Path**: The next step defined in the flow spec
+2. **Suggested Detours**: Alternative paths based on runtime conditions
+3. **Taken Path**: The path actually chosen
+
+The navigator records all evaluated options, not just the winner.
+
+### Visualization in Flow Studio
+
+**Step Node Tooltip**:
+When hovering over a step node, the tooltip shows:
+
+```
+Step: code-critic (S4)
+━━━━━━━━━━━━━━━━━━━━━━━
+Routing at this step:
+  • Suggested: code-implementer (loop back, 75%)
+  • Suggested: self-reviewer (advance, 20%)
+  • Suggested: security-scanner (detour, 5%)
+  ────────────────────
+  ✓ Taken: code-implementer
+    Reason: "UNVERIFIED status, iteration 2 of 5"
+```
+
+**Decision Point Markers**:
+- **Green checkmark**: Followed the golden path
+- **Orange arrow**: Went off-road (took a non-primary suggestion)
+- **Red exclamation**: Went completely off-road (path not in suggestions)
+
+### Detour Suggestions in Inspector
+
+When selecting a step that had routing suggestions, the Inspector's **Routing** tab shows:
+
+| Column | Description |
+|--------|-------------|
+| **Option** | The suggested next step |
+| **Score** | Confidence score (0-1) |
+| **Conditions** | CEL expressions that matched |
+| **Taken** | Whether this option was chosen |
+
+### Highlighting Off-Road Decisions
+
+When the navigator went off-road (chose something not in the primary suggestions):
+
+- The step node gets an **orange border**
+- The edge to the next step is **dashed orange**
+- The Events Timeline shows a `routing_offroad` event
+- The Run Summary includes "Off-road decisions: N"
+
+### Comparing Suggested vs Taken Across Runs
+
+In Run Comparison mode (`?run=A&compare=B`), Flow Studio highlights:
+
+- Steps where Run A followed suggestions but Run B went off-road
+- Steps where both runs went off-road but chose differently
+- Aggregate off-road decision count per run
+
+This helps identify patterns: "Why does this run always detour at step 4?"
+
+### UIID Selectors for Suggestions
+
+| Selector | Purpose |
+|----------|---------|
+| `[data-uiid="flow_studio.canvas.outline.step.routing_marker"]` | Decision point marker |
+| `[data-uiid="flow_studio.inspector.routing"]` | Routing tab in inspector |
+| `[data-uiid="flow_studio.inspector.routing.suggestions"]` | Suggestions list |
+| `[data-uiid="flow_studio.inspector.routing.taken"]` | Taken path highlight |
+| `[data-uiid^="flow_studio.canvas.edge.offroad:"]` | Off-road edges |
+
+---
+
 ## See Also
 
 - **[FLOW_STUDIO_FIRST_EDIT.md](./FLOW_STUDIO_FIRST_EDIT.md)**: Make your first agent edit (15 min walkthrough)
@@ -977,3 +1244,6 @@ allowing end-to-end testing of the orchestrator without LLM costs.
 - **[CONTEXT_BUDGETS.md](./CONTEXT_BUDGETS.md)**: Token discipline and priority-aware history truncation
 - **[LONG_RUNNING_HARNESSES.md](./LONG_RUNNING_HARNESSES.md)**: Anthropic patterns for state persistence and observability
 - **[GETTING_STARTED.md](./GETTING_STARTED.md)**: Quick start guide with Flow Studio lane
+- **[AGOPS_MANIFESTO.md](./AGOPS_MANIFESTO.md)**: High Trust model and detour philosophy
+- **[ADR-004](./adr/ADR-004-bounded-smart-routing.md)**: Bounded smart routing architecture
+- **[ROADMAP_3_0.md](./ROADMAP_3_0.md)**: v3.0 features including MacroNavigator and stack handling

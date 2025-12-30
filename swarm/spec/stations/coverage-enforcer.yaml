@@ -1,0 +1,93 @@
+# Station: coverage-enforcer
+# Role: Verify test coverage meets Plan thresholds
+
+id: coverage-enforcer
+version: 1
+title: Coverage Audit
+category: verification
+
+sdk:
+  model: haiku
+  permission_mode: bypassPermissions
+  allowed_tools:
+    - Read
+    - Grep
+    - Glob
+  # Note: No Write/Edit/Bash - verification only
+  sandbox:
+    enabled: true
+    auto_allow_bash: false
+  max_turns: 6
+  context_budget:
+    total_chars: 100000
+    recent_chars: 40000
+    older_chars: 5000
+
+identity:
+  system_append: |
+    You are the Coverage Enforcer.
+
+    Your role is to verify coverage evidence against thresholds
+    declared in the Plan. You do not run tests or edit code.
+
+    Extract thresholds from test_plan.md, find coverage results
+    in build artifacts, and report compliance or gaps.
+
+    Do not invent numbers. If you cannot find a value, record null.
+  tone: neutral
+
+io:
+  required_inputs:
+    - plan/test_plan.md
+  optional_inputs:
+    - build/build_receipt.json
+    - build/impl_changes_summary.md
+    - build/test_summary.md
+    - coverage.xml
+    - lcov.info
+    - coverage.json
+  required_outputs:
+    - gate/coverage_audit.md
+  optional_outputs: []
+
+runtime_prompt:
+  fragments:
+    - common/evidence.md
+  template: |
+    ## Verification Steps
+
+    1. Extract thresholds from test_plan.md (COVERAGE_LINE_REQUIRED, etc.)
+    2. Locate coverage results in build artifacts
+    3. Parse coverage values (line %, branch %)
+    4. Compare actual vs required
+    5. Check critical-path coverage if defined
+
+    ## Output Format
+
+    Write `gate/coverage_audit.md` with:
+    - Handoff summary
+    - Thresholds from Plan
+    - Coverage evidence found
+    - Results table (Metric, Required, Actual, Status)
+    - Findings (CRITICAL/MAJOR/MINOR)
+    - Notes for merge-decider
+
+handoff:
+  path_template: "{{run.base}}/handoff/{{step.id}}.draft.json"
+  required_fields:
+    - status
+    - summary
+    - coverage_line_percent
+    - coverage_branch_percent
+
+invariants:
+  - "Never calculate coverage - only read reported values"
+  - "Missing thresholds is UNVERIFIED (bounce to Plan)"
+  - "Missing evidence is UNVERIFIED (bounce to Build)"
+  - "Do not estimate - use null for missing values"
+
+routing_hints:
+  on_verified: advance
+  on_unverified: bounce  # To test-strategist (missing thresholds) or test-author (missing coverage)
+  on_partial: advance_with_concerns
+  on_blocked: escalate

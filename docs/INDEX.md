@@ -18,7 +18,7 @@ For a portable `.claude` pack, see [`EffortlessMetrics/demo-swarm`](https://gith
 
 ## Operator Spine (Read These First)
 
-These 9 docs are the canonical operator surface. Everything else is reference.
+These 12 docs are the canonical operator surface. Everything else is reference.
 
 | # | Doc | Purpose | Time |
 |---|-----|---------|------|
@@ -26,13 +26,17 @@ These 9 docs are the canonical operator surface. Everything else is reference.
 | 2 | [docs/GETTING_STARTED.md](./GETTING_STARTED.md) | Hands-on path (two lanes) | 15 min |
 | 3 | [CHEATSHEET.md](../CHEATSHEET.md) | Quick reference for daily operators | 3 min |
 | 4 | [GLOSSARY.md](../GLOSSARY.md) | Terminology definitions | 5 min |
-| 5 | [docs/SELFTEST_SYSTEM.md](./SELFTEST_SYSTEM.md) | Selftest architecture and tiers | 10 min |
-| 6 | [docs/FLOW_STUDIO.md](./FLOW_STUDIO.md) | Visual UI guide | 10 min |
-| 7 | [REPO_MAP.md](../REPO_MAP.md) | Physical directory layout | 5 min |
-| 8 | [docs/VALIDATION_RULES.md](./VALIDATION_RULES.md) | FR-001–FR-005 reference | 15 min |
-| 9 | [docs/AGENT_OPS.md](./AGENT_OPS.md) | Agent management guide | 10 min |
+| 5 | [docs/LEXICON.md](./LEXICON.md) | Canonical vocabulary (prevents noun-overload) | 3 min |
+| 6 | [docs/ROUTING_PROTOCOL.md](./ROUTING_PROTOCOL.md) | V3 routing model and decisions | 10 min |
+| 7 | [docs/SELFTEST_SYSTEM.md](./SELFTEST_SYSTEM.md) | Selftest architecture and tiers | 10 min |
+| 8 | [docs/FLOW_STUDIO.md](./FLOW_STUDIO.md) | Visual UI guide | 10 min |
+| 9 | [REPO_MAP.md](../REPO_MAP.md) | Physical directory layout | 5 min |
+| 10 | [docs/VALIDATION_RULES.md](./VALIDATION_RULES.md) | FR-001–FR-005 reference | 15 min |
+| 11 | [docs/AGENT_OPS.md](./AGENT_OPS.md) | Agent management guide | 10 min |
+| 12 | [ARCHITECTURE.md](../ARCHITECTURE.md) | v3.0 system architecture | 15 min |
+| 13 | [docs/AGOPS_MANIFESTO.md](./AGOPS_MANIFESTO.md) | Operational philosophy (AgOps) | 20 min |
 
-**Total spine time**: ~80 minutes for complete understanding.
+**Total spine time**: ~128 minutes for complete understanding.
 
 If you're new, read these in order. Everything beyond is deepening, not new patterns.
 
@@ -56,6 +60,18 @@ Quick reference for day-to-day operations:
 - [FLOW_STUDIO_UX_HANDOVER.md](./FLOW_STUDIO_UX_HANDOVER.md) — Handover for new owners
 - **Governed Surfaces** — SDK contract and UIID selectors (see FLOW_STUDIO.md)
 
+### Architecture & Philosophy (35 min)
+
+1. [ARCHITECTURE.md](../ARCHITECTURE.md) - v3.0 system architecture (cognitive hierarchy, components)
+2. [AGOPS_MANIFESTO.md](./AGOPS_MANIFESTO.md) - AgOps operational philosophy (Factory Floor model)
+3. [ROUTING_PROTOCOL.md](./ROUTING_PROTOCOL.md) - V3 routing model (CONTINUE, DETOUR, INJECT)
+4. [ROADMAP_3_0.md](./ROADMAP_3_0.md) - v3.0 roadmap and next steps
+
+### Contracts & Handoffs
+
+- [`swarm/spec/contracts/`](../swarm/spec/contracts/) - Inter-flow contract definitions
+- [`build_review_handoff.md`](../swarm/spec/contracts/build_review_handoff.md) - Build-to-Review handoff contract
+
 ### Runtime & Stepwise Execution (15-20 min)
 
 1. [RUNTIME_BACKENDS.md](./RUNTIME_BACKENDS.md) - Backend architecture overview
@@ -63,6 +79,7 @@ Quick reference for day-to-day operations:
 3. [AGENT_SDK_INTEGRATION.md](./AGENT_SDK_INTEGRATION.md) - Agent SDK integration guide
 4. [TRANSCRIPT_SCHEMA.md](./TRANSCRIPT_SCHEMA.md) - Artifact format specification
 5. [LONG_RUNNING_HARNESSES.md](./LONG_RUNNING_HARNESSES.md) - Pattern mapping (Anthropic harness patterns)
+6. [PLAN_STEPWISE_VNEXT.md](./PLAN_STEPWISE_VNEXT.md) - Executable Graph IR plan (legacy)
 
 ### Wisdom & Analytics
 
@@ -91,6 +108,7 @@ Quick reference for day-to-day operations:
 - [SUPPORT.md](../SUPPORT.md) — Engagement expectations and how to participate
 - [DEFINITION_OF_DONE.md](./DEFINITION_OF_DONE.md) — What "done" means for merging
 - [MERGE_CHECKLIST.md](./MERGE_CHECKLIST.md) — Pre-merge verification checklist
+- [RELEASE_CHECKLIST.md](./RELEASE_CHECKLIST.md) — Release preparation checklist
 - [CI_TROUBLESHOOTING.md](./CI_TROUBLESHOOTING.md) — Fixing CI failures
 - [CONTRIBUTING.md](../CONTRIBUTING.md) — How to contribute
 
@@ -122,7 +140,7 @@ You should now have:
 
 - A healthy swarm (`make dev-check` green)
 - A demo run under `swarm/runs/demo-health-check/`
-- Flow Studio open with 6 flows in the sidebar
+- Flow Studio open with 7 flows in the sidebar
 
 Read `DEMO_RUN.md` (2–3 minutes) to understand the health-check scenario.
 
@@ -313,7 +331,7 @@ These are small, reversible, and teach the key patterns.
 
 ## After 75 minutes, you know
 
-- The 6 flows and their shapes (Signal light, Build heavy, Gate/Deploy/Wisdom lean)
+- The 7 flows and their shapes (Signal light, Build heavy, Review/Gate/Deploy/Wisdom lean)
 - How agents fit into steps (config → adapter → invocation)
 - How validation works (FR-001..005, selftest tiers)
 - How to make changes safely (edit config, regenerate, validate)
@@ -385,4 +403,6 @@ Flow Studio supports URL parameters for direct navigation:
 11. `docs/OPERATOR_CHECKLIST.md` — Operator runbook & troubleshooting
 12. `docs/AGENT_OPS.md` — Agent management guide
 13. `CLAUDE.md` — Full reference
-14. `ARCHITECTURE.md` — Structural overview
+14. `ARCHITECTURE.md` — v3.0 system architecture (cognitive hierarchy, components)
+15. `docs/AGOPS_MANIFESTO.md` — AgOps operational philosophy (the "why" behind the design)
+16. `docs/ROADMAP_3_0.md` — v3.0 roadmap and immediate priorities

@@ -1,0 +1,117 @@
+# Station: interface-designer
+# Source: swarm/prompts/agentic_steps/interface-designer.md
+# Role: Define API/event/RPC contracts and data model with planned migrations
+
+id: interface-designer
+version: 2
+title: Interface Designer
+category: design
+
+sdk:
+  model: sonnet
+  permission_mode: bypassPermissions
+  allowed_tools:
+    - Read
+    - Write
+    - Edit
+    - Grep
+    - Glob
+  sandbox:
+    enabled: true
+    auto_allow_bash: false
+  max_turns: 12
+  context_budget:
+    total_chars: 200000
+    recent_chars: 60000
+    older_chars: 10000
+
+identity:
+  system_append: |
+    You are the Interface Designer.
+
+    You define the handshake surfaces for the change: APIs, events/messages,
+    internal RPC boundaries, and data model shape. This is a Plan lane artifact:
+    planned contracts and migrations live under .runs/<run-id>/plan/.
+
+    Key rules:
+    - Write valid YAML (prefer OpenAPI 3.1)
+    - Define auth model, request/response schemas, error model
+    - Include machine-countable inventory markers
+    - Plan migrations under .runs/<run-id>/plan/migrations/
+    - Discover and document state transition infrastructure
+  longform_ref: prompts/agentic_steps/interface-designer.md
+  tone: neutral
+
+policy:
+  invariants_ref:
+    - fragments/common/invariants.md
+  handoff_ref:
+    - fragments/common/handoff.md
+
+io:
+  required_inputs:
+    - plan/adr.md
+    - signal/requirements.md
+  optional_inputs:
+    - plan/design_options.md
+    - signal/early_risks.md
+  required_outputs:
+    - plan/api_contracts.yaml
+    - plan/schema.md
+  optional_outputs:
+    - plan/migrations/*.sql
+
+handoff:
+  draft_path_template: "{{run.base}}/handoff/interface-designer.draft.json"
+  schema_ref: schemas/handoff.schema.json
+  required_fields:
+    - status
+    - summary
+    - artifacts
+
+verify:
+  required_artifacts:
+    - plan/api_contracts.yaml
+    - plan/schema.md
+  gate_status_on_fail: UNVERIFIED
+
+runtime_prompt:
+  fragments:
+    - common/invariants.md
+    - common/handoff.md
+  template: |
+    ## Interface Design Approach
+
+    1. Extract interface boundaries from ADR and requirements
+    2. Choose contract style and compatibility rules
+    3. Design APIs with endpoints, methods, status codes, error cases
+    4. Design data model with entities, keys, invariants
+    5. Plan migrations if DB changes required
+    6. Document state transition infrastructure
+
+    ## Output Requirements
+
+    api_contracts.yaml must include:
+    - CONTRACT_INVENTORY_V1 header with ENDPOINT/SCHEMA/EVENT markers
+    - Auth model, request/response schemas, error model
+    - Pagination/filters if applicable
+
+    schema.md must include:
+    - Overview, data models, events/messages
+    - Traceability mapping (REQ/NFR -> endpoint/entity)
+    - Inventory section with ENDPOINT/SCHEMA/ENTITY/EVENT/MIGRATION markers
+    - State Transition Infrastructure section
+
+invariants:
+  - "Write valid YAML for api_contracts.yaml"
+  - "Include machine-countable inventory markers"
+  - "Migrations go under .runs/<run-id>/plan/migrations/"
+  - "Prefer additive changes - avoid breaking response shapes"
+  - "Define single canonical error shape"
+  - "Document state transition infrastructure"
+
+routing_hints:
+  on_verified: advance
+  on_unverified: loop
+  on_partial: advance_with_concerns
+  on_blocked: escalate

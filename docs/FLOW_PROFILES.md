@@ -43,7 +43,7 @@ version: 1
 meta:
   id: my-baseline
   label: "My Baseline Configuration"
-  description: "6-flow SDLC with default agents"
+  description: "7-flow SDLC with default agents"
   created_at: "2025-01-15T10:30:00Z"
   created_by: alice
 
@@ -106,7 +106,7 @@ Example:
 ```bash
 make profile-save PROFILE_ID=workshop-baseline \
   LABEL="Workshop Baseline" \
-  DESCRIPTION="Clean 6-flow SDLC for teaching"
+  DESCRIPTION="Clean 7-flow SDLC for teaching"
 ```
 
 ### Load a Profile
@@ -309,7 +309,7 @@ swarm/
 When a profile is loaded, Flow Studio displays the current profile in its header badge:
 
 ```
-Profile: Baseline 6-Flow SDLC
+Profile: Baseline 7-Flow SDLC
 ```
 
 This helps you know which configuration you're viewing. The badge shows:
@@ -322,10 +322,10 @@ The `flow_registry.py` module provides consistent numbering:
 
 ```python
 from swarm.config.flow_registry import (
-    get_flow_index,      # Flow 1-6 index
+    get_flow_index,      # Flow 1-7 index
     get_step_index,      # Step index within flow
     get_agent_position,  # Agent's positions: [(flow_key, step_id, flow_idx, step_idx), ...]
-    get_total_flows,     # Total flows (6)
+    get_total_flows,     # Total flows (7)
     get_total_steps,     # Steps in a flow
 )
 

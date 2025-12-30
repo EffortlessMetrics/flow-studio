@@ -106,7 +106,7 @@ print(status.to_json())
 **Features:**
 - Checks kernel health (cargo fmt, clippy, tests)
 - Validates selftest governance status
-- Verifies all 6 flows are loadable and valid
+- Verifies all 7 flows are loadable and valid
 - Confirms all agents are registered and valid
 - Returns rich status report with hints for remediation
 - Supports caching with configurable TTL
@@ -140,7 +140,7 @@ When `flowstudio-smoke` passes, `/platform/status` will report coherent governan
 ### Flow & Agent Validation
 
 The status provider loads all YAML configs from:
-- `swarm/config/flows/*.yaml` - 6 flows (signal, plan, build, gate, deploy, wisdom)
+- `swarm/config/flows/*.yaml` - 7 flows (signal, plan, build, review, gate, deploy, wisdom)
 - `swarm/config/agents/*.yaml` - 43+ agents across all flows
 
 Each is validated for:
@@ -296,7 +296,7 @@ done
 
 Possible extensions to the status provider:
 
-1. **Per-flow status**: Individual health for each of the 6 flows
+1. **Per-flow status**: Individual health for each of the 7 flows
 2. **Per-agent status**: Agent availability and model assignment health
 3. **Historical tracking**: Store status snapshots for trend analysis
 4. **Metrics export**: Prometheus or OpenMetrics format for scraping

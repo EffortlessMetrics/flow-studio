@@ -1,11 +1,11 @@
 # Swarm Agent Registry
 
-> Minimal viable swarm: 45 domain agents across 6 flows + 3 built-in infra.
+> Minimal viable swarm: 54 domain agents across 7 flows + 3 built-in infra.
 > Domain agents live under `.claude/agents/*.md`.
 > Built-in infra agents are native to Claude Code and have no `.claude/agents` files.
 
 <!-- META:AGENT_COUNTS -->
-**Total: 48 agents** (3 built-in + 45 domain)
+**Total: 57 agents** (3 built-in + 54 domain)
 <!-- /META:AGENT_COUNTS -->
 
 ---
@@ -56,6 +56,7 @@ For now: agents are pure tool-users. Only the orchestrator coordinates multiple 
 | clarifier | 1, 2, 3 | shaping | yellow | project/user | Detect ambiguities, draft clarification questions. |
 | risk-analyst | 1, 2, 4, 6 | analytics | orange | project/user | Identify risk patterns (security, compliance, data, performance). |
 | policy-analyst | 2, 4 | analytics | orange | project/user | Interpret policy docs vs change, assess policy implications. |
+| forensic-analyst | 3, 4, 5 | analytics | orange | project/user | Translate raw diffs and logs into semantic summaries for routing decisions. |
 | repo-operator | 3, 5 | implementation | green | project/user | Git workflows: branch, commit, merge, tag. Safe Bash only. |
 | gh-reporter | all | reporter | pink | project/user | Post summaries to GitHub issues/PRs at flow boundaries. |
 | swarm-ops | (utility) | infra | cyan | project/user | Guide for agent operations: model changes, adding agents, inspecting flows. |
@@ -94,17 +95,25 @@ For now: agents are pure tool-users. Only the orchestrator coordinates multiple 
 | smoke-verifier | deploy | verification | blue | project/user | Health checks, artifact verification → verification_report.md. |
 | deploy-decider | deploy | verification | blue | project/user | Verify operationalization FRs (FR-OP-001..005) → deployment_decision.md (STABLE/NOT_DEPLOYED/BLOCKED/INVESTIGATE). |
 | artifact-auditor | wisdom | verification | blue | project/user | Verify all expected artifacts from Flows 1-5 exist → artifact_audit.md. |
+| solution-analyst | wisdom | analytics | orange | project/user | Requirement/implementation alignment → solution_analysis.md. |
+| quality-analyst | wisdom | analytics | orange | project/user | Code health and complexity → quality_report.md. |
+| maintainability-analyst | wisdom | analytics | orange | project/user | Naming, modularity, DRY, coupling → maintainability_analysis.md. |
+| process-analyst | wisdom | analytics | orange | project/user | Flow efficiency, iterations, bounces → process_analysis.md, friction_log.md. |
 | regression-analyst | wisdom | analytics | orange | project/user | Tests, coverage, issues, blame → regression_report.md. |
+| pattern-analyst | wisdom | analytics | orange | project/user | Cross-run patterns and trends → pattern_report.md. |
+| signal-quality-analyst | wisdom | analytics | orange | project/user | Feedback accuracy analysis → signal_quality_report.md. |
 | flow-historian | wisdom | analytics | orange | project/user | Compile timeline → flow_history.json. |
 | learning-synthesizer | wisdom | analytics | orange | project/user | Extract lessons from receipts, critiques → learnings.md. |
 | feedback-applier | wisdom | analytics | orange | project/user | Create issues, suggest doc updates → feedback_actions.md. |
+| traceability-auditor | wisdom | verification | blue | project/user | Run-level coherence and spec traceability → traceability_audit.md. |
+| wisdom-cleanup | wisdom | verification | blue | project/user | Finalize wisdom_receipt.json, update run index. |
 
 ---
 
 ## Summary
 
 <!-- META:AGENT_COUNTS -->
-**Total: 48 agents** (3 built-in + 45 domain)
+**Total: 57 agents** (3 built-in + 54 domain)
 <!-- /META:AGENT_COUNTS -->
 
 | Category | Count | Notes |
@@ -115,9 +124,10 @@ For now: agents are pure tool-users. Only the orchestrator coordinates multiple 
 | Flow 1 (Signal) | 6 | |
 | Flow 2 (Plan) | 8 | |
 | Flow 3 (Build) | 9 | |
-| Flow 4 (Gate) | 6 | |
-| Flow 5 (Deploy) | 3 | |
-| Flow 6 (Wisdom) | 5 | |
+| Flow 4 (Review) | 3 | |
+| Flow 5 (Gate) | 6 | |
+| Flow 6 (Deploy) | 3 | |
+| Flow 7 (Wisdom) | 13 | |
 
 ### Agent Categories
 
@@ -162,17 +172,22 @@ For now: agents are pure tool-users. Only the orchestrator coordinates multiple 
 **Microloops**: test-author ⇄ test-critic, code-implementer ⇄ code-critic
 **Cross-cutting**: clarifier, repo-operator, gh-reporter
 
-### Flow 4: Code → Artifact (6 agents)
+### Flow 4: Code → Review (3 agents)
+**Question**: What feedback do we get from bots and humans?
+**Agents**: pr-creator, feedback-harvester, feedback-responder
+**Cross-cutting**: repo-operator, gh-reporter
+
+### Flow 5: Review → Gate (6 agents)
 **Question**: Is this merge-eligible?
 **Agents**: receipt-checker, contract-enforcer, security-scanner, coverage-enforcer, gate-fixer, merge-decider
 **Cross-cutting**: risk-analyst, policy-analyst, gh-reporter
 
-### Flow 5: Artifact → Prod (3 agents)
+### Flow 6: Gate → Prod (3 agents)
 **Question**: Is deployment healthy?
 **Agents**: deploy-monitor, smoke-verifier, deploy-decider
 **Cross-cutting**: repo-operator, gh-reporter
 
-### Flow 6: Prod → Wisdom (5 agents)
+### Flow 7: Prod → Wisdom (13 agents)
 **Question**: What did we learn?
-**Agents**: artifact-auditor, regression-analyst, flow-historian, learning-synthesizer, feedback-applier
+**Agents**: artifact-auditor, solution-analyst, quality-analyst, maintainability-analyst, process-analyst, regression-analyst, pattern-analyst, signal-quality-analyst, flow-historian, learning-synthesizer, feedback-applier, traceability-auditor, wisdom-cleanup
 **Cross-cutting**: risk-analyst, gh-reporter

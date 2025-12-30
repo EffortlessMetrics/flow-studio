@@ -1,0 +1,91 @@
+{
+  "$schema": "../schemas/flow_graph.schema.json",
+  "id": "deploy",
+  "name": "Deploy",
+  "version": "1.0.0",
+  "nodes": [
+    {
+      "id": "decide",
+      "agents": ["repo-operator"],
+      "role": "Merge PR to target branch, create git tag and GitHub release. Record actions in deployment_log.md.",
+      "objective": "Execute merge and create release",
+      "teaching_note": "This is the point of no return - the PR gets merged and a release is created. All Gate checks must have passed.",
+      "teaching_highlight": true,
+      "inputs": ["RUN_BASE/gate/merge_decision.md", "RUN_BASE/gate/gate_fix_summary.md", ".git/HEAD"],
+      "outputs": ["RUN_BASE/deploy/deployment_log.md"]
+    },
+    {
+      "id": "monitor",
+      "agents": ["deploy-monitor"],
+      "role": "Watch CI/deployment events for the merge commit. Record CI status and deployment events in verification_report.md.",
+      "objective": "Monitor CI pipeline and deployment events",
+      "teaching_note": "Passive monitoring of CI events after merge. This step watches but does not act.",
+      "teaching_highlight": true,
+      "inputs": ["RUN_BASE/deploy/deployment_log.md", ".github/workflows/*.yml"],
+      "outputs": ["RUN_BASE/deploy/ci_status.md"]
+    },
+    {
+      "id": "smoke",
+      "agents": ["smoke-verifier"],
+      "role": "Run health checks if endpoints available. Verify artifact/release existence. Append results to verification_report.md.",
+      "objective": "Validate deployment health",
+      "teaching_note": "Smoke tests verify the deployed artifact actually works. This is not comprehensive testing - it is quick validation that deployment succeeded and basic functionality works.",
+      "teaching_highlight": true,
+      "inputs": ["RUN_BASE/deploy/deployment_log.md", "RUN_BASE/deploy/ci_status.md"],
+      "outputs": ["RUN_BASE/deploy/verification_report.md"]
+    },
+    {
+      "id": "finalize",
+      "agents": ["deploy-decider"],
+      "role": "Synthesize CI + smoke results into deployment_decision.md with status: STABLE/INVESTIGATE/ROLLBACK/NOT_DEPLOYED.",
+      "objective": "Produce final deployment status",
+      "teaching_note": "The deploy decider produces a final status: STABLE (success), INVESTIGATE (concerning but not broken), ROLLBACK (deployment failed), or NOT_DEPLOYED (Gate bounced).",
+      "teaching_highlight": true,
+      "inputs": ["RUN_BASE/deploy/deployment_log.md", "RUN_BASE/deploy/ci_status.md", "RUN_BASE/deploy/verification_report.md"],
+      "outputs": ["RUN_BASE/deploy/deployment_decision.md"]
+    },
+    {
+      "id": "report",
+      "agents": ["gh-reporter"],
+      "role": "Post deployment summary to PR/issue to close the feedback loop.",
+      "objective": "Close feedback loop via GitHub reporting",
+      "teaching_note": "Closing the feedback loop by posting results to the original PR/issue. This ensures stakeholders see the outcome without checking multiple systems.",
+      "teaching_highlight": true,
+      "inputs": ["RUN_BASE/deploy/deployment_decision.md", "RUN_BASE/deploy/verification_report.md"],
+      "outputs": ["RUN_BASE/deploy/deploy_report_posted.md"]
+    }
+  ],
+  "edges": [
+    {
+      "from": "decide",
+      "to": "monitor",
+      "kind": "next"
+    },
+    {
+      "from": "monitor",
+      "to": "smoke",
+      "kind": "next"
+    },
+    {
+      "from": "smoke",
+      "to": "finalize",
+      "kind": "next"
+    },
+    {
+      "from": "finalize",
+      "to": "report",
+      "kind": "next"
+    }
+  ],
+  "entry_node": "decide",
+  "exit_nodes": ["report"],
+  "cross_cutting": ["repo-operator", "gh-reporter"],
+  "metadata": {
+    "title": "Flow 5 - Artifact -> Prod (Deploy)",
+    "description": "Move an approved artifact from 'ready to merge' to 'deployed' - execute deployment, verify health, create audit trail.",
+    "teaching": {
+      "title": "Artifact to Production: Safe Deployment and Verification",
+      "summary": "This flow executes the actual merge and verifies the deployed artifact is healthy. It always runs after Gate - even if Gate said BOUNCE, Deploy records WHY deployment did not happen. This creates a complete audit trail."
+    }
+  }
+}

@@ -1,0 +1,90 @@
+# Station: smoke-verifier
+# Role: Non-destructive release + health verification
+
+id: smoke-verifier
+version: 1
+title: Verify Smoke Tests
+category: verification
+
+sdk:
+  model: haiku
+  permission_mode: bypassPermissions
+  allowed_tools:
+    - Read
+    - Write
+    - Edit
+    - Glob
+    - Grep
+    - Bash
+  sandbox:
+    enabled: true
+    auto_allow_bash: true
+  max_turns: 10
+  context_budget:
+    total_chars: 150000
+    recent_chars: 50000
+    older_chars: 8000
+
+identity:
+  system_append: |
+    You are the Smoke Verifier.
+
+    Your job is quick, non-destructive verification: "did the thing we merged/tagged appear to exist, and does it look alive?"
+    You do NOT merge, tag, deploy, rollback, or change production configuration.
+
+    Key behaviors:
+    - Non-destructive checks only (HTTP GET, gh release view, etc.)
+    - Prioritize artifact verification over URL checks
+    - Verify build artifacts exist (binaries, packages, containers)
+    - Verify git tag exists and references correct commit
+    - Check health/version endpoints only if explicitly detected
+    - Use closed enum for smoke_signal: STABLE | INVESTIGATE | ROLLBACK
+    - Append results to verification_report.md
+  tone: neutral
+
+io:
+  required_inputs:
+    - "{{run.base}}/deploy/verification_report.md"
+  optional_inputs:
+    - "{{run.base}}/deploy/deployment_log.md"
+    - "{{run.base}}/run_meta.json"
+  required_outputs:
+    - "{{run.base}}/deploy/verification_report.md"
+  optional_outputs: []
+
+runtime_prompt:
+  fragments:
+    - common/invariants.md
+    - common/evidence.md
+  template: |
+    ## Smoke Verification Approach
+
+    1. Load context from verification_report.md
+    2. Extract tag and endpoint details if present
+    3. Verify build artifacts exist (binaries, packages, dist/)
+    4. Verify release artifacts if tag is known and gh available
+    5. Run health checks if endpoints are known (bounded, non-destructive)
+    6. Perform sanity checks (version matching, timestamp consistency)
+    7. Append Smoke Verification section to verification_report.md
+
+handoff:
+  path_template: "{{run.base}}/handoff/{{step.id}}.draft.json"
+  required_fields:
+    - status
+    - summary
+    - artifacts
+    - smoke_signal
+
+invariants:
+  - "Non-destructive checks only"
+  - "No merging, tagging, deploying, or rolling back"
+  - "Prioritize artifact verification over URL checks"
+  - "Use closed enum for smoke_signal: STABLE | INVESTIGATE | ROLLBACK"
+  - "Append to verification_report.md (do not replace)"
+  - "Null over guess (do not assume tag/endpoint if unknown)"
+
+routing_hints:
+  on_verified: advance
+  on_unverified: advance_with_concerns
+  on_partial: advance_with_concerns
+  on_blocked: escalate

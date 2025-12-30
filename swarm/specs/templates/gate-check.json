@@ -1,0 +1,65 @@
+{
+  "id": "gate-check",
+  "name": "Gate Check",
+  "description": "Gate/verification step for quality gates. Checks contracts, policies, and requirements before allowing progression. Can block, approve, or bounce back.",
+  "category": "gate",
+  "station_id": "merge-decider",
+  "version": 1,
+  "default_objective": "Verify {{check_type}} against {{requirements_source}}. Produce gate decision with clear MERGE, BOUNCE, or BLOCK recommendation.",
+  "parameters": [
+    {
+      "name": "check_type",
+      "type": "string",
+      "required": true,
+      "default": "build artifacts and test results",
+      "title": "Check Type",
+      "description": "What to verify at this gate"
+    },
+    {
+      "name": "requirements_source",
+      "type": "string",
+      "required": true,
+      "default": "contracts and policy documents",
+      "title": "Requirements Source",
+      "description": "What standards to check against"
+    },
+    {
+      "name": "gate_severity",
+      "type": "enum",
+      "required": false,
+      "default": "strict",
+      "title": "Gate Severity",
+      "description": "How strictly to enforce requirements",
+      "enum": ["lenient", "standard", "strict", "critical"]
+    },
+    {
+      "name": "allow_mechanical_fixes",
+      "type": "boolean",
+      "required": false,
+      "default": true,
+      "title": "Allow Mechanical Fixes",
+      "description": "Whether gate can apply trivial fixes (lint, format) before deciding"
+    }
+  ],
+  "routing_defaults": {
+    "kind": "branch",
+    "on_verified": "advance",
+    "on_unverified": "block"
+  },
+  "io_schema": {
+    "additional_inputs": [
+      "{{run.base}}/build/build_receipt.json"
+    ],
+    "additional_outputs": [
+      "{{run.base}}/gate/gate_decision.md",
+      "{{run.base}}/gate/gate_report.json"
+    ]
+  },
+  "ui": {
+    "icon": "shield-check",
+    "color": "#81C784",
+    "palette_group": "Verification",
+    "palette_order": 10
+  },
+  "tags": ["gate", "verification", "quality", "policy"]
+}

@@ -11,6 +11,8 @@ dependencies = [
     "uvicorn[standard]>=0.38.0",
     "httpx>=0.28.1",
     "playwright>=1.56.0",
+    "duckdb>=1.0.0",
+    "jsonschema>=4.25.1",
 ]
 
 [project.optional-dependencies]

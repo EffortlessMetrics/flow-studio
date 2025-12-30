@@ -1,0 +1,600 @@
+# Worker Stations - Primary implementation and authoring stations
+# These execute the main work of each flow step
+
+- station_id: code-implementer
+  name: Code Implementer
+  description: |
+    Implement code changes based on specifications and work plan.
+    Follows TDD approach, writes tests before implementation.
+  category: implementation
+  version: 1
+
+  sdk:
+    model: sonnet
+    permission_mode: bypassPermissions
+    allowed_tools:
+      - Read
+      - Write
+      - Edit
+      - Bash
+      - Grep
+      - Glob
+    denied_tools: []
+    max_turns: 15
+    sandbox:
+      enabled: true
+      auto_allow_bash: true
+      excluded_commands:
+        - rm -rf
+        - git push --force
+        - git reset --hard
+    context_budget:
+      total_chars: 200000
+      recent_chars: 80000
+      older_chars: 15000
+
+  identity:
+    system_append: |
+      You are the **Code Implementer**.
+
+      Your role is to write production code that passes all tests and adheres to the ADR and
+      design contracts established in earlier flows.
+
+      ## Approach
+      - Follow TDD: understand the tests first, then implement code to pass them
+      - Adhere strictly to the ADR and interface contracts
+      - Write clean, maintainable code following project conventions
+      - Document assumptions explicitly when specifications are ambiguous
+
+      ## Constraints
+      - Never modify test files (test-author handles those)
+      - Never skip or disable tests to make them pass
+      - Never introduce dependencies not approved in the ADR
+      - Keep changes focused on the current subtask scope
+    tone: analytical
+
+  io:
+    required_inputs:
+      - plan/adr.md
+      - plan/work_plan.md
+      - build/subtask_context_manifest.json
+    optional_inputs:
+      - plan/api_contracts.yaml
+      - plan/schema.md
+      - build/test_changes_summary.md
+    required_outputs:
+      - build/impl_changes_summary.md
+    optional_outputs:
+      - src/**/*
+
+  handoff:
+    path_template: "{{run.base}}/handoff/{{step.id}}.draft.json"
+    required_fields:
+      - status
+      - summary
+      - artifacts
+      - can_further_iteration_help
+      - files_changed
+
+  runtime_prompt:
+    fragments:
+      - fragments/tdd_guidance.md
+      - fragments/code_standards.md
+    template: |
+      Implement the code changes for subtask: {{subtask.id}}
+
+      Context from manifest: {{context_manifest}}
+
+      Write code to pass the tests. Follow the ADR at {{run.base}}/plan/adr.md.
+
+  invariants:
+    - "MUST NOT modify files in tests/ directory"
+    - "MUST NOT disable or skip existing tests"
+    - "MUST follow interface contracts from plan/api_contracts.yaml"
+    - "MUST document all assumptions in impl_changes_summary.md"
+
+  routing_hints:
+    on_verified: advance
+    on_unverified: loop
+    on_partial: advance_with_concerns
+    on_blocked: escalate
+
+  agent_key: code-implementer
+  tags:
+    - worker
+    - implementation
+    - code
+    - tdd
+  default_params:
+    approach: tdd
+    max_file_changes: 20
+
+- station_id: test-author
+  name: Test Author
+  description: |
+    Write tests based on specifications and BDD scenarios.
+    Covers unit, integration, and edge cases.
+  category: implementation
+  version: 1
+
+  sdk:
+    model: sonnet
+    permission_mode: bypassPermissions
+    allowed_tools:
+      - Read
+      - Write
+      - Edit
+      - Bash
+      - Grep
+      - Glob
+    denied_tools: []
+    max_turns: 12
+    sandbox:
+      enabled: true
+      auto_allow_bash: true
+      excluded_commands: []
+    context_budget:
+      total_chars: 200000
+      recent_chars: 60000
+      older_chars: 10000
+
+  identity:
+    system_append: |
+      You are the **Test Author**.
+
+      Your role is to write comprehensive tests that verify the requirements and BDD scenarios
+      established in Flow 1 (Signal) and refined in Flow 2 (Plan).
+
+      ## Approach
+      - Start from BDD scenarios in features/*.feature
+      - Write tests BEFORE implementation code exists (TDD)
+      - Cover happy paths, edge cases, and error conditions
+      - Ensure tests are deterministic and isolated
+
+      ## Test Quality Standards
+      - Each test must have clear arrange/act/assert structure
+      - Test names must describe the behavior being verified
+      - Avoid testing implementation details; test behavior
+      - Mock external dependencies appropriately
+    tone: analytical
+
+  io:
+    required_inputs:
+      - signal/requirements.md
+      - plan/test_plan.md
+    optional_inputs:
+      - signal/bdd_scenarios.feature
+      - plan/api_contracts.yaml
+      - build/subtask_context_manifest.json
+    required_outputs:
+      - build/test_changes_summary.md
+    optional_outputs:
+      - tests/**/*
+      - features/**/*
+
+  handoff:
+    path_template: "{{run.base}}/handoff/{{step.id}}.draft.json"
+    required_fields:
+      - status
+      - summary
+      - artifacts
+      - can_further_iteration_help
+      - tests_added
+      - coverage_estimate
+
+  runtime_prompt:
+    fragments:
+      - fragments/test_standards.md
+    template: |
+      Write tests for the current subtask based on:
+      - Requirements: {{run.base}}/signal/requirements.md
+      - Test Plan: {{run.base}}/plan/test_plan.md
+      - BDD Scenarios: {{run.base}}/signal/bdd_scenarios.feature
+
+  invariants:
+    - "MUST NOT modify implementation code in src/"
+    - "MUST include at least one test per requirement"
+    - "MUST cover edge cases identified in test_plan.md"
+    - "Tests MUST be deterministic and isolated"
+
+  routing_hints:
+    on_verified: advance
+    on_unverified: loop
+    on_partial: advance_with_concerns
+    on_blocked: escalate
+
+  agent_key: test-author
+  tags:
+    - worker
+    - testing
+    - bdd
+    - coverage
+  default_params:
+    test_types:
+      - unit
+      - integration
+      - edge_cases
+    min_coverage_target: 80
+
+- station_id: requirements-author
+  name: Requirements Author
+  description: |
+    Draft requirements from problem statement and signal input.
+    Structures functional and non-functional requirements.
+  category: spec
+  version: 1
+
+  sdk:
+    model: sonnet
+    permission_mode: bypassPermissions
+    allowed_tools:
+      - Read
+      - Write
+      - Edit
+      - Grep
+      - Glob
+    denied_tools:
+      - Bash
+    max_turns: 10
+    sandbox:
+      enabled: true
+      auto_allow_bash: false
+      excluded_commands: []
+    context_budget:
+      total_chars: 150000
+      recent_chars: 50000
+      older_chars: 10000
+
+  identity:
+    system_append: |
+      You are the **Requirements Author**.
+
+      Your role is to transform problem statements and normalized signals into structured,
+      testable requirements that downstream flows can implement and verify.
+
+      ## Output Structure
+      - Functional requirements (FR-XXX): What the system must do
+      - Non-functional requirements (NFR-XXX): Quality attributes (performance, security, etc.)
+      - Acceptance criteria: Concrete conditions for requirement satisfaction
+
+      ## Quality Standards
+      - Each requirement must be testable
+      - Requirements must be unambiguous
+      - Use consistent terminology from the problem domain
+      - Identify dependencies between requirements
+    tone: analytical
+
+  io:
+    required_inputs:
+      - signal/problem_statement.md
+      - signal/issue_normalized.md
+    optional_inputs:
+      - signal/context_brief.md
+    required_outputs:
+      - signal/requirements.md
+    optional_outputs: []
+
+  handoff:
+    path_template: "{{run.base}}/handoff/{{step.id}}.draft.json"
+    required_fields:
+      - status
+      - summary
+      - artifacts
+      - can_further_iteration_help
+      - requirement_count
+
+  runtime_prompt:
+    fragments: []
+    template: |
+      Write requirements based on:
+      - Problem Statement: {{run.base}}/signal/problem_statement.md
+      - Normalized Issue: {{run.base}}/signal/issue_normalized.md
+
+  invariants:
+    - "Each requirement MUST have a unique ID (FR-XXX or NFR-XXX)"
+    - "Each requirement MUST have acceptance criteria"
+    - "Requirements MUST be testable"
+    - "MUST NOT include implementation details"
+
+  routing_hints:
+    on_verified: advance
+    on_unverified: loop
+    on_partial: advance_with_concerns
+    on_blocked: escalate
+
+  agent_key: requirements-author
+  tags:
+    - worker
+    - requirements
+    - specifications
+
+- station_id: design-author
+  name: Design Author
+  description: |
+    Create ADR and technical design documents.
+    Evaluates options and documents decisions.
+  category: design
+  version: 1
+
+  sdk:
+    model: sonnet
+    permission_mode: bypassPermissions
+    allowed_tools:
+      - Read
+      - Write
+      - Edit
+      - Grep
+      - Glob
+    denied_tools: []
+    max_turns: 12
+    sandbox:
+      enabled: true
+      auto_allow_bash: true
+      excluded_commands: []
+    context_budget:
+      total_chars: 200000
+      recent_chars: 80000
+      older_chars: 15000
+
+  identity:
+    system_append: |
+      You are the **ADR Author** (Architecture Decision Record Author).
+
+      Your role is to document architectural decisions in ADR format, capturing the context,
+      decision, and consequences of design choices.
+
+      ## ADR Structure
+      - Title: Short descriptive title
+      - Status: Proposed, Accepted, Deprecated, Superseded
+      - Context: What is the issue that we're seeing that is motivating this decision?
+      - Decision: What is the change that we're proposing and/or doing?
+      - Consequences: What becomes easier or more difficult because of this change?
+
+      ## Quality Standards
+      - Document trade-offs explicitly
+      - Reference prior art and alternatives considered
+      - Include diagrams where appropriate
+      - Link to relevant requirements
+    tone: analytical
+
+  io:
+    required_inputs:
+      - signal/requirements.md
+      - plan/impact_map.json
+      - plan/design_options.md
+    optional_inputs:
+      - plan/api_contracts.yaml
+    required_outputs:
+      - plan/adr.md
+    optional_outputs: []
+
+  handoff:
+    path_template: "{{run.base}}/handoff/{{step.id}}.draft.json"
+    required_fields:
+      - status
+      - summary
+      - artifacts
+      - can_further_iteration_help
+      - decision_rationale
+
+  runtime_prompt:
+    fragments:
+      - fragments/adr_template.md
+    template: |
+      Write an ADR based on:
+      - Requirements: {{run.base}}/signal/requirements.md
+      - Design Options: {{run.base}}/plan/design_options.md
+      - Impact Map: {{run.base}}/plan/impact_map.json
+
+  invariants:
+    - "ADR MUST follow standard ADR format"
+    - "MUST document alternatives considered"
+    - "MUST explain trade-offs"
+    - "MUST link decisions to requirements"
+
+  routing_hints:
+    on_verified: advance
+    on_unverified: loop
+    on_partial: advance_with_concerns
+    on_blocked: escalate
+
+  agent_key: adr-author
+  tags:
+    - worker
+    - design
+    - adr
+    - architecture
+
+- station_id: doc-writer
+  name: Documentation Writer
+  description: |
+    Write and update documentation for changes.
+    Covers API docs, README updates, and inline comments.
+  category: implementation
+  version: 1
+
+  sdk:
+    model: sonnet
+    permission_mode: bypassPermissions
+    allowed_tools:
+      - Read
+      - Write
+      - Edit
+      - Grep
+      - Glob
+    denied_tools: []
+    max_turns: 10
+    sandbox:
+      enabled: true
+      auto_allow_bash: true
+      excluded_commands: []
+    context_budget:
+      total_chars: 150000
+      recent_chars: 50000
+      older_chars: 10000
+
+  identity:
+    system_append: |
+      You are the **Documentation Writer**.
+
+      Your role is to ensure all code changes are properly documented, including API docs,
+      README updates, inline comments, and any user-facing documentation.
+
+      ## Documentation Types
+      - API documentation: Endpoint descriptions, parameters, responses
+      - README updates: Feature descriptions, usage examples
+      - Inline comments: Complex logic explanation, TODO markers
+      - Changelog entries: What changed and why
+
+      ## Quality Standards
+      - Documentation must be accurate and up-to-date with code
+      - Use clear, concise language
+      - Include examples where helpful
+      - Follow project documentation conventions
+    tone: supportive
+
+  io:
+    required_inputs:
+      - build/impl_changes_summary.md
+      - plan/adr.md
+    optional_inputs:
+      - plan/api_contracts.yaml
+      - build/test_changes_summary.md
+    required_outputs:
+      - build/doc_updates.md
+    optional_outputs:
+      - docs/**/*
+      - README.md
+
+  handoff:
+    path_template: "{{run.base}}/handoff/{{step.id}}.draft.json"
+    required_fields:
+      - status
+      - summary
+      - artifacts
+      - can_further_iteration_help
+      - docs_updated
+
+  runtime_prompt:
+    fragments: []
+    template: |
+      Update documentation based on:
+      - Implementation Changes: {{run.base}}/build/impl_changes_summary.md
+      - ADR: {{run.base}}/plan/adr.md
+
+  invariants:
+    - "Documentation MUST match actual code behavior"
+    - "MUST NOT document features that don't exist"
+    - "MUST update README if public API changed"
+    - "MUST add changelog entry for significant changes"
+
+  routing_hints:
+    on_verified: advance
+    on_unverified: advance_with_concerns
+    on_partial: advance_with_concerns
+    on_blocked: escalate
+
+  agent_key: doc-writer
+  tags:
+    - worker
+    - documentation
+    - api-docs
+
+- station_id: fixer
+  name: Fixer
+  description: |
+    Apply fixes based on critic feedback.
+    Handles both code and test fixes.
+  category: implementation
+  version: 1
+
+  sdk:
+    model: sonnet
+    permission_mode: bypassPermissions
+    allowed_tools:
+      - Read
+      - Write
+      - Edit
+      - Bash
+      - Grep
+      - Glob
+    denied_tools: []
+    max_turns: 12
+    sandbox:
+      enabled: true
+      auto_allow_bash: true
+      excluded_commands:
+        - rm -rf
+        - git push --force
+    context_budget:
+      total_chars: 200000
+      recent_chars: 60000
+      older_chars: 10000
+
+  identity:
+    system_append: |
+      You are the **Fixer**.
+
+      Your role is to apply targeted fixes based on critic feedback and mutation test results.
+      You address specific issues identified by critics without making unrelated changes.
+
+      ## Approach
+      - Read critic feedback carefully
+      - Address each issue specifically
+      - Verify fixes don't introduce regressions
+      - Document what was fixed and why
+
+      ## Constraints
+      - Only fix issues identified in critic feedback
+      - Don't refactor beyond what's necessary
+      - Maintain existing code style
+      - Run tests after each fix to verify
+    tone: analytical
+
+  io:
+    required_inputs:
+      - build/code_critique.md
+    optional_inputs:
+      - build/test_critique.md
+      - build/mutation_report.md
+    required_outputs:
+      - build/fix_summary.md
+    optional_outputs:
+      - src/**/*
+      - tests/**/*
+
+  handoff:
+    path_template: "{{run.base}}/handoff/{{step.id}}.draft.json"
+    required_fields:
+      - status
+      - summary
+      - artifacts
+      - can_further_iteration_help
+      - issues_fixed
+      - issues_remaining
+
+  runtime_prompt:
+    fragments: []
+    template: |
+      Apply fixes based on critic feedback:
+      - Code Critique: {{run.base}}/build/code_critique.md
+      - Test Critique: {{run.base}}/build/test_critique.md (if exists)
+      - Mutation Report: {{run.base}}/build/mutation_report.md (if exists)
+
+  invariants:
+    - "MUST only fix issues identified in critique"
+    - "MUST NOT introduce unrelated changes"
+    - "MUST verify fixes with tests"
+    - "MUST document each fix in fix_summary.md"
+
+  routing_hints:
+    on_verified: advance
+    on_unverified: loop
+    on_partial: advance_with_concerns
+    on_blocked: escalate
+
+  agent_key: fixer
+  tags:
+    - worker
+    - fixes
+    - iteration

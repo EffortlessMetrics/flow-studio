@@ -1,0 +1,842 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://flowstudio.dev/schemas/progress_evidence.schema.json",
+  "title": "ProgressEvidence",
+  "description": "Captures before/after state proof for the Elephant Protocol stall detection. Implements the 'Forensics Over Narrative' principle: disk state is truth, agent claims are hypotheses to verify. This schema enables detection of runs that generate activity without making meaningful progress toward the flow's exit criteria.",
+  "type": "object",
+  "required": ["evidence_id", "step_id", "flow_key", "run_id", "timestamp", "state_before", "state_after", "delta"],
+  "properties": {
+    "evidence_id": {
+      "type": "string",
+      "pattern": "^pev-[0-9]{8}-[0-9]{6}-[a-z0-9]{6}$",
+      "description": "Unique identifier for this evidence record (format: pev-YYYYMMDD-HHMMSS-random)"
+    },
+    "step_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]*$",
+      "description": "Step that produced this evidence"
+    },
+    "flow_key": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]*$",
+      "description": "Flow this evidence belongs to (e.g., 'signal', 'plan', 'build')"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^run-[0-9]{8}-[0-9]{6}-[a-z0-9]{6,8}$",
+      "description": "Run identifier this evidence is associated with"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when this evidence was captured"
+    },
+    "state_before": {
+      "$ref": "#/definitions/StateSnapshot",
+      "description": "Snapshot of measurable state before the step executed"
+    },
+    "state_after": {
+      "$ref": "#/definitions/StateSnapshot",
+      "description": "Snapshot of measurable state after the step executed"
+    },
+    "delta": {
+      "$ref": "#/definitions/ProgressDelta",
+      "description": "Computed difference between state_before and state_after. The derivative of progress."
+    },
+    "forensic_binding": {
+      "$ref": "#/definitions/ForensicBinding",
+      "description": "Reference to ForensicMarker that can independently verify this evidence"
+    },
+    "claims_alignment": {
+      "$ref": "#/definitions/ClaimsAlignment",
+      "description": "Comparison of agent's claimed changes vs forensically observed changes. Core of 'Forensics Over Narrative'."
+    },
+    "stall_analysis": {
+      "$ref": "#/definitions/StallAnalysis",
+      "description": "Analysis of whether this step represents a stall condition"
+    },
+    "iteration_context": {
+      "type": "object",
+      "properties": {
+        "iteration_number": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Which iteration of a microloop this evidence is from"
+        },
+        "loop_key": {
+          "type": "string",
+          "description": "Identifier of the microloop (e.g., 'critique_reqs:author_reqs')"
+        },
+        "previous_evidence_id": {
+          "type": "string",
+          "pattern": "^pev-[0-9]{8}-[0-9]{6}-[a-z0-9]{6}$",
+          "description": "Evidence ID from previous iteration, enabling progress tracking across iterations"
+        }
+      },
+      "additionalProperties": false,
+      "description": "Context for evidence captured during microloop iterations"
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "captured_by": {
+          "type": "string",
+          "enum": ["kernel", "orchestrator", "post_hoc_audit", "manual"],
+          "description": "What component captured this evidence"
+        },
+        "capture_duration_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Time taken to capture state snapshots (should be minimal)"
+        },
+        "schema_version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+          "default": "1.0.0",
+          "description": "Version of this schema used"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "definitions": {
+    "StateSnapshot": {
+      "type": "object",
+      "required": ["captured_at"],
+      "description": "A point-in-time snapshot of measurable repository/artifact state. All counts are objectively measurable from disk.",
+      "properties": {
+        "file_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of tracked files in scope (typically RUN_BASE + modified source files)"
+        },
+        "line_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total lines across tracked files"
+        },
+        "test_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of test cases (from test discovery, not agent claims)"
+        },
+        "test_pass_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of passing tests (from actual test execution)"
+        },
+        "test_fail_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of failing tests (from actual test execution)"
+        },
+        "test_skip_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of skipped tests (from actual test execution)"
+        },
+        "coverage_percent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Code coverage percentage (from coverage tool, not estimates)"
+        },
+        "lint_error_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of lint errors (from linter execution)"
+        },
+        "type_error_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of type errors (from type checker execution)"
+        },
+        "artifact_hashes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "SHA-256 hash of artifact content"
+          },
+          "description": "Map of artifact_path to SHA-256 hash. Enables detecting changes vs churn."
+        },
+        "artifact_sizes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "description": "Map of artifact_path to size in bytes"
+        },
+        "git_state": {
+          "type": "object",
+          "properties": {
+            "head_sha": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{40}$",
+              "description": "Git HEAD commit SHA"
+            },
+            "branch": {
+              "type": "string",
+              "description": "Current branch name"
+            },
+            "staged_count": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Number of staged files"
+            },
+            "unstaged_count": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Number of modified but unstaged files"
+            },
+            "untracked_count": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Number of untracked files"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Git working tree state"
+        },
+        "custom_metrics": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              { "type": "number" },
+              { "type": "integer" },
+              { "type": "string" },
+              { "type": "boolean" }
+            ]
+          },
+          "description": "Extensible key-value pairs for flow-specific metrics (e.g., 'requirements_count', 'api_endpoints_defined')"
+        },
+        "captured_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp when this snapshot was taken"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ProgressDelta": {
+      "type": "object",
+      "required": ["has_meaningful_change", "stall_indicator"],
+      "description": "Computed difference between before and after states. This is the derivative of progress - positive means forward motion, zero means stall.",
+      "properties": {
+        "files_added": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of new files created"
+        },
+        "files_modified": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of existing files modified (hash changed)"
+        },
+        "files_deleted": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of files deleted"
+        },
+        "lines_added": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total lines added across all files (from diff)"
+        },
+        "lines_removed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total lines removed across all files (from diff)"
+        },
+        "net_lines": {
+          "type": "integer",
+          "description": "Net line change (added - removed). Can be negative."
+        },
+        "tests_added": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of new test cases"
+        },
+        "tests_removed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of test cases removed"
+        },
+        "test_pass_delta": {
+          "type": "integer",
+          "description": "Change in number of passing tests. Positive means more tests pass."
+        },
+        "test_fail_delta": {
+          "type": "integer",
+          "description": "Change in number of failing tests. Negative means fewer failures."
+        },
+        "coverage_delta": {
+          "type": "number",
+          "description": "Change in coverage percentage. Positive means improved coverage."
+        },
+        "lint_error_delta": {
+          "type": "integer",
+          "description": "Change in lint errors. Negative means fewer errors."
+        },
+        "type_error_delta": {
+          "type": "integer",
+          "description": "Change in type errors. Negative means fewer errors."
+        },
+        "artifacts_changed": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path", "change_type"],
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "Path to changed artifact"
+              },
+              "change_type": {
+                "type": "string",
+                "enum": ["added", "modified", "deleted"],
+                "description": "Type of change"
+              },
+              "size_delta": {
+                "type": "integer",
+                "description": "Change in file size (bytes)"
+              },
+              "content_similarity": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Similarity score between before/after (1.0 = identical). Helps detect churn."
+              }
+            },
+            "additionalProperties": false
+          },
+          "description": "List of artifacts that changed between snapshots"
+        },
+        "custom_deltas": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          },
+          "description": "Computed deltas for custom_metrics (after - before)"
+        },
+        "has_meaningful_change": {
+          "type": "boolean",
+          "description": "Is the derivative of progress positive? True if step made observable forward progress toward exit criteria."
+        },
+        "stall_indicator": {
+          "type": "boolean",
+          "description": "True if this delta indicates a stall condition. The Elephant Protocol triggers when this is true across multiple iterations."
+        },
+        "stall_reason": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "If stall_indicator is true, explains why (e.g., 'No file changes despite 3 iterations', 'Same test failures across iterations')"
+        },
+        "progress_score": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1,
+          "description": "Normalized progress score: -1 = regression, 0 = no change, 1 = significant progress. Computed from weighted deltas."
+        }
+      },
+      "additionalProperties": false
+    },
+    "ForensicBinding": {
+      "type": "object",
+      "required": ["marker_id"],
+      "description": "Links this evidence to a ForensicMarker that can independently verify claims. Enables cross-referencing between evidence and forensic audit trail.",
+      "properties": {
+        "marker_id": {
+          "type": "string",
+          "pattern": "^fm-[a-z0-9]{8}$",
+          "description": "ID of the ForensicMarker that can verify this evidence"
+        },
+        "binding_type": {
+          "type": "string",
+          "enum": ["primary", "secondary", "audit_trail"],
+          "default": "primary",
+          "description": "Type of binding: primary (direct verification), secondary (corroborating), audit_trail (historical reference)"
+        },
+        "verification_status": {
+          "type": "string",
+          "enum": ["pending", "verified", "failed", "skipped"],
+          "description": "Whether the forensic marker has been checked against this evidence"
+        },
+        "verification_timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When verification was performed"
+        },
+        "discrepancies": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["field", "evidence_value", "marker_value"],
+            "properties": {
+              "field": {
+                "type": "string",
+                "description": "Field that has a discrepancy"
+              },
+              "evidence_value": {
+                "type": ["string", "number", "boolean", "null"],
+                "description": "Value in this evidence"
+              },
+              "marker_value": {
+                "type": ["string", "number", "boolean", "null"],
+                "description": "Value in the forensic marker"
+              },
+              "severity": {
+                "type": "string",
+                "enum": ["info", "warning", "error"],
+                "description": "How serious this discrepancy is"
+              }
+            },
+            "additionalProperties": false
+          },
+          "description": "Any discrepancies found during verification"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ClaimsAlignment": {
+      "type": "object",
+      "required": ["alignment_score"],
+      "description": "Compares what the agent claimed to do vs what forensics actually found. Core implementation of 'Forensics Over Narrative' principle.",
+      "properties": {
+        "claimed_changes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["claim"],
+            "properties": {
+              "claim": {
+                "type": "string",
+                "maxLength": 500,
+                "description": "What the agent said it did (from handoff envelope or output)"
+              },
+              "claim_type": {
+                "type": "string",
+                "enum": ["file_created", "file_modified", "file_deleted", "test_added", "test_fixed", "bug_fixed", "refactor", "documentation", "other"],
+                "description": "Category of the claim"
+              },
+              "artifact_path": {
+                "type": "string",
+                "description": "Path to artifact if claim references a specific file"
+              }
+            },
+            "additionalProperties": false
+          },
+          "description": "Changes the agent claimed to make (extracted from handoff envelope)"
+        },
+        "actual_changes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["change_type", "path"],
+            "properties": {
+              "change_type": {
+                "type": "string",
+                "enum": ["file_created", "file_modified", "file_deleted", "test_result_changed", "coverage_changed", "lint_result_changed"],
+                "description": "Type of change detected by forensics"
+              },
+              "path": {
+                "type": "string",
+                "description": "Path to affected artifact"
+              },
+              "details": {
+                "type": "string",
+                "maxLength": 500,
+                "description": "Additional details about the change"
+              }
+            },
+            "additionalProperties": false
+          },
+          "description": "Changes actually detected by forensic analysis of disk state"
+        },
+        "alignment_score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "How well claims match reality (1.0 = perfect alignment, 0 = complete mismatch). Low scores indicate potential hallucination or stall."
+        },
+        "unmatched_claims": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Claims that could not be verified against disk state"
+        },
+        "unclaimed_changes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Changes found on disk that were not claimed by the agent"
+        },
+        "alignment_verdict": {
+          "type": "string",
+          "enum": ["aligned", "partial", "misaligned", "suspicious"],
+          "description": "Overall verdict: aligned (score > 0.8), partial (0.5-0.8), misaligned (0.2-0.5), suspicious (< 0.2)"
+        },
+        "narrative_reliability": {
+          "type": "string",
+          "enum": ["trustworthy", "verify", "unreliable"],
+          "description": "Based on alignment history: trustworthy (consistent alignment), verify (occasional mismatches), unreliable (frequent misalignment)"
+        }
+      },
+      "additionalProperties": false
+    },
+    "StallAnalysis": {
+      "type": "object",
+      "required": ["is_stalled"],
+      "description": "Analysis of whether the run is stalled. The Elephant Protocol uses this to detect and break loops that generate activity without progress.",
+      "properties": {
+        "is_stalled": {
+          "type": "boolean",
+          "description": "Whether this step indicates a stall condition"
+        },
+        "stall_type": {
+          "type": "string",
+          "enum": [
+            "no_file_changes",
+            "same_test_failures",
+            "zero_progress_delta",
+            "high_churn_low_progress",
+            "repeated_claim_pattern",
+            "coverage_plateau",
+            "claims_without_evidence"
+          ],
+          "description": "Category of stall detected"
+        },
+        "stall_duration_iterations": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "How many iterations have shown stall indicators"
+        },
+        "stall_duration_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "How long (wall clock) the stall has persisted"
+        },
+        "elephant_protocol_trigger": {
+          "type": "boolean",
+          "description": "Whether this stall has triggered the Elephant Protocol intervention"
+        },
+        "recommended_action": {
+          "type": "string",
+          "enum": [
+            "continue",
+            "break_loop",
+            "escalate_to_human",
+            "inject_clarifier",
+            "bounce_to_previous_flow",
+            "terminate_with_status"
+          ],
+          "description": "Recommended action based on stall analysis"
+        },
+        "evidence_chain": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^pev-[0-9]{8}-[0-9]{6}-[a-z0-9]{6}$"
+          },
+          "description": "Evidence IDs showing the stall pattern (for audit trail)"
+        },
+        "break_attempt_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of times we've tried to break this stall"
+        },
+        "last_meaningful_progress_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the last meaningful progress was detected"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ForensicMarker": {
+      "type": "object",
+      "required": ["marker_id", "step_id", "timestamp", "disk_snapshot"],
+      "description": "Binding between agent claims and disk reality. Created after step execution to enable independent verification.",
+      "properties": {
+        "marker_id": {
+          "type": "string",
+          "pattern": "^fm-[a-z0-9]{8}$",
+          "description": "Unique identifier for this marker"
+        },
+        "step_id": {
+          "type": "string",
+          "description": "Step that this marker is for"
+        },
+        "flow_key": {
+          "type": "string",
+          "description": "Flow that this marker belongs to"
+        },
+        "run_id": {
+          "type": "string",
+          "description": "Run that this marker belongs to"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When this marker was created"
+        },
+        "disk_snapshot": {
+          "type": "object",
+          "required": ["manifest_hash"],
+          "properties": {
+            "manifest_hash": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$",
+              "description": "SHA-256 hash of file manifest at marker time"
+            },
+            "key_files": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "description": "Map of key file paths to their SHA-256 hashes"
+            },
+            "git_sha": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{40}$",
+              "description": "Git commit SHA at marker time (if applicable)"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Snapshot of disk state for verification"
+        },
+        "agent_claims_hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "SHA-256 hash of agent's claimed changes (from handoff envelope)"
+        },
+        "verification_commands": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["command", "expected_hash"],
+            "properties": {
+              "command": {
+                "type": "string",
+                "description": "Command to run for verification (e.g., 'sha256sum path/to/file')"
+              },
+              "expected_hash": {
+                "type": "string",
+                "description": "Expected output hash"
+              },
+              "description": {
+                "type": "string",
+                "description": "What this command verifies"
+              }
+            },
+            "additionalProperties": false
+          },
+          "description": "Commands that can be run to verify this marker"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ProgressEvidenceRef": {
+      "type": "object",
+      "required": ["evidence_id", "step_id", "timestamp"],
+      "description": "Lightweight reference to progress evidence, used in run_state to track evidence history without embedding full records.",
+      "properties": {
+        "evidence_id": {
+          "type": "string",
+          "pattern": "^pev-[0-9]{8}-[0-9]{6}-[a-z0-9]{6}$",
+          "description": "ID of the progress evidence record"
+        },
+        "step_id": {
+          "type": "string",
+          "description": "Step this evidence is for"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When evidence was captured"
+        },
+        "has_meaningful_change": {
+          "type": "boolean",
+          "description": "Quick indicator of whether progress was made"
+        },
+        "stall_indicator": {
+          "type": "boolean",
+          "description": "Quick indicator of stall condition"
+        },
+        "alignment_score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Claims alignment score for quick access"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ResourceClaim": {
+      "type": "object",
+      "required": ["resource_type", "budget", "actual"],
+      "description": "Budget/pledge/actual tracking for resource governance. Enables cost attribution and resource limit enforcement.",
+      "properties": {
+        "resource_type": {
+          "type": "string",
+          "enum": ["tokens", "cost_usd", "duration_ms", "api_calls"],
+          "description": "Type of resource being tracked"
+        },
+        "budget": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Allocated budget for this resource"
+        },
+        "pledged": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Amount agent pledged to use (estimate before execution)"
+        },
+        "actual": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Actual amount consumed"
+        },
+        "over_budget": {
+          "type": "boolean",
+          "description": "Whether actual exceeded budget"
+        },
+        "pledge_accuracy": {
+          "type": "number",
+          "description": "Ratio of actual to pledged (1.0 = exact, >1 = underestimated, <1 = overestimated)"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "evidence_id": "pev-20251229-143022-abc123",
+      "step_id": "critique_tests",
+      "flow_key": "build",
+      "run_id": "run-20251229-140000-xyz789",
+      "timestamp": "2024-12-29T14:30:22Z",
+      "state_before": {
+        "file_count": 45,
+        "line_count": 3200,
+        "test_count": 24,
+        "test_pass_count": 20,
+        "test_fail_count": 4,
+        "test_skip_count": 0,
+        "coverage_percent": 78.5,
+        "artifact_hashes": {
+          "tests/test_auth.py": "a1b2c3d4e5f6789012345678901234567890123456789012345678901234abcd",
+          "src/auth.py": "b2c3d4e5f67890123456789012345678901234567890123456789012345bcde"
+        },
+        "captured_at": "2024-12-29T14:25:00Z"
+      },
+      "state_after": {
+        "file_count": 46,
+        "line_count": 3280,
+        "test_count": 26,
+        "test_pass_count": 24,
+        "test_fail_count": 2,
+        "test_skip_count": 0,
+        "coverage_percent": 82.3,
+        "artifact_hashes": {
+          "tests/test_auth.py": "c3d4e5f6789012345678901234567890123456789012345678901234567cdef",
+          "src/auth.py": "d4e5f67890123456789012345678901234567890123456789012345678defg",
+          "tests/test_auth_edge_cases.py": "e5f6789012345678901234567890123456789012345678901234567890efgh"
+        },
+        "captured_at": "2024-12-29T14:30:22Z"
+      },
+      "delta": {
+        "files_added": 1,
+        "files_modified": 2,
+        "files_deleted": 0,
+        "lines_added": 95,
+        "lines_removed": 15,
+        "net_lines": 80,
+        "tests_added": 2,
+        "tests_removed": 0,
+        "test_pass_delta": 4,
+        "test_fail_delta": -2,
+        "coverage_delta": 3.8,
+        "artifacts_changed": [
+          {
+            "path": "tests/test_auth.py",
+            "change_type": "modified",
+            "size_delta": 320
+          },
+          {
+            "path": "src/auth.py",
+            "change_type": "modified",
+            "size_delta": 45
+          },
+          {
+            "path": "tests/test_auth_edge_cases.py",
+            "change_type": "added",
+            "size_delta": 850
+          }
+        ],
+        "has_meaningful_change": true,
+        "stall_indicator": false,
+        "progress_score": 0.75
+      },
+      "forensic_binding": {
+        "marker_id": "fm-a1b2c3d4",
+        "binding_type": "primary",
+        "verification_status": "verified",
+        "verification_timestamp": "2024-12-29T14:30:25Z",
+        "discrepancies": []
+      },
+      "claims_alignment": {
+        "claimed_changes": [
+          {
+            "claim": "Added edge case tests for authentication timeout",
+            "claim_type": "test_added",
+            "artifact_path": "tests/test_auth_edge_cases.py"
+          },
+          {
+            "claim": "Fixed 2 failing tests in test_auth.py",
+            "claim_type": "test_fixed",
+            "artifact_path": "tests/test_auth.py"
+          }
+        ],
+        "actual_changes": [
+          {
+            "change_type": "file_created",
+            "path": "tests/test_auth_edge_cases.py",
+            "details": "New test file with 2 test cases"
+          },
+          {
+            "change_type": "file_modified",
+            "path": "tests/test_auth.py",
+            "details": "Modified, hash changed"
+          },
+          {
+            "change_type": "test_result_changed",
+            "path": "tests/test_auth.py",
+            "details": "2 tests now passing that were failing"
+          }
+        ],
+        "alignment_score": 0.95,
+        "unmatched_claims": [],
+        "unclaimed_changes": [],
+        "alignment_verdict": "aligned",
+        "narrative_reliability": "trustworthy"
+      },
+      "stall_analysis": {
+        "is_stalled": false,
+        "stall_duration_iterations": 0,
+        "elephant_protocol_trigger": false,
+        "recommended_action": "continue"
+      },
+      "metadata": {
+        "captured_by": "kernel",
+        "capture_duration_ms": 150,
+        "schema_version": "1.0.0"
+      }
+    }
+  ]
+}

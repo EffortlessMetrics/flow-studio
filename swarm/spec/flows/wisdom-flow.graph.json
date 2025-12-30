@@ -1,0 +1,271 @@
+{
+  "$schema": "../schemas/flow_graph.schema.json",
+  "id": "wisdom-flow",
+  "version": 1,
+  "title": "Flow 7 - Wisdom",
+  "flow_number": 7,
+  "description": "Analyze artifacts, detect regressions, extract learnings, close feedback loops.",
+  "charter": {
+    "goal": "Extract actionable learnings from the SDLC run and close feedback loops",
+    "question": "What can we learn from this change cycle?",
+    "exit_criteria": [
+      "Artifact audit confirms all expected outputs from Flows 1-6 exist",
+      "Regression analysis identifies any test/coverage/production regressions",
+      "Flow history compiled with timestamps and routing decisions",
+      "Learnings extracted as actionable patterns",
+      "Feedback actions created (issues, doc updates, template improvements)",
+      "Wisdom summary posted to GitHub"
+    ],
+    "non_goals": [
+      "Modifying code or tests",
+      "Fixing regressions (create issues instead)",
+      "Making design decisions for future work",
+      "Executing any recommended changes"
+    ],
+    "prime_directive": "Observe. Analyze. Learn. Recommend. Never execute fixes directly."
+  },
+  "nodes": [
+    {
+      "node_id": "audit",
+      "template_id": "artifact-auditor",
+      "params": {
+        "objective": "Verify all expected artifacts from Flows 1-6 exist"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Artifact Audit",
+        "position": {"x": 100, "y": 50},
+        "color": "#94a3b8",
+        "teaching": {
+          "highlight": true,
+          "note": "First step validates the SDLC produced complete outputs"
+        }
+      }
+    },
+    {
+      "node_id": "regression",
+      "template_id": "regression-analyst",
+      "params": {
+        "objective": "Analyze tests, coverage, issues, blame for regressions"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Regression Analysis",
+        "position": {"x": 100, "y": 130},
+        "color": "#ef4444",
+        "teaching": {
+          "highlight": true,
+          "note": "Did this change introduce problems? Did it fix long-standing issues?"
+        }
+      }
+    },
+    {
+      "node_id": "history",
+      "template_id": "flow-historian",
+      "params": {
+        "objective": "Compile timeline of all flow activity"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Flow History",
+        "position": {"x": 100, "y": 210},
+        "color": "#3b82f6",
+        "teaching": {
+          "highlight": true,
+          "note": "Complete timeline for post-mortem analysis and bottleneck identification"
+        }
+      }
+    },
+    {
+      "node_id": "learnings",
+      "template_id": "learning-synthesizer",
+      "params": {
+        "objective": "Extract lessons from receipts and critiques"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Extract Learnings",
+        "position": {"x": 100, "y": 290},
+        "color": "#22c55e",
+        "teaching": {
+          "highlight": true,
+          "note": "Actionable patterns: what requirements led to smooth implementation?"
+        }
+      }
+    },
+    {
+      "node_id": "feedback",
+      "template_id": "feedback-applier",
+      "params": {
+        "objective": "Create issues and suggest documentation updates"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Apply Feedback",
+        "position": {"x": 100, "y": 370},
+        "color": "#8b5cf6",
+        "teaching": {
+          "highlight": true,
+          "note": "CLOSED LOOP: Create concrete actions - issues, doc updates, template improvements"
+        }
+      }
+    },
+    {
+      "node_id": "wisdom_report",
+      "template_id": "gh-reporter",
+      "params": {
+        "objective": "Post wisdom summary to PR/issue"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Post Summary",
+        "position": {"x": 100, "y": 450},
+        "color": "#94a3b8",
+        "teaching": {
+          "highlight": true,
+          "note": "Final step posts wisdom summary to GitHub, completing the SDLC feedback loop"
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "edge_id": "e01-audit-to-regression",
+      "from": "audit",
+      "to": "regression",
+      "type": "sequence"
+    },
+    {
+      "edge_id": "e02-regression-to-history",
+      "from": "regression",
+      "to": "history",
+      "type": "sequence"
+    },
+    {
+      "edge_id": "e03-history-to-learnings",
+      "from": "history",
+      "to": "learnings",
+      "type": "sequence"
+    },
+    {
+      "edge_id": "e04-learnings-to-feedback",
+      "from": "learnings",
+      "to": "feedback",
+      "type": "sequence"
+    },
+    {
+      "edge_id": "e05-feedback-to-report",
+      "from": "feedback",
+      "to": "wisdom_report",
+      "type": "sequence"
+    }
+  ],
+  "subflows": [
+    {
+      "subflow_id": "analysis-phase",
+      "title": "Analysis Phase",
+      "description": "Audit artifacts, detect regressions, compile history",
+      "entry_node": "audit",
+      "exit_nodes": ["history"],
+      "contained_nodes": ["audit", "regression", "history"],
+      "ui": {
+        "color": "#dbeafe",
+        "collapsed_by_default": false
+      }
+    },
+    {
+      "subflow_id": "synthesis-phase",
+      "title": "Synthesis Phase",
+      "description": "Extract learnings and create feedback actions",
+      "entry_node": "learnings",
+      "exit_nodes": ["feedback"],
+      "contained_nodes": ["learnings", "feedback"],
+      "ui": {
+        "color": "#fef3c7",
+        "collapsed_by_default": false
+      }
+    }
+  ],
+  "policy": {
+    "max_loop_iterations": 1,
+    "max_depth": 2,
+    "escalation": {
+      "on_blocked": "continue_with_concerns",
+      "max_unverified_streak": 2,
+      "escalate_on_unverified_streak": "continue"
+    },
+    "suggested_detours": [
+      {
+        "from_nodes": ["regression", "history"],
+        "to_station": "risk-analyst",
+        "condition": {
+          "field": "pattern_anomalies",
+          "operator": "gt",
+          "value": 0
+        },
+        "return_to": "next",
+        "priority": 60
+      }
+    ],
+    "suggested_injections": [
+      {
+        "station_id": "pattern-analyst",
+        "inject_after": ["history"],
+        "condition": {
+          "field": "routing_anomalies",
+          "operator": "gt",
+          "value": 0
+        },
+        "one_shot": true,
+        "priority": 50,
+        "injection_type": "INJECT_NODES"
+      }
+    ],
+    "routing_decisions": {
+      "default_decision": "CONTINUE",
+      "signal_interpretation": {
+        "on_verified": "CONTINUE",
+        "on_unverified_can_iterate": "CONTINUE",
+        "on_unverified_cannot_iterate": "CONTINUE",
+        "on_blocked": "CONTINUE",
+        "on_concerns": "CONTINUE"
+      }
+    },
+    "invariants": [
+      "Wisdom never modifies code",
+      "Create issues instead of fixing regressions",
+      "Focus on patterns, not blame",
+      "Recommendations must be actionable"
+    ]
+  },
+  "defaults": {
+    "context_pack": {
+      "include_upstream_artifacts": true,
+      "include_previous_envelopes": true,
+      "max_envelopes": 20,
+      "include_scent_trail": true
+    },
+    "sdk": {
+      "model": "inherit",
+      "max_turns": 15
+    }
+  },
+  "on_complete": {
+    "next_flow": "1-signal",
+    "reason": "SDLC cycle complete; ready for next signal",
+    "pass_artifacts": [
+      "wisdom/learnings.md",
+      "wisdom/feedback_actions.md",
+      "wisdom/flow_history.json"
+    ]
+  },
+  "on_failure": {
+    "next_flow": "7-wisdom",
+    "reason": "Re-run wisdom with additional context"
+  },
+  "metadata": {
+    "author": "flow-studio-swarm",
+    "tags": ["wisdom", "analysis", "feedback", "learning"],
+    "cross_cutting_stations": ["risk-analyst", "gh-reporter"]
+  }
+}

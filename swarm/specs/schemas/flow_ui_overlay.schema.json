@@ -1,0 +1,268 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://flow-studio.dev/schemas/flow_ui_overlay.schema.json",
+  "title": "FlowUIOverlay",
+  "description": "UI overlay for flow visualization - positions, colors, and display state",
+  "type": "object",
+  "properties": {
+    "flow_id": {
+      "type": "string",
+      "description": "Reference to the flow this overlay applies to"
+    },
+    "version": {
+      "type": "string",
+      "description": "Version of the overlay schema",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "nodes": {
+      "type": "object",
+      "description": "Node-specific UI overrides keyed by node ID",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "position": {
+            "type": "object",
+            "description": "Canvas position of the node",
+            "properties": {
+              "x": {
+                "type": "number",
+                "description": "X coordinate on canvas"
+              },
+              "y": {
+                "type": "number",
+                "description": "Y coordinate on canvas"
+              }
+            },
+            "required": ["x", "y"]
+          },
+          "size": {
+            "type": "object",
+            "description": "Optional size override",
+            "properties": {
+              "width": {
+                "type": "number"
+              },
+              "height": {
+                "type": "number"
+              }
+            }
+          },
+          "color": {
+            "type": "string",
+            "description": "Override color (CSS color value or palette key)"
+          },
+          "icon": {
+            "type": "string",
+            "description": "Override icon (icon name or URL)"
+          },
+          "collapsed": {
+            "type": "boolean",
+            "description": "Whether the node is in collapsed view state",
+            "default": false
+          },
+          "pinned": {
+            "type": "boolean",
+            "description": "Whether the node position is pinned (not auto-layout)",
+            "default": false
+          },
+          "label_position": {
+            "type": "string",
+            "enum": ["top", "bottom", "left", "right", "inside"],
+            "description": "Where to render the node label",
+            "default": "inside"
+          },
+          "custom_class": {
+            "type": "string",
+            "description": "Additional CSS class for styling"
+          }
+        }
+      }
+    },
+    "edges": {
+      "type": "object",
+      "description": "Edge-specific UI overrides keyed by 'from:to'",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "color": {
+            "type": "string",
+            "description": "Override edge color"
+          },
+          "stroke_width": {
+            "type": "number",
+            "description": "Override stroke width",
+            "minimum": 0.5
+          },
+          "stroke_style": {
+            "type": "string",
+            "enum": ["solid", "dashed", "dotted"],
+            "description": "Line style",
+            "default": "solid"
+          },
+          "label_visible": {
+            "type": "boolean",
+            "description": "Whether to show edge label",
+            "default": true
+          },
+          "waypoints": {
+            "type": "array",
+            "description": "Manual waypoints for edge routing",
+            "items": {
+              "type": "object",
+              "properties": {
+                "x": { "type": "number" },
+                "y": { "type": "number" }
+              },
+              "required": ["x", "y"]
+            }
+          }
+        }
+      }
+    },
+    "palette": {
+      "type": "object",
+      "description": "Color palette definitions for the flow",
+      "properties": {
+        "node_default": {
+          "type": "string",
+          "description": "Default node fill color"
+        },
+        "node_highlight": {
+          "type": "string",
+          "description": "Color for highlighted/teaching nodes"
+        },
+        "node_active": {
+          "type": "string",
+          "description": "Color for currently executing node"
+        },
+        "node_completed": {
+          "type": "string",
+          "description": "Color for completed nodes"
+        },
+        "node_error": {
+          "type": "string",
+          "description": "Color for nodes with errors"
+        },
+        "edge_default": {
+          "type": "string",
+          "description": "Default edge color"
+        },
+        "edge_loop": {
+          "type": "string",
+          "description": "Color for microloop edges"
+        },
+        "edge_branch": {
+          "type": "string",
+          "description": "Color for conditional branch edges"
+        },
+        "background": {
+          "type": "string",
+          "description": "Canvas background color"
+        },
+        "grid": {
+          "type": "string",
+          "description": "Grid line color"
+        }
+      },
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "canvas": {
+      "type": "object",
+      "description": "Canvas-level settings",
+      "properties": {
+        "zoom": {
+          "type": "number",
+          "description": "Current zoom level",
+          "minimum": 0.1,
+          "maximum": 10,
+          "default": 1
+        },
+        "pan": {
+          "type": "object",
+          "description": "Current pan offset",
+          "properties": {
+            "x": { "type": "number", "default": 0 },
+            "y": { "type": "number", "default": 0 }
+          }
+        },
+        "grid_size": {
+          "type": "number",
+          "description": "Snap grid size in pixels",
+          "default": 20
+        },
+        "grid_visible": {
+          "type": "boolean",
+          "description": "Whether to show the grid",
+          "default": true
+        },
+        "snap_to_grid": {
+          "type": "boolean",
+          "description": "Whether to snap nodes to grid",
+          "default": true
+        }
+      }
+    },
+    "groups": {
+      "type": "array",
+      "description": "Visual groupings of nodes",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "node_ids": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "color": {
+            "type": "string"
+          },
+          "collapsed": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": ["id", "node_ids"]
+      }
+    },
+    "annotations": {
+      "type": "array",
+      "description": "Text annotations on the canvas",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "position": {
+            "type": "object",
+            "properties": {
+              "x": { "type": "number" },
+              "y": { "type": "number" }
+            },
+            "required": ["x", "y"]
+          },
+          "style": {
+            "type": "object",
+            "properties": {
+              "font_size": { "type": "number" },
+              "color": { "type": "string" },
+              "background": { "type": "string" }
+            }
+          }
+        },
+        "required": ["id", "text", "position"]
+      }
+    }
+  },
+  "required": ["flow_id"]
+}

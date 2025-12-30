@@ -1,0 +1,113 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "learning-synthesizer",
+  "version": 1,
+  "title": "Learning Synthesizer",
+  "category": "reporter",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_only",
+    "allowed_tools": ["Read", "Grep", "Glob", "Bash", "Skill"],
+    "denied_tools": ["Write", "Edit"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": true,
+      "excluded_commands": ["rm", "mv", "git push", "git commit", "gh"]
+    },
+    "max_turns": 15,
+    "context_budget": {
+      "total_chars": 200000,
+      "recent_chars": 60000,
+      "older_chars": 15000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Learning Synthesizer. Extract actionable lessons from run artifacts. Focus on: (1) Improving flows/agents - friction, poor outputs, wrong routing; (2) Improving codebase - architecture, test gaps, patterns. Actionable over advisory.",
+    "longform_ref": "prompts/agentic_steps/learning-synthesizer.md",
+    "tone": "analytical"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [],
+    "optional_inputs": [
+      "signal/open_questions.md",
+      "plan/adr.md",
+      "build/test_critique.md",
+      "build/code_critique.md",
+      "build/mutation_report.md",
+      "build/flakiness_report.md",
+      "build/fuzz_report.md",
+      "build/doc_critique.md",
+      "gate/merge_decision.md",
+      "deploy/deployment_decision.md",
+      "wisdom/regression_report.md",
+      "signal/signal_receipt.json",
+      "plan/plan_receipt.json",
+      "build/build_receipt.json",
+      "gate/gate_receipt.json",
+      "deploy/deploy_receipt.json",
+      "signal/github_report.md",
+      "plan/github_report.md",
+      "build/github_report.md",
+      "gate/github_report.md",
+      "deploy/github_report.md",
+      "signal/requirements_critique.md",
+      "signal/bdd_critique.md",
+      "plan/design_validation.md",
+      "plan/option_critique.md",
+      "plan/contract_critique.md",
+      "plan/observability_critique.md"
+    ],
+    "required_outputs": [
+      "wisdom/learnings.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/wisdom/learnings.md",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "wisdom/learnings.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nExtract actionable lessons from run artifacts into wisdom/learnings.md.\n\n## Primary Focus\n\n1. **Improve flows/agents**: What friction did we hit? What agents gave poor output? What routing decisions were wrong?\n2. **Improve codebase**: What architectural issues surfaced? What test gaps remain? What patterns to adopt or avoid?\n\n## Outcome Snapshot (Priority Order)\n\n1. Receipts first (*_receipt.json) for authoritative status/counts\n2. Machine Summary fallback if receipt missing\n3. If neither available, record concern and use clearly labeled sections only\n\n## Harvest Observations From\n\n1. github_report.md (Agent Notes section) - when available\n2. Critic Machine Summaries (observations field) - durable fallback\n\n## Extract Patterns That Would Reduce Iteration\n\n- Requirements ambiguity -> late rework\n- Missing/weak contracts -> design/build thrash\n- Hardening gaps found late\n- Gate/deploy surprises\n- Regressions (what escaped, why, what would catch it)\n- Pack/flow friction\n\n## Output\n\nWrite {{run.base}}/wisdom/learnings.md with:\n- Outcome Snapshot\n- DevLT Summary (aggregated from receipts)\n- Learning sections (Requirements, Design, Build)\n- Assumptions table\n- Surprises\n- Pack/Flow Observations (PACK_OBS markers)\n- Actions (ACTION markers)\n\n## Advice-to-Action Binding\n\nEvery learning must produce at least one ACTION or PACK_OBS marker. Sections ending with 'consider doing X' without markers are incomplete."
+  },
+  "invariants": [
+    "Write exactly one file: wisdom/learnings.md",
+    "Do not run tools, apply fixes, or create GitHub issues",
+    "Every learning section must produce ACTION or PACK_OBS markers",
+    "Use stable marker prefixes: '## Learning:', '- ACTION:', '- PACK_OBS:'",
+    "If you can't point to evidence, don't write it as a lesson",
+    "Actionable over advisory - prefer lessons that change defaults"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

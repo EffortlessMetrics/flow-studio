@@ -40,6 +40,9 @@ All responses are JSON unless otherwise noted. Successful responses use HTTP 200
 | `/api/graph/{flow_key}`    | GET    | Graph nodes/edges for a flow              |
 | `/api/runs`                | GET    | List known runs                           |
 | `/api/runs/{run_id}/summary` | GET  | Run summary with artifacts                |
+| `/api/runs/{run_id}/routing` | GET  | All routing decisions (including off-road)|
+| `/api/runs/{run_id}/stack` | GET    | Flow execution stack state                |
+| `/api/runs/{run_id}/boundary-review` | GET | Aggregated assumptions/decisions/detours |
 | `/api/runs/{run_id}/wisdom/summary` | GET | Wisdom summary (Flow 6 analysis)    |
 | `/api/selftest/plan`       | GET    | Selftest plan summary                     |
 | `/platform/status`         | GET    | Governance status                         |
@@ -68,7 +71,7 @@ Returns health status and server capabilities.
 ```json
 {
   "status": "ok",
-  "flows": 6,
+  "flows": 7,
   "agents": 42,
   "capabilities": {
     "runs": true,
@@ -109,7 +112,7 @@ List all defined flows.
 Get the flow graph (nodes and edges) for visualization.
 
 **Parameters**:
-- `flow_key`: Flow identifier (e.g., `signal`, `plan`, `build`, `gate`, `deploy`, `wisdom`)
+- `flow_key`: Flow identifier (e.g., `signal`, `plan`, `build`, `review`, `gate`, `deploy`, `wisdom`)
 
 **Response (200)**:
 ```json
@@ -227,6 +230,165 @@ Get detailed run summary with artifact status.
 }
 ```
 
+#### `GET /api/runs/{run_id}/routing`
+
+Returns all routing decisions made during a run, including off-road decisions.
+
+**Parameters**:
+- `run_id`: Run identifier
+
+**Response (200)**:
+```json
+{
+  "run_id": "ticket-123",
+  "decisions": [
+    {
+      "step_id": "S4",
+      "flow_key": "build",
+      "timestamp": "2025-12-15T10:00:05Z",
+      "route_type": "ADVANCE",
+      "golden_path_step": "code-critic",
+      "actual_step": "code-critic",
+      "is_offroad": false,
+      "confidence": 1.0,
+      "reason": "Step completed successfully"
+    },
+    {
+      "step_id": "S5",
+      "flow_key": "build",
+      "timestamp": "2025-12-15T10:05:10Z",
+      "route_type": "DETOUR",
+      "golden_path_step": "self-reviewer",
+      "actual_step": "security-scanner",
+      "is_offroad": true,
+      "confidence": 0.85,
+      "reason": "Detected potential SQL injection pattern",
+      "return_address": "self-reviewer",
+      "evaluated_conditions": ["has_db_queries == true"]
+    }
+  ],
+  "summary": {
+    "total_decisions": 12,
+    "offroad_count": 2,
+    "detour_count": 1,
+    "inject_flow_count": 0,
+    "inject_node_count": 1
+  }
+}
+```
+
+#### `GET /api/runs/{run_id}/stack`
+
+Returns the current flow execution stack state for a run.
+
+**Parameters**:
+- `run_id`: Run identifier
+
+**Response (200)**:
+```json
+{
+  "run_id": "ticket-123",
+  "current_depth": 2,
+  "max_depth_reached": 2,
+  "stack": [
+    {
+      "flow_key": "rebase",
+      "state": "active",
+      "started_at": "2025-12-15T10:10:00Z",
+      "current_step": "conflict-resolver"
+    },
+    {
+      "flow_key": "build",
+      "state": "paused",
+      "paused_at": "2025-12-15T10:09:55Z",
+      "paused_step": "code-implementer",
+      "resume_condition": "flow_completed",
+      "injected_by": "stack_push at S6"
+    }
+  ],
+  "events": [
+    {
+      "kind": "stack_push",
+      "timestamp": "2025-12-15T10:09:55Z",
+      "paused_flow": "build",
+      "injected_flow": "rebase"
+    }
+  ]
+}
+```
+
+**Response (200) - No stack (normal execution)**:
+```json
+{
+  "run_id": "ticket-456",
+  "current_depth": 1,
+  "max_depth_reached": 1,
+  "stack": [
+    {
+      "flow_key": "build",
+      "state": "active",
+      "started_at": "2025-12-15T09:00:00Z",
+      "current_step": "code-critic"
+    }
+  ],
+  "events": []
+}
+```
+
+#### `GET /api/runs/{run_id}/boundary-review`
+
+Returns aggregated boundary review data including assumptions, decisions, and detours.
+
+**Parameters**:
+- `run_id`: Run identifier
+- `scope` (optional): `run` (default) or `flow`
+- `flow_key` (optional): Required if `scope=flow`
+
+**Response (200)**:
+```json
+{
+  "run_id": "ticket-123",
+  "scope": "run",
+  "aggregated_at": "2025-12-15T10:30:00Z",
+  "assumptions": [
+    {
+      "step_id": "S2",
+      "flow_key": "signal",
+      "assumption": "User wants React-based implementation",
+      "basis": "Framework hints in issue description",
+      "impact_if_wrong": "Would need to reimplement in different framework"
+    }
+  ],
+  "decisions": [
+    {
+      "step_id": "S4",
+      "flow_key": "build",
+      "decision": "Used hook-based state management",
+      "rationale": "Aligns with existing codebase patterns",
+      "alternatives_considered": ["Redux", "Zustand"]
+    }
+  ],
+  "detours": [
+    {
+      "step_id": "S5",
+      "flow_key": "build",
+      "route_type": "DETOUR",
+      "from_step": "code-critic",
+      "to_step": "security-scanner",
+      "rationale": "Security concern detected",
+      "returned": true,
+      "return_step": "code-critic"
+    }
+  ],
+  "summary": {
+    "assumptions_count": 3,
+    "decisions_count": 7,
+    "detours_count": 1,
+    "offroad_count": 1
+  }
+}
+```
+
 #### `GET /api/runs/{run_id}/wisdom/summary`
 
 Returns the wisdom summary for a completed run. This endpoint surfaces Flow 6 (Prod -> Wisdom) analysis results.
@@ -298,7 +460,7 @@ Current governance status across all flows and selftest.
       "failed_steps": []
     },
     "flows": {
-      "healthy": 6,
+      "healthy": 7,
       "degraded": 0,
       "broken": 0,
       "invalid_flows": []
@@ -404,7 +566,7 @@ List available interactive tours.
     {
       "id": "quickstart",
       "title": "20-Minute Quickstart",
-      "description": "Navigate all 6 flows in 20 minutes",
+      "description": "Navigate all 7 flows in 20 minutes",
       "steps": 12
     },
     ...

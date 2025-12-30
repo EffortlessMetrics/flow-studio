@@ -28,7 +28,7 @@ uv sync --extra dev
 
 ### Step 0.2: Populate the Demo Run
 
-**You say:** "Now we populate a complete demo run. This copies curated example artifacts from all 6 flows into the runs directory."
+**You say:** "Now we populate a complete demo run. This copies curated example artifacts from all 7 flows into the runs directory."
 
 **You run:**
 ```bash
@@ -139,7 +139,7 @@ uv run swarm/tools/selftest.py --json-v2 | jq .summary
 
 ## 2. Flow Studio
 
-Flow Studio is a local web UI for visualizing the 6 SDLC flows as node
+Flow Studio is a local web UI for visualizing the 7 SDLC flows as node
 graphs.
 
 ### Step 2.1: Start Flow Studio
@@ -190,7 +190,7 @@ Open: http://localhost:5000/?flow=build&run=demo-health-check
 ```
 
 **You show:**
-- Left sidebar: 6 flows (Signal, Plan, Build, Gate, Deploy, Wisdom)
+- Left sidebar: 7 flows (Signal, Plan, Build, Review, Gate, Deploy, Wisdom)
 - Center: Node graph showing steps (teal) connected to agents (colored by role)
 - Right panel: Details on selected node
 
@@ -523,7 +523,7 @@ subdirectories for each flow
 | `make dev-check` | Run all validation (CI entrypoint) |
 | `make selftest` | Full 10-step governance check |
 | `make kernel-smoke` | Fast 3-step kernel check |
-| `swarm/runs/demo-health-check/` | Demo artifacts from all 6 flows |
+| `swarm/runs/demo-health-check/` | Demo artifacts from all 7 flows |
 | `swarm/examples/` | Curated scenarios including failure cases |
 | `swarm/flows/flow-*.md` | Flow specifications |
 | `swarm/AGENTS.md` | Agent registry |

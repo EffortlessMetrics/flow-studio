@@ -54,7 +54,7 @@ make kernel-smoke  # Quick health check
 make stepwise-sdlc-stub
 ```
 
-This runs a full 6-flow SDLC in stub mode (no LLM calls, instant completion).
+This runs a full 7-flow SDLC in stub mode (no LLM calls, instant completion).
 
 **Verify**: Output shows run creation and flow completion messages.
 
@@ -76,7 +76,7 @@ http://localhost:5000/?run=stepwise-stub&mode=operator
 
 **Checklist**:
 
-- [ ] SDLC bar shows all 6 flows completed
+- [ ] SDLC bar shows all 7 flows completed
 - [ ] Click "Build" → see step nodes in the graph
 - [ ] Click a step node → inspector shows teaching notes (inputs, outputs, emphasizes, constraints)
 - [ ] Click "Run Detail" → see events timeline with step boundaries
@@ -164,7 +164,7 @@ make stepwise-sdlc-claude-sdk
 All of these must be true:
 
 1. `make stepwise-sdlc-stub` completes without errors
-2. `swarm/runs/stepwise-stub/` contains artifacts for all 6 flows
+2. `swarm/runs/stepwise-stub/` contains artifacts for all 7 flows
 3. Flow Studio loads the run at `/?run=stepwise-stub&mode=operator`
 4. Events timeline shows 50+ events with step boundaries
 5. Step details panel shows teaching notes (inputs/outputs/emphasizes/constraints)
@@ -203,4 +203,4 @@ If all pass: **Stepwise execution is working.**
 - [LONG_RUNNING_HARNESSES.md](../../docs/LONG_RUNNING_HARNESSES.md) — Anthropic pattern mapping
 - [FLOW_STUDIO.md](../../docs/FLOW_STUDIO.md) — Flow Studio UI reference
 - [runs-retention.md](./runs-retention.md) — Runs lifecycle, GC, and retention policy
-- [stepwise-sdlc-claude/](../examples/stepwise-sdlc-claude/) — Complete 6-flow golden example
+- [stepwise-sdlc-claude/](../examples/stepwise-sdlc-claude/) — Complete 7-flow golden example

@@ -8,6 +8,8 @@
 // - Re-run and close actions
 import { Api } from "./api.js";
 import { escapeHtml, formatDateTime, createModalFocusManager } from "./utils.js";
+import { updateCompactInventory, injectInventoryCSS } from "./inventory_counts.js";
+import { updateBoundaryReviewPanel, injectBoundaryReviewCSS } from "./boundary_review.js";
 // ============================================================================
 // Module State
 // ============================================================================
@@ -191,6 +193,23 @@ export function renderRunDetailContent(runId, summary) {
       ${flowProgress}
     </div>
 
+    <div class="kv-section" style="margin-top: 16px;" data-uiid="flow_studio.modal.run_detail.inventory">
+      <div class="kv-label">Inventory Markers</div>
+      <div id="run-detail-inventory-container" data-uiid="flow_studio.modal.run_detail.inventory.container" style="margin-top: 8px;">
+        <div class="muted fs-text-xs">Loading inventory...</div>
+      </div>
+    </div>
+
+    <div class="kv-section" style="margin-top: 16px;" data-uiid="flow_studio.modal.run_detail.boundary">
+      <div class="kv-label" style="display: flex; align-items: center; gap: 8px;">
+        <span>Boundary Summary</span>
+        <button id="run-detail-boundary-toggle" class="fs-button-small" data-uiid="flow_studio.modal.run_detail.boundary.toggle" style="padding: 2px 8px; font-size: 10px;">Load Review</button>
+      </div>
+      <div id="run-detail-boundary-container" data-uiid="flow_studio.modal.run_detail.boundary.container" style="display: none; margin-top: 8px;">
+        <div class="muted fs-text-xs">Click "Load Review" to view boundary data...</div>
+      </div>
+    </div>
+
     <div class="kv-section" style="margin-top: 16px;">
       <div class="kv-label" style="display: flex; align-items: center; gap: 8px;">
         <span>Events Timeline</span>
@@ -343,7 +362,7 @@ function getStatusClass(status) {
             return "fs-status-badge info";
         case "failed":
             return "fs-status-badge error";
-        case "cancelled":
+        case "canceled":
             return "fs-status-badge warning";
         case "pending":
         default:
@@ -361,8 +380,8 @@ function getStatusLabel(status) {
             return "\u25CF RUNNING";
         case "failed":
             return "\u2717 FAILED";
-        case "cancelled":
-            return "\u2014 CANCELLED";
+        case "canceled":
+            return "\u2014 CANCELED";
         case "pending":
             return "\u2026 PENDING";
         default:
@@ -413,6 +432,48 @@ function getFlowStatusClass(status) {
  * Attach action handlers to modal buttons.
  */
 function attachActionHandlers(modal, runId, summary) {
+    // Inject CSS for inventory and boundary components
+    injectInventoryCSS();
+    injectBoundaryReviewCSS();
+    // Load inventory counts immediately (compact view)
+    const inventoryContainer = modal.querySelector("#run-detail-inventory-container");
+    if (inventoryContainer) {
+        updateCompactInventory(inventoryContainer, runId).catch((err) => {
+            console.error("Failed to load inventory counts", err);
+            inventoryContainer.innerHTML = '<span class="muted fs-text-xs">Failed to load inventory data.</span>';
+        });
+    }
+    // Boundary review toggle button (lazy-load on click)
+    const boundaryToggle = modal.querySelector("#run-detail-boundary-toggle");
+    const boundaryContainer = modal.querySelector("#run-detail-boundary-container");
+    if (boundaryToggle && boundaryContainer) {
+        boundaryToggle.addEventListener("click", async () => {
+            const btn = boundaryToggle;
+            const container = boundaryContainer;
+            // Toggle visibility
+            if (container.style.display === "none") {
+                container.style.display = "block";
+                btn.textContent = "Loading...";
+                btn.disabled = true;
+                try {
+                    await updateBoundaryReviewPanel(container, runId, { scope: "run" });
+                    btn.textContent = "Hide Review";
+                }
+                catch (err) {
+                    console.error("Failed to load boundary review", err);
+                    container.innerHTML = `<div class="fs-text-xs" style="color: #dc2626;">Failed to load boundary review: ${escapeHtml(err.message || "Unknown error")}</div>`;
+                    btn.textContent = "Retry";
+                }
+                finally {
+                    btn.disabled = false;
+                }
+            }
+            else {
+                container.style.display = "none";
+                btn.textContent = "Load Review";
+            }
+        });
+    }
     // Exemplar checkbox
     const exemplarCheckbox = modal.querySelector("#run-detail-exemplar-checkbox");
     const exemplarStatus = modal.querySelector("#run-detail-exemplar-status");

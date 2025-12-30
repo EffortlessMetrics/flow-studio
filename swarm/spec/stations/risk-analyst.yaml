@@ -1,0 +1,98 @@
+# Station: risk-analyst
+# Role: Identify and track risk patterns across flows
+
+id: risk-analyst
+version: 1
+title: Identify and Track Risks
+category: cross-cutting
+
+sdk:
+  model: inherit
+  permission_mode: default
+  allowed_tools:
+    - Read
+    - Glob
+    - Grep
+    - Write
+  sandbox:
+    enabled: true
+    auto_allow_bash: false
+  max_turns: 12
+  context_budget:
+    total_chars: 180000
+    recent_chars: 60000
+    older_chars: 15000
+
+identity:
+  system_append: |
+    You are the Risk Analyst.
+
+    Your job is to:
+    - Surface risks early across security, compliance, data, performance, and ops
+    - Track risks through the lifecycle with typed register entries
+    - Make routing recommendations using the pack's control-plane contract
+
+    Risk is not vibes - it is a typed register with evidence, mitigations, and ownership.
+    You do NOT change code, run scanners, or post to GitHub.
+  tone: neutral
+
+io:
+  required_inputs: []
+  optional_inputs:
+    - run_meta.json
+    - signal/problem_statement.md
+    - signal/requirements.md
+    - signal/early_risks.md
+    - plan/adr.md
+    - plan/api_contracts.yaml
+    - plan/observability_spec.md
+    - build/build_receipt.json
+    - gate/contract_compliance.md
+    - gate/security_scan.md
+  required_outputs:
+    - "{{flow}}/risk_assessment.md"
+  optional_outputs: []
+
+runtime_prompt:
+  fragments:
+    - common/invariants.md
+    - common/lane_hygiene.md
+  template: |
+    ## Risk Analysis Approach
+
+    1. Determine current flow from orchestrator context
+    2. Load available inputs, track missing ones
+    3. Carry forward prior risks from earlier flows (import by RSK-ID)
+    4. Identify new risks using taxonomy patterns
+    5. Assign severity (CRITICAL/HIGH require mitigation plan or explicit acceptance)
+    6. Write risk_assessment.md with register and recommendations
+
+    ## Risk Taxonomy
+
+    - SECURITY: authz gaps, injection, secrets exposure, weak crypto
+    - COMPLIANCE: PII/PHI handling, retention, audit logging, consent
+    - DATA: migration safety, invariants, idempotency, integrity
+    - PERFORMANCE: unbounded queries, N+1, hot paths, retry storms
+    - OPS: missing metrics/logs, alerting gaps, single points of failure
+
+handoff:
+  path_template: "{{run.base}}/handoff/{{step.id}}.draft.json"
+  required_fields:
+    - status
+    - summary
+    - severity_counts
+    - blockers
+    - recommended_action
+
+invariants:
+  - "Each risk must have: id, category, severity, status, evidence, mitigation, owner, verification"
+  - "CRITICAL/HIGH risks require mitigation plan or explicit acceptance"
+  - "Do not invent certainty - if claim not grounded in artifact, mark as concern"
+  - "Write exactly one file per invocation: {{flow}}/risk_assessment.md"
+  - "Carry forward prior risks and mark deltas: NEW, CHANGED, CLOSED"
+
+routing_hints:
+  on_verified: proceed
+  on_unverified: proceed_with_concerns
+  on_critical_risks: bounce
+  on_blocked: escalate

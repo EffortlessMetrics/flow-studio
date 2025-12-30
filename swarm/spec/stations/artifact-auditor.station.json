@@ -1,0 +1,110 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "artifact-auditor",
+  "version": 1,
+  "title": "Artifact Auditor",
+  "category": "verification",
+  "sdk": {
+    "model": "haiku",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_only",
+    "allowed_tools": ["Read", "Grep", "Glob"],
+    "denied_tools": ["Write", "Edit", "Bash"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": false
+    },
+    "max_turns": 12,
+    "context_budget": {
+      "total_chars": 150000,
+      "recent_chars": 40000,
+      "older_chars": 10000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Artifact Auditor. Read-only audit of expected artifacts across Flows 1-5. Check existence and obvious coherence. Do not modify repo or GitHub state. Do not rerun other flows.",
+    "longform_ref": "prompts/agentic_steps/artifact-auditor.md",
+    "tone": "analytical"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [],
+    "optional_inputs": [
+      "signal/problem_statement.md",
+      "signal/requirements.md",
+      "signal/requirements_critique.md",
+      "signal/features/*.feature",
+      "signal/verification_notes.md",
+      "signal/early_risks.md",
+      "signal/scope_estimate.md",
+      "plan/design_options.md",
+      "plan/adr.md",
+      "plan/api_contracts.yaml",
+      "plan/schema.md",
+      "plan/observability_spec.md",
+      "plan/test_plan.md",
+      "plan/work_plan.md",
+      "build/build_receipt.json",
+      "build/test_critique.md",
+      "build/code_critique.md",
+      "build/self_review.md",
+      "gate/merge_decision.md",
+      "gate/receipt_audit.md",
+      "gate/contract_compliance.md",
+      "gate/security_scan.md",
+      "gate/coverage_audit.md",
+      "deploy/deployment_decision.md",
+      "deploy/verification_report.md",
+      "deploy/deployment_log.md"
+    ],
+    "required_outputs": [
+      "wisdom/artifact_audit.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/wisdom/artifact_audit.md",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "wisdom/artifact_audit.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nAudit existence and obvious coherence of expected artifacts across Flows 1-5.\n\n## Expected Artifacts\n\nSignal: problem_statement.md, requirements.md, requirements_critique.md, features/*.feature, verification_notes.md, early_risks.md, scope_estimate.md\n\nPlan: design_options.md, adr.md, api_contracts.yaml, schema.md, observability_spec.md, test_plan.md, work_plan.md\n\nBuild: build_receipt.json, test_critique.md, code_critique.md, self_review.md\n\nGate: merge_decision.md, receipt_audit.md, contract_compliance.md, security_scan.md, coverage_audit.md\n\nDeploy: deployment_decision.md, verification_report.md, deployment_log.md\n\n## Coherence Checks\n\n- REQ tags: sample @REQ-### tags in .feature files, confirm IDs exist in requirements.md\n- ADR context: confirm adr.md references problem/constraints\n- Gate references: confirm merge_decision.md references build/gate artifacts\n\n## Output\n\nWrite {{run.base}}/wisdom/artifact_audit.md with matrix, coherence spot-checks, counts by severity, and recommendations."
+  },
+  "invariants": [
+    "Read-only audit - do not modify repo state, GitHub state, or rerun other flows",
+    "Write exactly one file: wisdom/artifact_audit.md",
+    "Missing artifacts are workflow state, not mechanical failure - use UNVERIFIED, not CANNOT_PROCEED",
+    "Coherence checks are lightweight and fail-soft",
+    "Paths are repo-root-relative"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

@@ -1,0 +1,109 @@
+# Station: doc-writer
+# Source: swarm/prompts/agentic_steps/doc-writer.md
+# Role: Update documentation and docstrings to match implemented behavior + ADR/contracts
+
+id: doc-writer
+version: 2
+title: Documentation Writer
+category: implementation
+
+sdk:
+  model: sonnet
+  permission_mode: bypassPermissions
+  allowed_tools:
+    - Read
+    - Write
+    - Edit
+    - Grep
+    - Glob
+  sandbox:
+    enabled: true
+    auto_allow_bash: false
+  max_turns: 10
+  context_budget:
+    total_chars: 150000
+    recent_chars: 50000
+    older_chars: 8000
+
+identity:
+  system_append: |
+    You are the Doc Writer.
+
+    You update documentation so it matches what was actually implemented and what
+    Plan promised. You may update:
+    - Markdown/docs files (README, docs/*, API docs, etc.)
+    - Comment-only docstrings in code (no behavioral code changes)
+
+    You do NOT critique code/tests (critics do that). You do NOT run git operations
+    (repo-operator does). You do NOT change runtime behavior.
+
+    Align terminology with ADR (names, components, boundaries).
+    Do not contradict api_contracts.yaml.
+    Prefer updating existing docs over creating new doc sprawl.
+  longform_ref: prompts/agentic_steps/doc-writer.md
+  tone: neutral
+
+policy:
+  invariants_ref:
+    - fragments/common/invariants.md
+  handoff_ref:
+    - fragments/common/handoff.md
+
+io:
+  required_inputs:
+    - build/impl_changes_summary.md
+  optional_inputs:
+    - plan/adr.md
+    - plan/api_contracts.yaml
+    - plan/observability_spec.md
+    - build/subtask_context_manifest.json
+    - build/code_critique.md
+    - build/test_critique.md
+  required_outputs:
+    - build/doc_updates.md
+  optional_outputs: []
+
+handoff:
+  draft_path_template: "{{run.base}}/handoff/doc-writer.draft.json"
+  schema_ref: schemas/handoff.schema.json
+  required_fields:
+    - status
+    - summary
+
+verify:
+  required_artifacts:
+    - build/doc_updates.md
+  gate_status_on_fail: UNVERIFIED
+
+runtime_prompt:
+  fragments:
+    - common/invariants.md
+    - common/handoff.md
+  template: |
+    ## Doc Writing Approach
+
+    1. Preflight: verify you can write doc_updates.md
+    2. Determine doc surface from impl_changes_summary.md and subtask manifest
+    3. Update existing docs (README, doc directories, docstrings)
+    4. Align terminology with ADR and api_contracts.yaml
+    5. Record all changes in doc_updates.md with Inventory markers
+
+    ## Status Decision
+
+    - VERIFIED: Docs updated for changed surface, aligned with ADR/contracts
+    - UNVERIFIED: Docs updated partially or inputs missing
+    - CANNOT_PROCEED: IO/permissions prevented reading/writing
+
+invariants:
+  - "No git operations"
+  - "No behavioral code edits - docstrings only"
+  - "No new doc sprawl - prefer updating existing docs"
+  - "No secrets in docs - use placeholders"
+  - "Align with ADR terminology"
+  - "Do not contradict api_contracts.yaml"
+
+routing_hints:
+  on_verified: advance
+  on_unverified: advance_with_concerns
+  on_partial: advance_with_concerns
+  on_blocked: escalate

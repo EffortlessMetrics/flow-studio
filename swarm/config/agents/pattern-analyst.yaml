@@ -1,0 +1,9 @@
+# Auto-bootstrapped from swarm/AGENTS.md
+key: pattern-analyst
+flows:
+  - wisdom
+category: analytics
+color: orange
+source: project/user
+short_role: "Cross-run patterns and trends → pattern_report.md."
+model: inherit

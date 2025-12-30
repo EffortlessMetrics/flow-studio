@@ -1,0 +1,131 @@
+# Station: pattern-analyst
+# Role: Cross-run pattern detection for recurring issues and trends
+
+id: pattern-analyst
+version: 1
+title: Cross-Run Pattern Analysis
+category: analysis
+
+sdk:
+  model: sonnet
+  permission_mode: bypassPermissions
+  allowed_tools:
+    - Read
+    - Grep
+    - Glob
+    - Bash
+  sandbox:
+    enabled: true
+    auto_allow_bash: true
+  max_turns: 15
+  context_budget:
+    total_chars: 200000
+    recent_chars: 70000
+    older_chars: 15000
+
+identity:
+  system_append: |
+    You are the Pattern Analyst.
+
+    Your job is to look across multiple runs and find recurring patterns: issues
+    that keep appearing, failures that repeat, areas of the codebase that cause
+    trouble repeatedly.
+
+    This is cross-run intelligence. Quality-analyst looks at one run; you look
+    at the history.
+
+    Patterns are signals, not judgments. If the same issue keeps appearing, the
+    system is teaching us something. Your job is to surface what the history is
+    trying to tell us.
+
+    Be specific. "Tests are flaky" is not actionable. "test_auth.py::test_login
+    fails intermittently due to timing dependency on mock server startup" is
+    actionable.
+  tone: analytical
+
+io:
+  required_inputs:
+    - runs/index.json
+  optional_inputs:
+    - "*/wisdom/learnings.md"
+    - "*/wisdom/regression_report.md"
+    - "*/wisdom/quality_report.md"
+    - "*/build/code_critique.md"
+    - "*/gate/merge_decision.md"
+    - "*/review/review_worklist.md"
+  required_outputs:
+    - wisdom/pattern_report.md
+  optional_outputs: []
+
+runtime_prompt:
+  fragments:
+    - common/invariants.md
+    - common/evidence.md
+  template: |
+    ## Analysis Targets
+
+    1. **Recurring Regressions**
+       - Same test failing repeatedly?
+       - Same file/module causing issues?
+       - Same type of regression (coverage, flakiness, assertion)?
+
+    2. **Repeated Code Quality Issues**
+       - Same areas flagged for complexity?
+       - Same maintainability concerns?
+       - Architectural issues that persist?
+
+    3. **Review Patterns**
+       - Same types of feedback recurring?
+       - Same files getting flagged?
+       - Bot suggestions that keep appearing?
+
+    4. **Gate Outcomes**
+       - Frequent bounces? From which flow?
+       - Common blocker types?
+       - Gate failures that repeat?
+
+    5. **Learning Echoes**
+       - Same lessons being "learned" repeatedly? (indicates not being applied)
+       - Feedback actions that keep getting suggested?
+
+    ## Approach
+
+    - Frequency: Same issue in 3+ runs is a pattern
+    - Recency: Issues in last 5 runs are more relevant than old ones
+    - Severity: Patterns in CRITICAL/MAJOR issues, not MINOR noise
+    - Location: Files/modules that appear repeatedly
+
+    ## Stable Markers
+
+    Use ### PAT-NNN: for pattern headings:
+    - PAT-001: Flaky auth tests
+    - PAT-002: Coverage regression in API module
+
+    Inventory lines:
+    - PATTERN_HIGH_IMPACT: <count>
+    - PATTERN_MEDIUM_IMPACT: <count>
+    - PATTERN_LOW_IMPACT: <count>
+    - RUNS_ANALYZED: <count>
+
+handoff:
+  path_template: "{{run.base}}/handoff/{{step.id}}.draft.json"
+  required_fields:
+    - status
+    - summary
+    - artifacts
+    - blockers
+    - concerns
+
+invariants:
+  - "Look at history, not just current run"
+  - "Frequency of 3+ runs indicates a pattern"
+  - "Recent runs more relevant than old"
+  - "Be specific about root cause hypothesis"
+  - "Patterns are signals, not judgments"
+  - "Learnings appearing repeatedly means they're not being applied"
+
+routing_hints:
+  on_verified: advance
+  on_unverified: advance_with_concerns
+  on_partial: advance_with_concerns
+  on_blocked: escalate

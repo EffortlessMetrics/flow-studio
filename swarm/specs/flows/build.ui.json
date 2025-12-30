@@ -1,0 +1,146 @@
+{
+  "$schema": "../schemas/flow_ui_overlay.schema.json",
+  "flow_id": "build",
+  "version": "1.0.0",
+  "nodes": {
+    "branch": {
+      "position": { "x": 100, "y": 300 },
+      "collapsed": false,
+      "pinned": true
+    },
+    "load_context": {
+      "position": { "x": 300, "y": 300 },
+      "collapsed": false,
+      "pinned": true
+    },
+    "clarify": {
+      "position": { "x": 500, "y": 300 },
+      "collapsed": false,
+      "pinned": true
+    },
+    "author_tests": {
+      "position": { "x": 700, "y": 200 },
+      "color": "node_highlight",
+      "collapsed": false,
+      "pinned": true
+    },
+    "critique_tests": {
+      "position": { "x": 900, "y": 200 },
+      "color": "node_highlight",
+      "collapsed": false,
+      "pinned": true
+    },
+    "implement": {
+      "position": { "x": 700, "y": 400 },
+      "color": "node_highlight",
+      "collapsed": false,
+      "pinned": true
+    },
+    "critique_code": {
+      "position": { "x": 900, "y": 400 },
+      "color": "node_highlight",
+      "collapsed": false,
+      "pinned": true
+    },
+    "mutate": {
+      "position": { "x": 1100, "y": 300 },
+      "collapsed": false,
+      "pinned": true
+    },
+    "fix": {
+      "position": { "x": 1300, "y": 300 },
+      "collapsed": false,
+      "pinned": true
+    },
+    "docs": {
+      "position": { "x": 1500, "y": 300 },
+      "collapsed": false,
+      "pinned": true
+    },
+    "self_review": {
+      "position": { "x": 1700, "y": 300 },
+      "collapsed": false,
+      "pinned": true
+    },
+    "commit": {
+      "position": { "x": 1900, "y": 300 },
+      "collapsed": false,
+      "pinned": true
+    }
+  },
+  "edges": {
+    "critique_tests:author_tests": {
+      "color": "edge_loop",
+      "stroke_style": "dashed",
+      "label_visible": true,
+      "waypoints": [
+        { "x": 900, "y": 120 },
+        { "x": 700, "y": 120 }
+      ]
+    },
+    "critique_code:implement": {
+      "color": "edge_loop",
+      "stroke_style": "dashed",
+      "label_visible": true,
+      "waypoints": [
+        { "x": 900, "y": 480 },
+        { "x": 700, "y": 480 }
+      ]
+    }
+  },
+  "palette": {
+    "node_default": "#4a5568",
+    "node_highlight": "#38a169",
+    "node_active": "#68d391",
+    "node_completed": "#2d3748",
+    "node_error": "#e53e3e",
+    "edge_default": "#718096",
+    "edge_loop": "#ed8936",
+    "edge_branch": "#4299e1",
+    "background": "#1a202c",
+    "grid": "#2d3748"
+  },
+  "canvas": {
+    "zoom": 0.8,
+    "pan": { "x": 0, "y": 0 },
+    "grid_size": 20,
+    "grid_visible": true,
+    "snap_to_grid": true
+  },
+  "groups": [
+    {
+      "id": "test_microloop",
+      "label": "Test Microloop",
+      "node_ids": ["author_tests", "critique_tests"],
+      "color": "#38a16980",
+      "collapsed": false
+    },
+    {
+      "id": "code_microloop",
+      "label": "Code Microloop",
+      "node_ids": ["implement", "critique_code"],
+      "color": "#38a16980",
+      "collapsed": false
+    }
+  ],
+  "annotations": [
+    {
+      "id": "tdd_note",
+      "text": "TDD: Tests first, then implementation",
+      "position": { "x": 700, "y": 100 },
+      "style": {
+        "font_size": 12,
+        "color": "#a0aec0"
+      }
+    },
+    {
+      "id": "adr_note",
+      "text": "Code must follow ADR from Flow 2",
+      "position": { "x": 700, "y": 500 },
+      "style": {
+        "font_size": 12,
+        "color": "#a0aec0"
+      }
+    }
+  ]
+}

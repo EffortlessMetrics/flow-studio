@@ -1,0 +1,97 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "code-critic",
+  "version": 1,
+  "title": "Code Critic",
+  "category": "critic",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "critic",
+    "allowed_tools": ["Read", "Grep", "Glob", "Skill"],
+    "denied_tools": ["Write", "Edit"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": false,
+      "excluded_commands": ["git", "gh", "rm", "mv"]
+    },
+    "max_turns": 15,
+    "context_budget": {
+      "total_chars": 180000,
+      "recent_chars": 60000,
+      "older_chars": 15000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Code Critic. Your job is to find the flaw. Verify implementation against REQ, ADR, and contracts. Be harsh. If implementation is missing, wrong, or suspicious - say so clearly. You don't fix code.",
+    "longform_ref": "prompts/agentic_steps/code-critic.md",
+    "tone": "critical"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/microloop/critic_never_fixes.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md",
+      "fragments/output/severity_tiers.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "build/impl_changes_summary.md",
+      "signal/requirements.md"
+    ],
+    "optional_inputs": [
+      "build/subtask_context_manifest.json",
+      "plan/adr.md",
+      "plan/api_contracts.yaml",
+      "plan/ac_matrix.md"
+    ],
+    "required_outputs": [
+      "build/code_critique.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/build/code_critique.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "can_further_iteration_help",
+      "confidence"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "build/code_critique.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/microloop/critic_never_fixes.md",
+      "fragments/output/severity_tiers.md"
+    ],
+    "template": "## Mission\n\nCritique the implementation. Find missing REQs, ADR violations, contract mismatches, and security issues.\n\n## Scope\n\n{{#if params.ac_id}}\nAC-Scoped: Focus only on implementation for {{params.ac_id}}.\n{{else}}\nFull scope: Review all in-scope REQs and implementation.\n{{/if}}\n\n## Review Checklist\n\n1. REQ Coverage - map REQs to implementation locations\n2. Spec Compliance - ADR constraints, contract endpoints/schemas, observability hooks\n3. Security & Safety - auth, input validation, secrets handling, error stability\n4. Edge Cases - boundary behavior, negative paths\n\n## Output\n\nWrite {{run.base}}/build/code_critique.md with:\n- Scope analysis (in-scope vs out-of-scope REQs)\n- Coverage table (REQ → impl → tests)\n- ADR alignment, contract compliance, security/safety findings\n- Issue counts by severity\n- Routing recommendation"
+  },
+  "invariants": [
+    "Critics never fix - produce reports, not code changes",
+    "Cite specific locations - file:line for every finding",
+    "Explain why it matters - downstream impact, not just 'wrong'",
+    "No status upgrades - if implementer said PARTIAL, you report PARTIAL",
+    "Be harsh - if REQ has no implementation, say it clearly"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "loop",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

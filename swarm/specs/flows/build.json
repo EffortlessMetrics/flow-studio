@@ -1,0 +1,202 @@
+{
+  "$schema": "../schemas/flow_graph.schema.json",
+  "id": "build",
+  "name": "Build",
+  "version": "1.0.0",
+  "nodes": [
+    {
+      "id": "branch",
+      "agents": ["repo-operator"],
+      "role": "Ensure clean tree, create feature branch with conventional naming.",
+      "objective": "Prepare git state for implementation",
+      "inputs": ["RUN_BASE/plan/work_plan.md"],
+      "outputs": ["RUN_BASE/build/git_status.md"]
+    },
+    {
+      "id": "load_context",
+      "agents": ["context-loader"],
+      "role": "Load relevant context for subtask -> subtask_context_manifest.json.",
+      "objective": "Gather implementation context (20-50k tokens)",
+      "inputs": ["RUN_BASE/plan/work_plan.md", "RUN_BASE/plan/test_plan.md", "RUN_BASE/plan/adr.md", "RUN_BASE/signal/requirements.md", "RUN_BASE/signal/bdd_scenarios.md"],
+      "outputs": ["RUN_BASE/build/subtask_context_manifest.json"]
+    },
+    {
+      "id": "clarify",
+      "agents": ["clarifier"],
+      "role": "Detect ambiguities, draft clarification questions -> clarification_questions.md.",
+      "objective": "Surface ambiguities before implementation",
+      "inputs": ["RUN_BASE/build/subtask_context_manifest.json", "RUN_BASE/plan/work_plan.md", "RUN_BASE/signal/requirements.md"],
+      "outputs": ["RUN_BASE/build/clarification_questions.md"]
+    },
+    {
+      "id": "author_tests",
+      "agents": ["test-author"],
+      "role": "Write/update tests -> tests/*, test_changes_summary.md.",
+      "objective": "Create tests before implementation (TDD)",
+      "teaching_note": "Tests are written FIRST, before implementation. The test author uses BDD scenarios from Flow 1 as the specification.",
+      "teaching_highlight": true,
+      "inputs": ["RUN_BASE/plan/test_plan.md", "RUN_BASE/build/subtask_context_manifest.json", "RUN_BASE/signal/bdd_scenarios.md", "RUN_BASE/build/test_critique.md"],
+      "outputs": ["RUN_BASE/build/test_changes_summary.md", "tests/**"]
+    },
+    {
+      "id": "critique_tests",
+      "agents": ["test-critic"],
+      "role": "Harsh review of tests vs BDD/spec -> test_critique.md. Never fixes.",
+      "objective": "Validate test quality via adversarial review",
+      "teaching_note": "MICROLOOP: Test critic provides harsh feedback but NEVER fixes code. Loop continues with test-author until Status=VERIFIED.",
+      "teaching_highlight": true,
+      "inputs": ["RUN_BASE/build/test_changes_summary.md", "RUN_BASE/signal/bdd_scenarios.md", "RUN_BASE/signal/requirements.md", "tests/**"],
+      "outputs": ["RUN_BASE/build/test_critique.md"]
+    },
+    {
+      "id": "implement",
+      "agents": ["code-implementer"],
+      "role": "Write code to pass tests, follow ADR -> src/*, impl_changes_summary.md.",
+      "objective": "Implement code following ADR and passing tests",
+      "teaching_note": "Implementation MUST follow the ADR from Flow 2. The implementer makes tests pass while respecting design constraints.",
+      "teaching_highlight": true,
+      "inputs": ["RUN_BASE/build/subtask_context_manifest.json", "RUN_BASE/plan/adr.md", "RUN_BASE/plan/api_contracts.yaml", "RUN_BASE/plan/interface_spec.md", "RUN_BASE/plan/observability_spec.md", "RUN_BASE/build/code_critique.md", "tests/**"],
+      "outputs": ["RUN_BASE/build/impl_changes_summary.md", "src/**"]
+    },
+    {
+      "id": "critique_code",
+      "agents": ["code-critic"],
+      "role": "Harsh review of code vs ADR/contracts -> code_critique.md. Never fixes.",
+      "objective": "Validate implementation quality and ADR compliance",
+      "teaching_note": "MICROLOOP: Code critic verifies ADR compliance and contract adherence. If code_critique.md exists from a previous iteration, the implementer must address cited violations.",
+      "teaching_highlight": true,
+      "inputs": ["RUN_BASE/build/impl_changes_summary.md", "RUN_BASE/plan/adr.md", "RUN_BASE/plan/api_contracts.yaml", "RUN_BASE/plan/interface_spec.md", "src/**"],
+      "outputs": ["RUN_BASE/build/code_critique.md"]
+    },
+    {
+      "id": "mutate",
+      "agents": ["mutator"],
+      "role": "Run mutation tests to identify weak spots -> mutation_report.md.",
+      "objective": "Identify test coverage gaps via mutation testing",
+      "inputs": ["RUN_BASE/build/impl_changes_summary.md", "src/**", "tests/**"],
+      "outputs": ["RUN_BASE/build/mutation_report.md"]
+    },
+    {
+      "id": "fix",
+      "agents": ["fixer"],
+      "role": "Apply targeted fixes from critics and mutations -> fix_summary.md.",
+      "objective": "Address identified issues",
+      "inputs": ["RUN_BASE/build/code_critique.md", "RUN_BASE/build/test_critique.md", "RUN_BASE/build/mutation_report.md", "src/**", "tests/**"],
+      "outputs": ["RUN_BASE/build/fix_summary.md", "src/**", "tests/**"]
+    },
+    {
+      "id": "docs",
+      "agents": ["doc-writer"],
+      "role": "Update docs, READMEs, API docs -> doc_updates.md.",
+      "objective": "Keep documentation in sync with code",
+      "inputs": ["RUN_BASE/build/impl_changes_summary.md", "RUN_BASE/plan/adr.md", "src/**"],
+      "outputs": ["RUN_BASE/build/doc_updates.md"]
+    },
+    {
+      "id": "self_review",
+      "agents": ["self-reviewer"],
+      "role": "Final review -> self_review.md, build_receipt.json with per-dimension verdicts.",
+      "objective": "Produce comprehensive build receipt",
+      "inputs": ["RUN_BASE/build/impl_changes_summary.md", "RUN_BASE/build/test_changes_summary.md", "RUN_BASE/build/code_critique.md", "RUN_BASE/build/test_critique.md", "RUN_BASE/build/fix_summary.md", "RUN_BASE/plan/adr.md", "src/**", "tests/**"],
+      "outputs": ["RUN_BASE/build/self_review.md", "RUN_BASE/build/build_receipt.json"]
+    },
+    {
+      "id": "commit",
+      "agents": ["repo-operator"],
+      "role": "Stage changes, compose commit message, commit to feature branch.",
+      "objective": "Commit implementation to feature branch",
+      "inputs": ["RUN_BASE/build/impl_changes_summary.md", "RUN_BASE/build/self_review.md", "src/**", "tests/**"],
+      "outputs": ["RUN_BASE/build/commit_info.md"]
+    }
+  ],
+  "edges": [
+    {
+      "from": "branch",
+      "to": "load_context",
+      "kind": "next"
+    },
+    {
+      "from": "load_context",
+      "to": "clarify",
+      "kind": "next"
+    },
+    {
+      "from": "clarify",
+      "to": "author_tests",
+      "kind": "next"
+    },
+    {
+      "from": "author_tests",
+      "to": "critique_tests",
+      "kind": "next"
+    },
+    {
+      "from": "critique_tests",
+      "to": "author_tests",
+      "kind": "loop",
+      "condition": "status == 'UNVERIFIED' && can_further_iteration_help == true",
+      "label": "Revise Tests",
+      "priority": 1
+    },
+    {
+      "from": "critique_tests",
+      "to": "implement",
+      "kind": "next",
+      "condition": "status == 'VERIFIED' || can_further_iteration_help == false",
+      "label": "Tests OK",
+      "priority": 0
+    },
+    {
+      "from": "implement",
+      "to": "critique_code",
+      "kind": "next"
+    },
+    {
+      "from": "critique_code",
+      "to": "implement",
+      "kind": "loop",
+      "condition": "status == 'UNVERIFIED' && can_further_iteration_help == true",
+      "label": "Revise Code",
+      "priority": 1
+    },
+    {
+      "from": "critique_code",
+      "to": "mutate",
+      "kind": "next",
+      "condition": "status == 'VERIFIED' || can_further_iteration_help == false",
+      "label": "Code OK",
+      "priority": 0
+    },
+    {
+      "from": "mutate",
+      "to": "fix",
+      "kind": "next"
+    },
+    {
+      "from": "fix",
+      "to": "docs",
+      "kind": "next"
+    },
+    {
+      "from": "docs",
+      "to": "self_review",
+      "kind": "next"
+    },
+    {
+      "from": "self_review",
+      "to": "commit",
+      "kind": "next"
+    }
+  ],
+  "entry_node": "branch",
+  "exit_nodes": ["commit"],
+  "cross_cutting": ["clarifier", "repo-operator", "gh-reporter"],
+  "metadata": {
+    "title": "Flow 3 - Plan -> Code (Build)",
+    "description": "Implement via adversarial microloops - build code+tests, self-verify, produce receipts that minimize human attention.",
+    "teaching": {
+      "title": "Plan to Code: Adversarial Microloops in Action",
+      "summary": "This is where the core 'spend compute to save attention' pattern shines. Two adversarial microloops (test author/critic and code implementer/critic) iterate until verified. Critics never fix - they write harsh feedback that drives improvement."
+    }
+  }
+}

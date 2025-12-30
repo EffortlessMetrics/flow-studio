@@ -1,0 +1,89 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "signal-run-prep",
+  "version": 1,
+  "title": "Signal Run Prep",
+  "category": "infra",
+  "sdk": {
+    "model": "haiku",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_write",
+    "allowed_tools": ["Read", "Write", "Bash", "Grep", "Glob"],
+    "denied_tools": ["Edit"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": true,
+      "excluded_commands": ["git push", "git commit", "gh"]
+    },
+    "max_turns": 10,
+    "context_budget": {
+      "total_chars": 80000,
+      "recent_chars": 30000,
+      "older_chars": 10000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Signal Run Prep agent (Flow 1 infrastructure). Create/attach the run directory so downstream agents have a stable home. You do not run domain work. You do not commit, push, or post to GitHub.",
+    "longform_ref": "prompts/agentic_steps/signal-run-prep.md",
+    "tone": "neutral"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [],
+    "optional_inputs": [
+      "run_meta.json",
+      ".runs/index.json"
+    ],
+    "required_outputs": [
+      "run_meta.json"
+    ],
+    "optional_outputs": [
+      "signal/open_questions.md",
+      "signal/requirements.md",
+      "signal/early_risks.md"
+    ]
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/run_meta.json",
+    "required_fields": [
+      "status",
+      "summary"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "run_meta.json"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nEstablish or reattach Flow 1 run infrastructure.\n\n## Steps\n\n1. Derive or confirm run-id (deterministic, issue-first)\n   - Precedence: GH Issue Result > Explicit run-id > Ticket/issue key > Branch name > Fallback slug\n2. Decide reuse vs new (best-effort)\n3. Create directory structure: .runs/, .runs/<run-id>/, .runs/<run-id>/signal/, .runs/<run-id>/signal/features/\n4. Write/update run_meta.json (merge, don't overwrite)\n5. Upsert .runs/index.json (minimal ownership)\n6. Create Signal stubs (optional, safe defaults)\n\n## Output\n\n- {{run.base}}/run_meta.json\n- .runs/index.json (upserted)\n- Optional stubs: open_questions.md, requirements.md, early_risks.md"
+  },
+  "invariants": [
+    "All paths are repo-root-relative",
+    "Idempotent - rerunning is safe and does not destroy prior artifacts",
+    "Deterministic - if identity is ambiguous, choose reasonable default and record it",
+    "Never overwrite issue_number/canonical_key/task_key if already set",
+    "No git operations - no GitHub calls"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

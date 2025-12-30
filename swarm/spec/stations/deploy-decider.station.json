@@ -1,0 +1,94 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "deploy-decider",
+  "version": 1,
+  "title": "Deploy Decider",
+  "category": "router",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_only",
+    "allowed_tools": ["Read", "Grep", "Glob", "Bash"],
+    "denied_tools": ["Write", "Edit"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": true,
+      "excluded_commands": ["git checkout", "git branch", "git add", "git commit", "git push", "git merge", "git tag", "rm", "mv"]
+    },
+    "max_turns": 12,
+    "context_budget": {
+      "total_chars": 150000,
+      "recent_chars": 50000,
+      "older_chars": 15000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Deploy Decider. Determine whether governance enforcement is verifiable (CI + branch protection) and whether the run is deploy-ready. You do not merge, tag, release, post comments, or create issues. You only read and write .runs artifacts.",
+    "longform_ref": "prompts/agentic_steps/deploy-decider.md",
+    "tone": "analytical"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md",
+      "fragments/common/routing_vocabulary.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "gate/merge_decision.md"
+    ],
+    "optional_inputs": [
+      "deploy/verification_report.md",
+      "deploy/branch_protection.md",
+      "run_meta.json"
+    ],
+    "required_outputs": [
+      "deploy/deployment_decision.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/deploy/deployment_decision.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "routing_signal"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "deploy/deployment_decision.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md",
+      "fragments/common/routing_vocabulary.md"
+    ],
+    "template": "## Mission\n\nDetermine deploy readiness via governance verification.\n\n## Two-Axis Model\n\n**Axis 1: Deploy Action** (what happened):\n- COMPLETED: merge/tag succeeded\n- SKIPPED: gate BOUNCE\n- FAILED: merge/tag attempted but failed\n\n**Axis 2: Governance Enforcement** (can we verify protections):\n- VERIFIED: classic branch protection with required checks\n- VERIFIED_RULESET: org/repo ruleset provides protection\n- UNVERIFIED_PERMS: cannot determine (permissions)\n- NOT_CONFIGURED: no protection exists\n- UNKNOWN: cannot determine (auth/API failure)\n\n## Verification Steps\n\n1. Read Gate verdict (MERGE | BOUNCE)\n2. Determine default branch\n3. Verify CI workflow presence\n4. Verify branch protection (API or manual snapshot)\n5. Runtime verification (if report exists)\n6. Optional checks (pre-commit, documentation)\n7. Decide verdict via two-axis model\n\n## Output\n\nWrite {{run.base}}/deploy/deployment_decision.md with:\n- Fenced YAML block (schema_version, deploy_action, governance_enforcement, deployment_verdict)\n- Evidence section\n- Rationale\n- Charter Alignment\n- Handoff"
+  },
+  "invariants": [
+    "Do not merge, tag, release, post comments, or create issues",
+    "Two-axis model: deploy_action x governance_enforcement = deployment_verdict",
+    "STABLE requires COMPLETED + (VERIFIED or VERIFIED_RULESET)",
+    "GOVERNANCE_UNVERIFIABLE is distinct from NOT_DEPLOYED",
+    "Tighten on uncertainty - missing governance is not success"
+  ],
+  "routing_hints": {
+    "on_verified": "complete",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

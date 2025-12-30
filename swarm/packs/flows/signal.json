@@ -1,0 +1,53 @@
+{
+  "id": "signal",
+  "name": "Signal → Specs",
+  "description": "Transform raw input into structured requirements, BDD scenarios, and risk assessment",
+  "version": 1,
+  "nodes": [
+    {
+      "node_id": "signal-normalizer",
+      "template_id": "signal-normalizer",
+      "params": {}
+    },
+    {
+      "node_id": "problem-framer",
+      "template_id": "problem-framer",
+      "params": {}
+    },
+    {
+      "node_id": "requirements-author",
+      "template_id": "requirements-author",
+      "params": {}
+    },
+    {
+      "node_id": "requirements-critic",
+      "template_id": "requirements-critic",
+      "params": {},
+      "overrides": {
+        "exit_on": {"status": ["VERIFIED"]}
+      }
+    },
+    {
+      "node_id": "bdd-author",
+      "template_id": "bdd-author",
+      "params": {}
+    },
+    {
+      "node_id": "scope-assessor",
+      "template_id": "scope-assessor",
+      "params": {}
+    }
+  ],
+  "edges": [
+    {"edge_id": "e1", "from": "signal-normalizer", "to": "problem-framer", "type": "sequence", "priority": 50},
+    {"edge_id": "e2", "from": "problem-framer", "to": "requirements-author", "type": "sequence", "priority": 50},
+    {"edge_id": "e3", "from": "requirements-author", "to": "requirements-critic", "type": "sequence", "priority": 50},
+    {"edge_id": "e4-loop", "from": "requirements-critic", "to": "requirements-author", "type": "loop", "priority": 40, "condition": {"expression": "status != 'VERIFIED' && can_further_iteration_help == true"}},
+    {"edge_id": "e4-exit", "from": "requirements-critic", "to": "bdd-author", "type": "sequence", "priority": 50, "condition": {"expression": "status == 'VERIFIED' || can_further_iteration_help == false"}},
+    {"edge_id": "e5", "from": "bdd-author", "to": "scope-assessor", "type": "sequence", "priority": 50}
+  ],
+  "policy": {
+    "max_loop_iterations": 50,
+    "suggested_sidequests": ["clarifier", "risk-assessment"]
+  }
+}

@@ -1,0 +1,115 @@
+# Station: adr-author
+# Source: swarm/prompts/agentic_steps/adr-author.md
+# Role: Write run-local ADR binding design options to REQ/NFRs
+
+id: adr-author
+version: 2
+title: ADR Author
+category: design
+
+sdk:
+  model: sonnet
+  permission_mode: bypassPermissions
+  allowed_tools:
+    - Read
+    - Write
+    - Edit
+    - Grep
+    - Glob
+  sandbox:
+    enabled: true
+    auto_allow_bash: false
+  max_turns: 10
+  context_budget:
+    total_chars: 200000
+    recent_chars: 60000
+    older_chars: 10000
+
+identity:
+  system_append: |
+    You are the ADR Author.
+
+    You write a run-local Architecture Decision Record. This ADR is Swarm-Proposed
+    and reviewed by humans at the appropriate boundary. You do not publish to
+    repo-wide ADR systems.
+
+    Key rules:
+    - Bind decision to evidence (cite REQ/NFR IDs and OPT-### labels)
+    - Prefer option with fewest irreversible bets
+    - Document trade-offs and consequences explicitly
+    - Use stable markers (DR-###, RSK-###, ASM-###)
+    - Write only to .runs/<run-id>/plan/adr.md
+  longform_ref: prompts/agentic_steps/adr-author.md
+  tone: neutral
+
+policy:
+  invariants_ref:
+    - fragments/common/invariants.md
+  handoff_ref:
+    - fragments/common/handoff.md
+
+io:
+  required_inputs:
+    - plan/design_options.md
+  optional_inputs:
+    - plan/impact_map.json
+    - signal/problem_statement.md
+    - signal/requirements.md
+    - signal/open_questions.md
+    - signal/early_risks.md
+  required_outputs:
+    - plan/adr.md
+  optional_outputs: []
+
+handoff:
+  draft_path_template: "{{run.base}}/handoff/adr-author.draft.json"
+  schema_ref: schemas/handoff.schema.json
+  required_fields:
+    - status
+    - summary
+    - artifacts
+
+verify:
+  required_artifacts:
+    - plan/adr.md
+  gate_status_on_fail: UNVERIFIED
+
+runtime_prompt:
+  fragments:
+    - common/invariants.md
+    - common/handoff.md
+  template: |
+    ## ADR Writing Approach
+
+    1. Read design_options.md and extract options, trade-offs, recommendation
+    2. Choose one option (or explicitly named hybrid)
+    3. Bind decision to evidence with REQ/NFR/OPT references
+    4. Document alternatives considered with rejection reasons
+    5. List risks with mitigations using RSK-### markers
+    6. State assumptions with ASM-### markers
+
+    ## ADR Structure
+
+    Include:
+    - Status: Swarm-Proposed (run-scoped)
+    - Context: problem, constraints, non-goals
+    - Decision Drivers: DRIVER: DR-### with req/nfr/option_ref
+    - Decision: ADR_CHOSEN_OPTION: OPT-00N
+    - Alternatives Considered: ALT: OPT-### - Rejected because
+    - Consequences: positive and negative
+    - Risks and Mitigations: RISK: RSK-###
+    - Assumptions: ASM: ASM-###
+    - Inventory section with machine-countable markers
+
+invariants:
+  - "Decision Drivers must cite REQ/NFR IDs when available"
+  - "Use stable option references (OPT-###) from design_options.md"
+  - "Use stable markers (DR-###, RSK-###, ASM-###)"
+  - "ADR is run-scoped - do not edit repo-wide ADR index"
+  - "If REQ/NFR IDs unavailable, downgrade to UNVERIFIED"
+
+routing_hints:
+  on_verified: advance
+  on_unverified: loop
+  on_partial: advance_with_concerns
+  on_blocked: escalate

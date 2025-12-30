@@ -5,8 +5,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
 
-# Error message template: ✗ TYPE: location problem → Fix: action
-ERROR_TEMPLATE = "✗ {error_type}: {location} {problem}\n  Fix: {fix_action}"
+# Error message template: [FAIL] TYPE: location problem -> Fix: action
+ERROR_TEMPLATE = "[FAIL] {error_type}: {location} {problem}\n  Fix: {fix_action}"
 
 
 class ValidationError:

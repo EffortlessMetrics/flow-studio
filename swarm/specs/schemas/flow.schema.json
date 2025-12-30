@@ -1,0 +1,201 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://flow-studio.dev/schemas/flow.schema.json",
+  "title": "Flow Specification",
+  "description": "Defines an orchestrated flow with steps, routing, and defaults.",
+  "type": "object",
+  "required": ["id", "version", "title"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "Unique flow identifier (e.g., '3-build')."
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Schema version for this flow definition."
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable flow title."
+    },
+    "description": {
+      "type": "string",
+      "description": "Detailed description of the flow's purpose."
+    },
+    "flow_number": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 6,
+      "description": "Flow number in the SDLC sequence (1-6)."
+    },
+    "defaults": {
+      "type": "object",
+      "description": "Default settings for all steps in this flow.",
+      "properties": {
+        "context_pack": {
+          "type": "object",
+          "properties": {
+            "include_upstream_artifacts": { "type": "boolean", "default": true },
+            "include_previous_envelopes": { "type": "boolean", "default": true },
+            "max_envelopes": { "type": "integer", "default": 12 },
+            "include_scent_trail": { "type": "boolean", "default": true }
+          }
+        },
+        "sdk_overrides": {
+          "type": "object",
+          "description": "SDK options to override for all steps."
+        }
+      }
+    },
+    "steps": {
+      "type": "array",
+      "description": "Ordered list of flow steps.",
+      "items": {
+        "type": "object",
+        "required": ["id", "station"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "description": "Unique step identifier within this flow."
+          },
+          "station": {
+            "type": "string",
+            "description": "Station ID to execute at this step."
+          },
+          "objective": {
+            "type": "string",
+            "description": "Human-readable objective for this step."
+          },
+          "scope": {
+            "type": "string",
+            "description": "Optional scope limiter for this step."
+          },
+          "inputs": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Input artifact paths for this step."
+          },
+          "outputs": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Output artifact paths for this step."
+          },
+          "routing": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["linear", "microloop", "branch", "terminal"],
+                "default": "linear"
+              },
+              "next": {
+                "type": "string",
+                "description": "Next step ID for linear routing."
+              },
+              "loop_target": {
+                "type": "string",
+                "description": "Step ID to loop back to."
+              },
+              "loop_condition_field": {
+                "type": "string",
+                "default": "status"
+              },
+              "loop_success_values": {
+                "type": "array",
+                "items": { "type": "string" },
+                "default": ["VERIFIED", "verified"]
+              },
+              "max_iterations": {
+                "type": "integer",
+                "minimum": 1,
+                "default": 3
+              },
+              "branches": {
+                "type": "object",
+                "additionalProperties": { "type": "string" }
+              }
+            }
+          },
+          "sdk_overrides": {
+            "type": "object",
+            "description": "SDK options to override for this step."
+          },
+          "teaching": {
+            "type": "object",
+            "properties": {
+              "highlight": { "type": "boolean", "default": false },
+              "note": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "cross_cutting_stations": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Stations available across all steps (e.g., clarifier)."
+    },
+    "nodes": {
+      "type": "array",
+      "description": "Graph nodes for visualization (optional, can be in .ui.json).",
+      "items": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string" },
+          "type": { "type": "string" },
+          "label": { "type": "string" },
+          "station": { "type": "string" },
+          "position": {
+            "type": "object",
+            "properties": {
+              "x": { "type": "number" },
+              "y": { "type": "number" }
+            }
+          }
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "description": "Graph edges for visualization.",
+      "items": {
+        "type": "object",
+        "required": ["source", "target"],
+        "properties": {
+          "id": { "type": "string" },
+          "source": { "type": "string" },
+          "target": { "type": "string" },
+          "label": { "type": "string" },
+          "type": { "type": "string" }
+        }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "description": "Flow-level policy settings."
+    },
+    "subflows": {
+      "type": "array",
+      "items": { "type": "object" },
+      "description": "Nested subflows within this flow."
+    },
+    "on_complete": {
+      "type": "object",
+      "description": "Actions to take when flow completes successfully."
+    },
+    "on_failure": {
+      "type": "object",
+      "description": "Actions to take when flow fails."
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Arbitrary metadata for this flow."
+    }
+  },
+  "additionalProperties": true
+}

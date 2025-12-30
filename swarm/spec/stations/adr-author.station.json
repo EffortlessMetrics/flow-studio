@@ -1,0 +1,96 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "adr-author",
+  "version": 1,
+  "title": "ADR Author",
+  "category": "spec",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_write",
+    "allowed_tools": ["Read", "Write", "Grep", "Glob"],
+    "denied_tools": ["Bash", "Edit"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": false
+    },
+    "max_turns": 12,
+    "context_budget": {
+      "total_chars": 150000,
+      "recent_chars": 50000,
+      "older_chars": 15000
+    }
+  },
+  "identity": {
+    "system_append": "You are the ADR Author. Write a run-local Architecture Decision Record (Swarm-Proposed) that binds a chosen design option to REQ/NFR evidence. Use OPT-### identifiers from design_options.md. Do NOT publish to repo-wide ADR systems. Write exactly: adr.md.",
+    "longform_ref": "prompts/agentic_steps/adr-author.md",
+    "tone": "neutral"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "plan/design_options.md"
+    ],
+    "optional_inputs": [
+      "plan/impact_map.json",
+      "signal/problem_statement.md",
+      "signal/requirements.md",
+      "signal/open_questions.md",
+      "plan/open_questions.md",
+      "signal/early_risks.md",
+      "signal/risk_assessment.md"
+    ],
+    "required_outputs": [
+      "plan/adr.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/plan/adr.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "proposed_next_step"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "plan/adr.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nWrite a run-local ADR that binds a chosen design option to evidence.\n\n## Context\n\n{{#each inputs}}\n- {{this}}\n{{/each}}\n\n## Objective\n\nChoose one option from design_options.md (or a named hybrid) and document:\n- Decision drivers with REQ/NFR citations\n- Alternatives considered with rejection reasons\n- Consequences (positive/negative)\n- Risks and mitigations\n- Assumptions made to proceed\n\n## Constraints\n\n- Write exactly one file: adr.md\n- Use OPT-### identifiers from design_options.md\n- Do NOT edit docs/adr/ or repo-wide ADR systems\n- Bind decision drivers to REQ/NFR IDs when available"
+  },
+  "invariants": [
+    "Write exactly one file: plan/adr.md",
+    "Reference OPT-### identifiers from design_options.md, not prose names",
+    "Decision drivers must cite REQ/NFR IDs when available",
+    "Do NOT edit docs/adr/ or repo-wide ADR systems",
+    "Status is Swarm-Proposed (run-scoped; pending human review)",
+    "Include machine-countable inventory section (ADR_CHOSEN_OPTION, ADR_DRIVER, ADR_ALT, ADR_RISK, ADR_ASM)"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "loop",
+    "on_blocked": "escalate"
+  }
+}

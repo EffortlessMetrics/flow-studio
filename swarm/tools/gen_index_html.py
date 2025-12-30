@@ -40,7 +40,12 @@ FRAGMENT_ORDER = [
     "50-inspector.html", # Details/inspector panel
 ]
 
-MODAL_FRAGMENT = "60-modals.html"
+# Modal/overlay fragments to include after main content
+MODAL_FRAGMENTS = [
+    "60-modals.html",
+    "65-context-budget-modal.html",
+    "67-boundary-review.html",
+]
 FOOTER_FRAGMENT = "90-footer.html"
 
 # JS files to bundle (in dependency order)
@@ -129,7 +134,7 @@ def generate_html() -> str:
     fragments = load_all_fragments()
 
     # Verify all required fragments exist
-    required = FRAGMENT_ORDER + [MODAL_FRAGMENT, FOOTER_FRAGMENT]
+    required = FRAGMENT_ORDER + MODAL_FRAGMENTS + [FOOTER_FRAGMENT]
     for name in required:
         if name not in fragments:
             print(f"Error: Required fragment missing: {name}")
@@ -147,9 +152,10 @@ def generate_html() -> str:
     parts.append('<script type="module" src="js/main.js"></script>')
     parts.append("")
 
-    # 3. Modals
-    parts.append(fragments[MODAL_FRAGMENT].rstrip())
-    parts.append("")
+    # 3. Modals and overlays
+    for modal_name in MODAL_FRAGMENTS:
+        parts.append(fragments[modal_name].rstrip())
+        parts.append("")
 
     # 4. Embedded assets comment and inline CSS
     css_content = load_css()

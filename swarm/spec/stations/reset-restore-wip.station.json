@@ -1,0 +1,88 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "reset-restore-wip",
+  "version": 1,
+  "title": "Reset: Restore WIP",
+  "category": "infra",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "full_access",
+    "allowed_tools": ["Read", "Bash", "Grep", "Glob", "Write"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": true,
+      "excluded_commands": ["rm -rf", "git push --force", "git reset --hard", "git clean -fd"]
+    },
+    "max_turns": 10,
+    "context_budget": {
+      "total_chars": 100000,
+      "recent_chars": 40000,
+      "older_chars": 10000
+    }
+  },
+  "identity": {
+    "system_append": "You are executing the Restore WIP step in Flow 8 (Reset). Your task is to pop the stashed changes and verify they apply cleanly. Use git stash apply first, verify success, then git stash drop. NEVER use git stash pop directly - it drops on success which makes recovery harder if issues arise.",
+    "longform_ref": "prompts/steps/reset/restore_wip.md",
+    "tone": "neutral"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "reset/stash_report.md"
+    ],
+    "optional_inputs": [
+      "reset/sync_report.md",
+      "reset/conflict_resolution.md"
+    ],
+    "required_outputs": [
+      "reset/restore_report.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/reset/restore_report.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "reset/restore_report.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nRestore stashed work-in-progress changes and verify they apply cleanly.\n\n## Procedure\n\n1. Read stash_report.md to get stash reference and file inventory\n2. Apply stash: `git stash apply stash@{0}`\n3. Verify all files from inventory are restored\n4. If successful, drop stash: `git stash drop stash@{0}`\n5. If conflicts, document and set UNVERIFIED\n\n## Constraints\n\n- NEVER use `git stash pop` - it drops on success making recovery harder\n- Use `git stash apply` followed by verification, then `git stash drop`\n- Verify restored files match original inventory\n\n## Output\n\nWrite {{run.base}}/reset/restore_report.md with restoration status and any issues."
+  },
+  "invariants": [
+    "NEVER use git stash pop directly",
+    "Use git stash apply, verify, then git stash drop",
+    "Verify restored files match stash inventory",
+    "Only drop stash after confirming successful restore",
+    "If stash apply has conflicts, document and set UNVERIFIED",
+    "Safe Bash only - no destructive commands"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

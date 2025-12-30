@@ -1,0 +1,86 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "gh-reporter",
+  "version": 1,
+  "title": "GitHub Reporter",
+  "category": "reporter",
+  "sdk": {
+    "model": "haiku",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "reporter",
+    "allowed_tools": ["Read", "Bash", "Grep", "Glob"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": true,
+      "excluded_commands": ["git push", "git commit", "git reset"]
+    },
+    "max_turns": 10,
+    "context_budget": {
+      "total_chars": 120000,
+      "recent_chars": 40000,
+      "older_chars": 10000
+    }
+  },
+  "identity": {
+    "system_append": "You are the GitHub Reporter. Post one idempotent flow summary comment to the GitHub issue (never PR). Issue-first invariant. Use content mode ladder: FULL, FULL_PATHS_ONLY, SUMMARY_ONLY, MACHINE_ONLY. Be a neutral clerk. Never create issues. Never post to PRs.",
+    "longform_ref": "prompts/agentic_steps/gh-reporter.md",
+    "tone": "neutral"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "run_meta.json"
+    ],
+    "optional_inputs": [
+      "<flow>/<flow>_receipt.json",
+      "<flow>/github_report.md",
+      "<flow>/secrets_status.json",
+      "<flow>/git_status.md"
+    ],
+    "required_outputs": [
+      "<flow>/gh_report_status.md"
+    ],
+    "optional_outputs": [
+      "<flow>/gh_comment_id.txt"
+    ]
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/{{flow}}/gh_report_status.md",
+    "required_fields": [
+      "status",
+      "summary"
+    ]
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nPost flow summary to GitHub issue for run: {{params.run_id}}, flow: {{params.flow}}.\n\n## Content Mode\n\nDerived from control-plane signals:\n- safe_to_publish: {{params.safe_to_publish}}\n- publish_surface: {{params.publish_surface}}\n\n## Rules\n\n- Issue-first: always post to issue, never PR\n- One comment per flow, idempotent\n- Never create issues (bounce to gh-issue-manager)\n- Tighten-only: may restrict content mode, never loosen"
+  },
+  "invariants": [
+    "Issue-first invariant - flow summaries always posted to issue, never PR",
+    "No metric recomputation - copy from receipts or emit null",
+    "No status upgrades - preserve labels like VERIFIED, UNVERIFIED",
+    "Link, don't duplicate - use relative paths, avoid large pasted text",
+    "Never create issues - if issue_number missing, SKIP and bounce to gh-issue-manager",
+    "Tighten-only - last-mile checks may tighten content mode, never loosen"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

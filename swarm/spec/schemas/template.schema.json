@@ -1,0 +1,778 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://flowstudio.dev/schemas/template.schema.json",
+  "title": "StepTemplateSpec",
+  "description": "A step template is a reusable blueprint that users drag onto the flow canvas. Templates reference a station and provide parameterized configuration for common use cases.",
+  "type": "object",
+  "required": ["id", "version", "station_id", "objective", "ui"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "Unique template identifier (kebab-case)"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Template spec version for traceability and migration"
+    },
+    "station_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "Reference to the underlying station spec that powers this template"
+    },
+    "station_version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Optional pinned station version (if omitted, uses latest)"
+    },
+    "title": {
+      "type": "string",
+      "maxLength": 60,
+      "description": "Human-readable template title for display in palette"
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 300,
+      "description": "Brief description shown in template library and tooltips"
+    },
+    "objective": {
+      "$ref": "#/definitions/ParameterizedObjective",
+      "description": "Parameterized objective template with placeholder substitution"
+    },
+    "io_overrides": {
+      "$ref": "#/definitions/IoOverrides",
+      "description": "Optional overrides to the station's default I/O contract"
+    },
+    "routing_defaults": {
+      "$ref": "#/definitions/RoutingDefaults",
+      "description": "Optional default routing behavior for instances of this template"
+    },
+    "ui": {
+      "$ref": "#/definitions/UiDefaults",
+      "description": "Visual defaults for display in Flow Studio canvas"
+    },
+    "parameters": {
+      "$ref": "#/definitions/ParameterSchema",
+      "description": "Schema for user-configurable parameters shown in UI forms"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*$"
+      },
+      "uniqueItems": true,
+      "description": "Tags for filtering in the template library (e.g., 'testing', 'security', 'documentation')"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "shaping",
+        "spec",
+        "design",
+        "implementation",
+        "critic",
+        "verification",
+        "analytics",
+        "reporter",
+        "infra",
+        "router",
+        "custom"
+      ],
+      "description": "Category for grouping in the template palette"
+    },
+    "examples": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/TemplateExample"
+      },
+      "description": "Example configurations showing common usage patterns"
+    },
+    "deprecated": {
+      "type": "boolean",
+      "default": false,
+      "description": "Mark template as deprecated (still usable but hidden from palette)"
+    },
+    "replaced_by": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "If deprecated, the template ID that replaces this one"
+    },
+    "constraints": {
+      "$ref": "#/definitions/TemplateConstraints",
+      "description": "Constraints on where and how this template can be used"
+    }
+  },
+  "definitions": {
+    "ParameterizedObjective": {
+      "type": "object",
+      "required": ["template"],
+      "properties": {
+        "template": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Objective template with {{parameter}} placeholders for substitution"
+        },
+        "default_params": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Default values for template parameters"
+        }
+      },
+      "additionalProperties": false,
+      "examples": [
+        {
+          "template": "Review {{artifact_type}} for {{quality_criteria}} and produce critique report",
+          "default_params": {
+            "artifact_type": "code changes",
+            "quality_criteria": "security vulnerabilities and performance issues"
+          }
+        }
+      ]
+    },
+    "IoOverrides": {
+      "type": "object",
+      "properties": {
+        "additional_inputs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Additional required inputs beyond station defaults"
+        },
+        "additional_optional_inputs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Additional optional inputs beyond station defaults"
+        },
+        "additional_outputs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Additional required outputs beyond station defaults"
+        },
+        "additional_optional_outputs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Additional optional outputs beyond station defaults"
+        },
+        "remove_inputs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Station default inputs to remove for this template"
+        },
+        "remove_outputs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Station default outputs to remove for this template"
+        }
+      },
+      "additionalProperties": false
+    },
+    "RoutingDefaults": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["linear", "microloop", "branch", "terminal"],
+          "default": "linear",
+          "description": "Default routing kind for steps created from this template"
+        },
+        "on_verified": {
+          "type": "string",
+          "enum": ["advance", "complete"],
+          "default": "advance",
+          "description": "Default action when step produces VERIFIED status"
+        },
+        "on_unverified": {
+          "type": "string",
+          "enum": ["loop", "advance_with_concerns", "block"],
+          "default": "advance_with_concerns",
+          "description": "Default action when step produces UNVERIFIED status"
+        },
+        "max_iterations": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "default": 3,
+          "description": "Default max iterations for microloop routing"
+        },
+        "exit_on": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["VERIFIED", "BLOCKED"]
+              },
+              "description": "Exit microloop when status matches"
+            },
+            "can_further_iteration_help": {
+              "type": "boolean",
+              "description": "Exit when can_further_iteration_help equals this value"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Default exit conditions for microloop"
+        }
+      },
+      "additionalProperties": false
+    },
+    "UiDefaults": {
+      "type": "object",
+      "required": ["icon"],
+      "properties": {
+        "icon": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Icon identifier for display (e.g., 'code-review', 'test-tube', 'shield-check')"
+        },
+        "icon_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Optional custom icon URL (overrides icon identifier)"
+        },
+        "color": {
+          "type": "string",
+          "pattern": "^#[0-9A-Fa-f]{6}$",
+          "description": "Hex color code for the template node (e.g., '#4A90D9')"
+        },
+        "color_scheme": {
+          "type": "string",
+          "enum": [
+            "shaping",
+            "spec",
+            "design",
+            "implementation",
+            "critic",
+            "verification",
+            "analytics",
+            "reporter",
+            "infra",
+            "router",
+            "neutral"
+          ],
+          "description": "Named color scheme (alternative to explicit hex color)"
+        },
+        "suggested_ports": {
+          "$ref": "#/definitions/SuggestedPorts",
+          "description": "Suggested input/output port configuration for canvas display"
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 400,
+          "default": 200,
+          "description": "Default node width in pixels"
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 60,
+          "maximum": 300,
+          "default": 100,
+          "description": "Default node height in pixels"
+        },
+        "show_status_badge": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to show execution status badge on node"
+        },
+        "show_iteration_count": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether to show iteration count (for microloop templates)"
+        },
+        "palette_group": {
+          "type": "string",
+          "maxLength": 40,
+          "description": "Group name for organizing in the template palette"
+        },
+        "palette_order": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Sort order within palette group (lower = earlier)"
+        }
+      },
+      "additionalProperties": false
+    },
+    "SuggestedPorts": {
+      "type": "object",
+      "properties": {
+        "inputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PortDefinition"
+          },
+          "description": "Suggested input ports for the node"
+        },
+        "outputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PortDefinition"
+          },
+          "description": "Suggested output ports for the node"
+        }
+      },
+      "additionalProperties": false
+    },
+    "PortDefinition": {
+      "type": "object",
+      "required": ["id", "label"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "description": "Port identifier (unique within node)"
+        },
+        "label": {
+          "type": "string",
+          "maxLength": 30,
+          "description": "Display label for the port"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["artifact", "signal", "control"],
+          "default": "artifact",
+          "description": "Type of connection this port accepts"
+        },
+        "artifact_pattern": {
+          "type": "string",
+          "description": "Glob pattern for matching artifact paths (e.g., '*.md', 'plan/*.yaml')"
+        },
+        "required": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether this port must be connected"
+        },
+        "multiple": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether multiple connections are allowed"
+        },
+        "position": {
+          "type": "string",
+          "enum": ["top", "bottom", "left", "right"],
+          "default": "left",
+          "description": "Edge position for the port"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ParameterSchema": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "object",
+          "default": "object"
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/ParameterDefinition"
+          },
+          "description": "Parameter definitions keyed by parameter name"
+        },
+        "required": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of required parameter names"
+        },
+        "ui_order": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Order of parameters in the UI form"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ParameterDefinition": {
+      "type": "object",
+      "required": ["type", "title"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["string", "number", "integer", "boolean", "array", "enum"],
+          "description": "Parameter data type"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 60,
+          "description": "Display label for the parameter"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 300,
+          "description": "Help text shown below the input"
+        },
+        "default": {
+          "description": "Default value for the parameter"
+        },
+        "placeholder": {
+          "type": "string",
+          "description": "Placeholder text for empty inputs"
+        },
+        "enum": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Allowed values for enum type"
+        },
+        "enum_labels": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Display labels for enum values"
+        },
+        "minimum": {
+          "type": "number",
+          "description": "Minimum value for number/integer types"
+        },
+        "maximum": {
+          "type": "number",
+          "description": "Maximum value for number/integer types"
+        },
+        "minLength": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Minimum length for string types"
+        },
+        "maxLength": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum length for string types"
+        },
+        "pattern": {
+          "type": "string",
+          "description": "Regex pattern for string validation"
+        },
+        "items": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["string", "number", "integer"]
+            }
+          },
+          "description": "Item schema for array types"
+        },
+        "ui_widget": {
+          "type": "string",
+          "enum": [
+            "text",
+            "textarea",
+            "number",
+            "slider",
+            "toggle",
+            "select",
+            "multi-select",
+            "file-picker",
+            "path-picker",
+            "color-picker",
+            "code-editor"
+          ],
+          "description": "UI widget to use for this parameter"
+        },
+        "ui_group": {
+          "type": "string",
+          "description": "Group name for organizing parameters in the form"
+        },
+        "ui_collapsed": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether the parameter should be collapsed by default (for advanced options)"
+        },
+        "depends_on": {
+          "type": "object",
+          "properties": {
+            "parameter": {
+              "type": "string",
+              "description": "Name of the parameter this depends on"
+            },
+            "value": {
+              "description": "Value(s) that make this parameter visible"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Conditional visibility based on another parameter"
+        }
+      },
+      "additionalProperties": false
+    },
+    "TemplateExample": {
+      "type": "object",
+      "required": ["name", "params"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 60,
+          "description": "Example name for display in UI"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Brief description of when to use this example"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Parameter values for this example"
+        }
+      },
+      "additionalProperties": false
+    },
+    "TemplateConstraints": {
+      "type": "object",
+      "properties": {
+        "allowed_flows": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9]+-[a-z]+$"
+          },
+          "description": "Flow IDs where this template can be used (if omitted, allowed in all flows)"
+        },
+        "disallowed_flows": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9]+-[a-z]+$"
+          },
+          "description": "Flow IDs where this template cannot be used"
+        },
+        "requires_predecessor": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*$"
+          },
+          "description": "Template IDs that must precede this template in the flow"
+        },
+        "incompatible_with": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*$"
+          },
+          "description": "Template IDs that cannot appear in the same flow"
+        },
+        "max_instances_per_flow": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum number of this template allowed in a single flow"
+        },
+        "singleton": {
+          "type": "boolean",
+          "default": false,
+          "description": "If true, only one instance allowed per flow (shorthand for max_instances_per_flow: 1)"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "id": "code-review-security",
+      "version": 1,
+      "station_id": "code-critic",
+      "title": "Security-Focused Code Review",
+      "description": "Review code changes specifically for security vulnerabilities, injection risks, and authentication issues.",
+      "category": "critic",
+      "tags": ["security", "review", "critic"],
+      "objective": {
+        "template": "Review {{file_patterns}} for {{security_focus}} and produce security critique report with severity ratings",
+        "default_params": {
+          "file_patterns": "all changed files",
+          "security_focus": "OWASP Top 10 vulnerabilities"
+        }
+      },
+      "io_overrides": {
+        "additional_outputs": [
+          "security_critique.md"
+        ]
+      },
+      "routing_defaults": {
+        "kind": "linear",
+        "on_verified": "advance",
+        "on_unverified": "loop",
+        "max_iterations": 2
+      },
+      "ui": {
+        "icon": "shield-check",
+        "color_scheme": "critic",
+        "suggested_ports": {
+          "inputs": [
+            {
+              "id": "code-changes",
+              "label": "Code Changes",
+              "type": "artifact",
+              "required": true
+            }
+          ],
+          "outputs": [
+            {
+              "id": "critique",
+              "label": "Security Critique",
+              "type": "artifact"
+            },
+            {
+              "id": "signal",
+              "label": "Status",
+              "type": "signal"
+            }
+          ]
+        },
+        "palette_group": "Review",
+        "palette_order": 10,
+        "show_status_badge": true
+      },
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "security_focus": {
+            "type": "enum",
+            "title": "Security Focus",
+            "description": "Primary security concern to evaluate",
+            "enum": ["OWASP Top 10 vulnerabilities", "Injection attacks", "Authentication/Authorization", "Data exposure", "All categories"],
+            "default": "OWASP Top 10 vulnerabilities",
+            "ui_widget": "select"
+          },
+          "severity_threshold": {
+            "type": "enum",
+            "title": "Minimum Severity",
+            "description": "Only report issues at or above this severity",
+            "enum": ["low", "medium", "high", "critical"],
+            "default": "low",
+            "ui_widget": "select"
+          },
+          "file_patterns": {
+            "type": "string",
+            "title": "File Patterns",
+            "description": "Glob patterns for files to review (comma-separated)",
+            "default": "**/*.ts,**/*.py,**/*.rs",
+            "placeholder": "**/*.ts,**/*.py",
+            "ui_widget": "text"
+          },
+          "include_recommendations": {
+            "type": "boolean",
+            "title": "Include Fix Recommendations",
+            "description": "Include suggested fixes for each finding",
+            "default": true,
+            "ui_widget": "toggle"
+          }
+        },
+        "required": ["security_focus"],
+        "ui_order": ["security_focus", "severity_threshold", "file_patterns", "include_recommendations"]
+      },
+      "examples": [
+        {
+          "name": "API Endpoint Review",
+          "description": "Review API handlers for injection and auth issues",
+          "params": {
+            "security_focus": "Injection attacks",
+            "file_patterns": "**/api/**/*.ts,**/handlers/**/*.py"
+          }
+        },
+        {
+          "name": "Full Security Audit",
+          "description": "Comprehensive security review of all code",
+          "params": {
+            "security_focus": "All categories",
+            "severity_threshold": "low",
+            "include_recommendations": true
+          }
+        }
+      ],
+      "constraints": {
+        "allowed_flows": ["3-build", "4-gate"]
+      }
+    },
+    {
+      "id": "test-coverage-check",
+      "version": 1,
+      "station_id": "coverage-enforcer",
+      "title": "Test Coverage Gate",
+      "description": "Verify test coverage meets minimum thresholds before allowing merge.",
+      "category": "verification",
+      "tags": ["testing", "coverage", "gate"],
+      "objective": {
+        "template": "Verify test coverage for {{scope}} meets {{threshold}}% threshold",
+        "default_params": {
+          "scope": "changed files",
+          "threshold": "80"
+        }
+      },
+      "routing_defaults": {
+        "kind": "linear",
+        "on_verified": "advance",
+        "on_unverified": "block"
+      },
+      "ui": {
+        "icon": "chart-bar",
+        "color_scheme": "verification",
+        "suggested_ports": {
+          "inputs": [
+            {
+              "id": "test-results",
+              "label": "Test Results",
+              "type": "artifact",
+              "required": true
+            },
+            {
+              "id": "coverage-report",
+              "label": "Coverage Report",
+              "type": "artifact",
+              "required": true
+            }
+          ],
+          "outputs": [
+            {
+              "id": "verdict",
+              "label": "Coverage Verdict",
+              "type": "signal"
+            }
+          ]
+        },
+        "palette_group": "Verification",
+        "palette_order": 20
+      },
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "threshold": {
+            "type": "integer",
+            "title": "Coverage Threshold",
+            "description": "Minimum coverage percentage required",
+            "minimum": 0,
+            "maximum": 100,
+            "default": 80,
+            "ui_widget": "slider"
+          },
+          "scope": {
+            "type": "enum",
+            "title": "Coverage Scope",
+            "description": "What to measure coverage for",
+            "enum": ["changed files", "all files", "critical paths only"],
+            "default": "changed files",
+            "ui_widget": "select"
+          },
+          "fail_on_decrease": {
+            "type": "boolean",
+            "title": "Fail on Coverage Decrease",
+            "description": "Fail if coverage decreases from baseline",
+            "default": true,
+            "ui_widget": "toggle"
+          }
+        },
+        "required": ["threshold"],
+        "ui_order": ["threshold", "scope", "fail_on_decrease"]
+      },
+      "constraints": {
+        "allowed_flows": ["4-gate"],
+        "singleton": true
+      }
+    }
+  ]
+}

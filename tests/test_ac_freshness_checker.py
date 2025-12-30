@@ -49,7 +49,7 @@ def test_freshness_check_passes():
         f"stdout: {result.stdout}\n"
         f"stderr: {result.stderr}"
     )
-    assert "✓ AC Matrix Freshness Check" in result.stdout
+    assert "[PASS] AC Matrix Freshness Check" in result.stdout
     # Check for success message (AC count may change as new ACs are added)
     assert "ACs OK" in result.stdout
 

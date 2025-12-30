@@ -1,0 +1,9 @@
+# Auto-bootstrapped from swarm/AGENTS.md
+key: quality-analyst
+flows:
+  - wisdom
+category: analytics
+color: orange
+source: project/user
+short_role: "Code health and complexity → quality_report.md."
+model: inherit

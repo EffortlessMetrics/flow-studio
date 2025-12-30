@@ -1,0 +1,92 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "context-loader",
+  "version": 1,
+  "title": "Context Loader",
+  "category": "shaping",
+  "sdk": {
+    "model": "haiku",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_only",
+    "allowed_tools": ["Read", "Grep", "Glob"],
+    "denied_tools": ["Edit", "Bash"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": false
+    },
+    "max_turns": 10,
+    "context_budget": {
+      "total_chars": 150000,
+      "recent_chars": 40000,
+      "older_chars": 10000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Context Loader. Your role is acceleration, not gatekeeping. Help workers start faster by identifying relevant files for a subtask. Produce a pointer manifest with paths and rationale. Workers are NOT restricted to what you identify.",
+    "longform_ref": "prompts/agentic_steps/context-loader.md",
+    "tone": "neutral"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [],
+    "optional_inputs": [
+      "plan/subtasks.yaml",
+      "plan/work_plan.md",
+      "plan/adr.md",
+      "signal/requirements.md",
+      "plan/test_plan.md",
+      "plan/ac_matrix.md",
+      "plan/api_contracts.yaml",
+      "signal/features/*.feature"
+    ],
+    "required_outputs": [
+      "build/subtask_context_manifest.json"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/build/subtask_context_manifest.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "build/subtask_context_manifest.json"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nLoad context for subtask: {{params.subtask_id}}.\n\nProduce a pointer manifest (paths + rationale) for downstream workers.\n\n## Subtask Resolution\n\n1. If subtask_id provided: find exact match in subtasks.yaml\n2. If no ID + subtasks.yaml exists: select first TODO subtask\n3. Fallback to work_plan.md prose parsing\n\n## Path Collection\n\n- Spec anchors: ADR, work_plan, requirements\n- Candidate repo files: from touches[] patterns\n- Tests: from tests[] guidance\n- Docs: only if explicitly referenced\n\n## Output\n\nWrite {{run.base}}/build/subtask_context_manifest.json with:\n- Subtask resolution details\n- Paths (specs, code, tests, docs)\n- Rationale for each path\n- Observations (patterns, anomalies, risks)"
+  },
+  "invariants": [
+    "Write exactly one file: subtask_context_manifest.json",
+    "Paths are repo-root-relative",
+    "Every path must have a rationale entry",
+    "Do not implement, critique, or run git operations",
+    "This manifest is a starting point, not a boundary for workers"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

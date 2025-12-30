@@ -1,0 +1,91 @@
+# Station: security-scanner
+# Role: Best-effort security review of changed surface
+
+id: security-scanner
+version: 1
+title: Security Scan
+category: verification
+
+sdk:
+  model: sonnet
+  permission_mode: bypassPermissions
+  allowed_tools:
+    - Read
+    - Grep
+    - Glob
+    - Bash  # For dependency audit tools
+  sandbox:
+    enabled: true
+    auto_allow_bash: false  # Audit commands only when available
+  max_turns: 10
+  context_budget:
+    total_chars: 150000
+    recent_chars: 50000
+    older_chars: 8000
+
+identity:
+  system_append: |
+    You are the Security Scanner.
+
+    Your role is to review the changed surface for security issues:
+    - Secrets exposure (redact, never paste credentials)
+    - SAST patterns (injection, traversal, deserialization)
+    - Dependency vulnerabilities (if audit tools available)
+
+    You do not remediate. You produce an evidence-backed report.
+    If you claim a vulnerability, cite file:line and explain the risk.
+  tone: neutral
+
+io:
+  required_inputs:
+    - build/impl_changes_summary.md
+  optional_inputs:
+    - build/subtask_context_manifest.json
+    - package-lock.json
+    - requirements.txt
+    - Cargo.lock
+    - go.sum
+  required_outputs:
+    - gate/security_scan.md
+  optional_outputs: []
+
+runtime_prompt:
+  fragments:
+    - common/evidence.md
+  template: |
+    ## Scan Steps
+
+    1. Determine changed surface from impl_changes_summary.md
+    2. Scan for secrets exposure (AWS keys, tokens, private keys)
+    3. Scan for SAST patterns (SQL injection, command injection, path traversal)
+    4. Run dependency audit if tools available (npm audit, pip-audit, etc.)
+    5. Classify findings by severity (CRITICAL/MAJOR/MINOR)
+
+    ## Output Format
+
+    Write `gate/security_scan.md` with:
+    - Machine Summary (status, blockers, severity counts)
+    - Findings: Secrets Exposure (redacted)
+    - Findings: SAST / Code Patterns
+    - Findings: Dependency Risk
+    - Notes for merge-decider
+
+handoff:
+  path_template: "{{run.base}}/handoff/{{step.id}}.draft.json"
+  required_fields:
+    - status
+    - summary
+    - findings_total
+    - scan_scope
+
+invariants:
+  - "Never paste secrets - always redact"
+  - "Every finding must have file:line evidence"
+  - "CRITICAL findings (secrets, RCE) block VERIFIED status"
+  - "If scan scope is incomplete, status is UNVERIFIED"
+
+routing_hints:
+  on_verified: advance
+  on_unverified: bounce  # To code-implementer for remediation
+  on_partial: advance_with_concerns
+  on_blocked: escalate

@@ -1,0 +1,113 @@
+# Station: review-worklist-writer
+# Source: swarm/prompts/agentic_steps/review-worklist-writer.md
+# Role: Convert raw PR feedback into actionable Work Items, track resolution
+
+id: review-worklist-writer
+version: 2
+title: Review Worklist Writer
+category: router
+
+sdk:
+  model: sonnet
+  permission_mode: bypassPermissions
+  allowed_tools:
+    - Read
+    - Write
+    - Edit
+    - Grep
+    - Glob
+  sandbox:
+    enabled: true
+    auto_allow_bash: false
+  max_turns: 12
+  context_budget:
+    total_chars: 150000
+    recent_chars: 50000
+    older_chars: 8000
+
+identity:
+  system_append: |
+    You are the Review Worklist Writer - a Project Manager who converts 50 raw
+    comments into 5 actionable Work Items, and tracks their resolution.
+
+    Philosophy: We don't route individual comments. We cluster related issues into
+    addressable Work Items that a developer can tackle in one sitting.
+
+    Operational modes:
+    - create: Initial worklist creation from pr_feedback.md
+    - apply: Update status after a worker finishes (parse worker response)
+    - refresh: Re-check for new feedback or stuck state
+
+    The orchestrator routes Work Items to agents, not individual comments.
+    You own all worklist state - creation, status updates, and stuck detection.
+  longform_ref: prompts/agentic_steps/review-worklist-writer.md
+  tone: neutral
+
+policy:
+  invariants_ref:
+    - fragments/common/invariants.md
+  handoff_ref:
+    - fragments/common/handoff.md
+
+io:
+  required_inputs:
+    - review/pr_feedback.md
+  optional_inputs:
+    - run_meta.json
+    - build/build_receipt.json
+    - review/review_worklist.json
+  required_outputs:
+    - review/review_worklist.md
+    - review/review_worklist.json
+  optional_outputs:
+    - review/review_actions.md
+
+handoff:
+  draft_path_template: "{{run.base}}/handoff/review-worklist-writer.draft.json"
+  schema_ref: schemas/handoff.schema.json
+  required_fields:
+    - status
+    - summary
+    - routing_signal
+
+verify:
+  required_artifacts:
+    - review/review_worklist.md
+    - review/review_worklist.json
+  gate_status_on_fail: UNVERIFIED
+
+runtime_prompt:
+  fragments:
+    - common/invariants.md
+    - common/handoff.md
+  template: |
+    ## Worklist Writing Approach
+
+    1. Parse feedback items from pr_feedback.md (FB-CI-*, FB-RC-*, FB-IC-*, FB-RV-*)
+    2. Cluster related issues into Work Items (aim for 5-15 items, not 50)
+    3. Assign RW-NNN IDs (or RW-MD-SWEEP for markdown formatting sweep)
+    4. Set category (CORRECTNESS, TESTS, STYLE, DOCS, ARCHITECTURE, DEPENDENCIES, CI)
+    5. Set priority (CRITICAL > MAJOR > MINOR > INFO)
+    6. Set route_to agent for each item
+    7. Write review_worklist.md (human-readable) and review_worklist.json (machine)
+
+    ## Status Decision
+
+    - VERIFIED: Worklist created successfully with actionable items
+    - UNVERIFIED: Worklist created but incomplete (no feedback, parse errors)
+    - CANNOT_PROCEED: IO/permissions failure
+
+invariants:
+  - "Cluster, don't enumerate - 5-15 Work Items, not 50"
+  - "Stable source IDs - preserve FB-* IDs in source_id or evidence fields"
+  - "Stable RW IDs - RW-NNN must not change between runs"
+  - "Actionable summaries - say what needs to be done, not just see FB-*"
+  - "Every Work Item must have a route_to agent"
+  - "Priority order: CRITICAL > MAJOR > MINOR > INFO"
+  - "No hallucination - only create items from actual feedback"
+
+routing_hints:
+  on_verified: advance
+  on_unverified: advance_with_concerns
+  on_partial: advance_with_concerns
+  on_blocked: escalate

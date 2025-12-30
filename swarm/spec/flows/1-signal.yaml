@@ -1,0 +1,204 @@
+# Flow: 1-signal
+# Purpose: Signal -> Spec: Shape the problem, identify stakeholders, flag early risks, estimate scope
+
+id: 1-signal
+version: 1
+title: "Flow 1 - Signal to Spec"
+description: |
+  Transform raw input (issue, feature request, signal) into testable requirements,
+  BDD scenarios, early risk assessment, and scope estimate.
+  Uses microloops for requirements and BDD refinement.
+  Exit when VERIFIED or no further iteration can help.
+
+defaults:
+  context_pack:
+    include_upstream_artifacts: false  # No upstream flows for Flow 1
+    include_previous_envelopes: true
+    max_envelopes: 8
+    include_scent_trail: true
+  sdk_overrides: {}
+
+# Macro-level flow routing
+on_complete:
+  next_flow: 2-plan
+  reason: "Signal artifacts complete; proceed to design planning"
+
+on_failure:
+  next_flow: null
+  reason: "Flow 1 has no failure fallback; rerun with better input"
+
+steps:
+  # Step 1: Normalize raw signal
+  - id: normalize
+    station: signal-normalizer
+    objective: |
+      Parse raw input (issue text, feature request, user story) into structured form.
+      Extract key signals: what is being asked, who is affected, why it matters.
+    inputs:
+      - raw_signal  # Provided as orchestrator input
+    outputs:
+      - signal/issue_normalized.md
+      - signal/context_brief.md
+    routing:
+      kind: linear
+      next: frame
+    teaching:
+      highlight: true
+      note: "First step: parse messy input into structured form"
+
+  # Step 2: Frame the problem
+  - id: frame
+    station: problem-framer
+    objective: |
+      Synthesize normalized signal into a clear problem statement.
+      Define goals, non-goals, and constraints.
+      Check for state/migration implications.
+    inputs:
+      - signal/issue_normalized.md
+      - signal/context_brief.md
+    outputs:
+      - signal/problem_statement.md
+    routing:
+      kind: linear
+      next: author_reqs
+    teaching:
+      note: "Frame what we're solving, not how"
+
+  # Step 3: Author requirements
+  - id: author_reqs
+    station: requirements-author
+    objective: |
+      Draft functional and non-functional requirements.
+      Use stable markers (REQ-F-NNN, REQ-NF-NNN).
+      Each requirement must be testable and verifiable.
+    inputs:
+      - signal/problem_statement.md
+      - signal/requirements_critique.md  # If iterating
+    outputs:
+      - signal/requirements.md
+    routing:
+      kind: linear
+      next: critique_reqs
+    teaching:
+      highlight: true
+      note: "Requirements writing: what, not how"
+
+  # Step 4: Critique requirements (microloop decision point)
+  - id: critique_reqs
+    station: requirements-critic
+    objective: |
+      Harsh review of requirements for testability, completeness, and consistency.
+      Check alignment with problem statement.
+      Set Status and can_further_iteration_help signals.
+    inputs:
+      - signal/requirements.md
+      - signal/problem_statement.md
+    outputs:
+      - signal/requirements_critique.md
+    routing:
+      kind: microloop
+      loop_target: author_reqs
+      next: author_bdd
+      exit_on:
+        status:
+          - VERIFIED
+          - verified
+        can_further_iteration_help: false
+      max_iterations: 3
+    teaching:
+      highlight: true
+      note: "MICROLOOP: requirements-author <-> requirements-critic until VERIFIED"
+
+  # Step 5: Author BDD scenarios
+  - id: author_bdd
+    station: bdd-author
+    objective: |
+      Create Gherkin scenarios for each functional requirement.
+      Cover happy paths, edge cases, and error scenarios.
+      Tag scenarios with requirement IDs (@REQ-F-NNN).
+      Write verification_notes.md for NFRs not expressible as BDD.
+    inputs:
+      - signal/requirements.md
+      - signal/bdd_critique.md  # If iterating
+    outputs:
+      - signal/features/*.feature
+      - signal/example_matrix.md
+      - signal/verification_notes.md
+    routing:
+      kind: linear
+      next: critique_bdd
+    teaching:
+      highlight: true
+      note: "BDD: concrete scenarios, not vibes"
+
+  # Step 6: Critique BDD scenarios (microloop decision point)
+  - id: critique_bdd
+    station: bdd-critic
+    objective: |
+      Review traceability (every REQ has scenarios).
+      Check testability (concrete, measurable).
+      Verify sad path coverage (error scenarios for each REQ).
+      Set Status and can_further_iteration_help signals.
+    inputs:
+      - signal/features/*.feature
+      - signal/requirements.md
+    outputs:
+      - signal/bdd_critique.md
+    routing:
+      kind: microloop
+      loop_target: author_bdd
+      next: assess_scope
+      exit_on:
+        status:
+          - VERIFIED
+          - verified
+        can_further_iteration_help: false
+      max_iterations: 3
+    teaching:
+      highlight: true
+      note: "MICROLOOP: bdd-author <-> bdd-critic until VERIFIED; enforce sad paths"
+
+  # Step 7: Assess scope
+  - id: assess_scope
+    station: scope-assessor
+    objective: |
+      Identify stakeholders (teams, systems, users affected).
+      Flag early risks by category (security, compliance, data, perf).
+      Estimate scope (S/M/L/XL t-shirt size) with rationale.
+    inputs:
+      - signal/problem_statement.md
+      - signal/requirements.md
+      - signal/features/*.feature
+    outputs:
+      - signal/stakeholders.md
+      - signal/early_risks.md
+      - signal/scope_estimate.md
+    routing:
+      kind: linear
+      next: finalize
+    teaching:
+      note: "Scope: who, what risks, how big"
+
+  # Step 8: Finalize and write receipt
+  - id: finalize
+    station: signal-cleanup
+    objective: |
+      Verify all required artifacts exist.
+      Write signal_receipt.json with counts and quality gate status.
+      Update flow_plan.md and index.json.
+    inputs:
+      - signal/requirements.md
+      - signal/features/*.feature
+      - signal/scope_estimate.md
+      - signal/early_risks.md
+    outputs:
+      - signal/signal_receipt.json
+      - signal/cleanup_report.md
+    routing:
+      kind: terminal
+    teaching:
+      note: "Cleanup: seal the signal receipt"
+
+cross_cutting_stations:
+  - clarifier
+  - risk-analyst

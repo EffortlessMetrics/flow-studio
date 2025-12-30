@@ -1,9 +1,9 @@
 # Auto-bootstrapped from swarm/AGENTS.md
 key: repo-operator
 flows:
-  - 3, 5
+  - 3, 5, 8
 category: implementation
 color: green
 source: project/user
-short_role: "Git workflows: branch, commit, merge, tag. Safe Bash only."
+short_role: "Git workflows: branch, commit, merge, tag, reset operations. Safe Bash only."
 model: inherit

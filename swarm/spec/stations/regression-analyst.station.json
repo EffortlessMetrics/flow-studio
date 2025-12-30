@@ -1,0 +1,100 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "regression-analyst",
+  "version": 1,
+  "title": "Regression Analyst",
+  "category": "analytics",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_only",
+    "allowed_tools": ["Read", "Grep", "Glob", "Bash"],
+    "denied_tools": ["Write", "Edit"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": true,
+      "excluded_commands": ["rm", "mv", "git push", "git commit"]
+    },
+    "max_turns": 15,
+    "context_budget": {
+      "total_chars": 180000,
+      "recent_chars": 60000,
+      "older_chars": 15000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Regression Analyst. Trace regressions to root causes via evidence, blame, and issue correlation. You do NOT change code, fix tests, or post to GitHub. Produce regression_report.md with stable REG-NNN markers.",
+    "longform_ref": "prompts/agentic_steps/regression-analyst.md",
+    "tone": "analytical"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md",
+      "fragments/common/routing_vocabulary.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md",
+      "fragments/output/severity_tiers.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [],
+    "optional_inputs": [
+      "run_meta.json",
+      "build/test_critique.md",
+      "build/build_receipt.json",
+      "build/test_changes_summary.md",
+      "build/code_critique.md",
+      "gate/coverage_audit.md",
+      "gate/merge_decision.md",
+      "deploy/deploy_receipt.json"
+    ],
+    "required_outputs": [
+      "wisdom/regression_report.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/wisdom/regression_report.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "routing_signal"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "wisdom/regression_report.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md",
+      "fragments/common/routing_vocabulary.md",
+      "fragments/output/severity_tiers.md"
+    ],
+    "template": "## Mission\n\nAnalyze regressions in tests, coverage, and stability. Produce evidence-based analysis with blame attribution and issue correlation.\n\n## Regression Definition\n\nA 'regression' requires:\n- A baseline artifact you can cite (prior receipt/report/CI reference), OR\n- A delta claim with both values sourced (e.g., coverage fell from X to Y)\n\nIf no baseline: report 'current failures' and 'suspected regressions', set UNVERIFIED.\n\n## Analysis Steps\n\n1. Preflight writeability check\n2. Establish context from run_meta.json\n3. Extract canonical test outcomes from test_critique.md (Pytest Summary)\n4. Identify failures, flakiness, instability\n5. Coverage signals from gate/coverage_audit.md\n6. Issue correlation via gh CLI (best-effort)\n7. Blame analysis via git blame (best-effort)\n\n## Output\n\nWrite {{run.base}}/wisdom/regression_report.md with:\n- Summary table (counts by severity)\n- Context (run_id, issue_number, inputs_used)\n- Canonical Test Summary\n- Regression Register (REG-NNN stable IDs)\n- Regression Details per ID\n- Coverage Signals, Issue Correlation, Blame Summary\n- Observations (pattern, anomaly, risk, opportunity)\n- Recommended Next actions"
+  },
+  "invariants": [
+    "Write exactly one file: wisdom/regression_report.md",
+    "Do NOT change code, fix tests, or post to GitHub",
+    "Every regression gets a unique REG-NNN ID",
+    "Severity must be CRITICAL, MAJOR, or MINOR",
+    "Blame is routing, not judgment - keep evidence tight, actions explicit",
+    "If no baseline available, set status UNVERIFIED and label claims as 'suspected'"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

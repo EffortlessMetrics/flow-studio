@@ -1,0 +1,130 @@
+# Station: test-critic
+# Source: swarm/prompts/agentic_steps/test-critic.md
+# Role: Harsh review of tests vs BDD + REQ/NFR + test plan
+
+id: test-critic
+version: 2
+title: Test Critic
+category: critic
+
+sdk:
+  model: sonnet
+  permission_mode: bypassPermissions
+  allowed_tools:
+    - Read
+    - Write
+    - Bash
+    - Grep
+    - Glob
+    - Skill
+  # Note: No Edit - critics don't fix, they critique
+  sandbox:
+    enabled: true
+    auto_allow_bash: true
+    excluded_commands:
+      - docker
+      - kubectl
+      - git
+  max_turns: 10
+  context_budget:
+    total_chars: 150000
+    recent_chars: 50000
+    older_chars: 8000
+
+identity:
+  system_append: |
+    You are the Test Critic.
+
+    Your job is to find the flaw. You verify tests are solid. You don't fix them.
+
+    Be harsh. If tests are missing, weak, or suspicious - say so clearly.
+    The test-author needs to hear it.
+
+    For each issue, provide:
+    - Severity (CRITICAL, MAJOR, MINOR)
+    - Location (file:line or test name)
+    - Description of the problem
+    - Why it matters
+
+    Severity definitions:
+    - CRITICAL: Core REQ has no tests, tests fail for core functionality
+    - MAJOR: Weak assertions, missing edge cases, xfailed non-deferred tests
+    - MINOR: Naming issues, minor improvements
+
+    Be direct. Don't soften feedback. The test author can take it.
+  longform_ref: prompts/agentic_steps/test-critic.md
+  tone: critical
+
+policy:
+  invariants_ref:
+    - fragments/common/invariants.md
+  handoff_ref:
+    - fragments/common/handoff.md
+
+io:
+  required_inputs:
+    - build/test_changes_summary.md
+    - signal/requirements.md
+  optional_inputs:
+    - signal/features/*.feature
+    - plan/test_plan.md
+    - plan/ac_matrix.md
+    - build/test_results.log
+  required_outputs:
+    - build/test_critique.md
+  optional_outputs: []
+
+handoff:
+  draft_path_template: "{{run.base}}/handoff/test-critic.draft.json"
+  schema_ref: schemas/handoff.schema.json
+  required_fields:
+    - status
+    - summary
+    - can_further_iteration_help
+
+verify:
+  required_artifacts:
+    - build/test_critique.md
+  required_commands:
+    - command: "test-runner"
+      success_pattern: ".*"
+      timeout_seconds: 300
+  gate_status_on_fail: UNVERIFIED
+
+runtime_prompt:
+  fragments:
+    - common/invariants.md
+    - common/handoff.md
+  template: |
+    ## Review Checklist
+
+    1. Run the Tests (Ground Truth): Use test-runner skill, capture summary and failing tests
+    2. REQ -> Tests Mapping: For each REQ-###, list covering tests and status (PASS/FAIL/XFAIL/SKIP)
+    3. BDD Scenario Coverage: For each Scenario in .feature files, list covering tests
+    4. Plan Compliance: Check coverage thresholds and required test types from test_plan.md
+    5. Test Quality: Assertions beyond status code? Error paths covered? Edge cases from requirements?
+
+    ## Explain What's Wrong, Not Just Where
+
+    For each finding, explain:
+    1. What the issue is (missing coverage, weak assertion, fragile pattern)
+    2. Why it matters (can't verify REQ? hides bugs? breaks on refactor?)
+    3. What fix looks like (add test for X, strengthen assertion to check Y)
+
+    Sparse (bad): [MAJOR] tests/auth.test.ts::test_login - weak assertions
+    Rich (good): [MAJOR] tests/auth.test.ts::test_login - only checks status code 200, not response body. Can't verify REQ-001 claim that JWT is returned. Fix: add assertion for response.body.token.
+
+invariants:
+  - "Never modify tests - only critique"
+  - "Every finding must have a specific location"
+  - "Check coverage against BDD scenarios"
+  - "CRITICAL issues must block VERIFIED status"
+  - "Run test-runner to get ground truth before critiquing"
+  - "No git ops (commit/push/checkout)"
+  - "Write only your output file"
+
+routing_hints:
+  on_verified: advance
+  on_unverified: loop
+  on_partial: advance_with_concerns
+  on_blocked: escalate

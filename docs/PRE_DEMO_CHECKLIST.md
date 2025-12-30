@@ -117,7 +117,7 @@ http://localhost:5000/?tab=validation
 
 ## What to Highlight in Demo
 
-1. **SDLC Bar**: 6 flows from Signal to Wisdom
+1. **SDLC Bar**: 7 flows from Signal to Wisdom
 2. **Agent Colors**: Green=implementation, Red=critic, Blue=verification
 3. **Microloops**: Author ⇄ Critic pairs in Build flow
 4. **Receipts**: Click any step to see execution metadata

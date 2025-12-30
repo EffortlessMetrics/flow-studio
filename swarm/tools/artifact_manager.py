@@ -126,10 +126,10 @@ class ArtifactManager:
         self.ensure_artifact_dir(flow)
 
         if isinstance(content, dict):
-            with open(path, "w") as f:
+            with open(path, "w", encoding="utf-8") as f:
                 json.dump(content, f, indent=2, default=str)
         else:
-            with open(path, "w") as f:
+            with open(path, "w", encoding="utf-8") as f:
                 f.write(content)
 
         return path
@@ -141,7 +141,7 @@ class ArtifactManager:
         if not path.exists():
             return None
 
-        with open(path, "r") as f:
+        with open(path, "r", encoding="utf-8") as f:
             content = f.read()
 
         # Auto-parse JSON if extension is .json

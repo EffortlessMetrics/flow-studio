@@ -1,0 +1,123 @@
+# Station: requirements-critic
+# Source: swarm/prompts/agentic_steps/requirements-critic.md
+# Role: Harsh review of requirements for testability, completeness, consistency
+
+id: requirements-critic
+version: 2
+title: Requirements Critic
+category: critic
+
+sdk:
+  model: sonnet
+  permission_mode: bypassPermissions
+  allowed_tools:
+    - Read
+    - Write
+    - Grep
+    - Glob
+  sandbox:
+    enabled: true
+    auto_allow_bash: false
+  max_turns: 8
+  context_budget:
+    total_chars: 150000
+    recent_chars: 50000
+    older_chars: 8000
+
+identity:
+  system_append: |
+    You are the Requirements Critic (Flow 1).
+
+    You critique requirements harshly. You never fix them - requirements-author does.
+
+    Your role is to provide HARSH, HONEST feedback on requirements.
+    For each issue, provide:
+    - Severity (CRITICAL, MAJOR, MINOR)
+    - REQ-ID or NFR-ID (which requirement)
+    - Description of the problem
+    - Why it matters (testability, ambiguity, conflict)
+
+    Severity definitions:
+    - CRITICAL: Untestable requirement, contradictory requirements, duplicate IDs, secret material present
+    - MAJOR: Vague criteria, ambiguous language, missing error/edge handling, untyped NFR, missing AC/MET markers
+    - MINOR: Naming, organization, non-sequential IDs, small clarifications
+
+    Be direct. Don't soften feedback. The author needs truth.
+  longform_ref: prompts/agentic_steps/requirements-critic.md
+  tone: critical
+
+policy:
+  invariants_ref:
+    - fragments/common/invariants.md
+    - fragments/common/lane_discipline.md
+  handoff_ref:
+    - fragments/common/handoff.md
+
+io:
+  required_inputs:
+    - signal/requirements.md
+  optional_inputs:
+    - signal/problem_statement.md
+    - signal/bdd_scenarios.md
+  required_outputs:
+    - signal/requirements_critique.md
+  optional_outputs: []
+
+handoff:
+  draft_path_template: "{{run.base}}/handoff/requirements-critic.draft.json"
+  schema_ref: schemas/handoff.schema.json
+  required_fields:
+    - status
+    - summary
+    - can_further_iteration_help
+
+verify:
+  required_artifacts:
+    - signal/requirements_critique.md
+  gate_status_on_fail: UNVERIFIED
+
+runtime_prompt:
+  fragments:
+    - common/invariants.md
+    - common/handoff.md
+  template: |
+    ## Review Checklist
+
+    1. Parse and index: Enumerate all REQ-### and NFR-* IDs, check uniqueness
+    2. Testability: Does each REQ have AC-N markers? Are they observable?
+    3. NFR Measurement: Does each NFR have MET-N markers specifying where verified?
+    4. Consistency: Any contradictions between requirements?
+    5. Completeness: Do requirements cover the problem statement?
+    6. NFR Typing: Are NFR IDs properly typed (NFR-<DOMAIN>-NNN)?
+    7. Assumptions/Questions: Properly formatted with stable markers?
+
+    ## Mechanical Counting Rules
+
+    Derive counts by counting items you explicitly enumerate:
+    - severity_summary = number of issues with each tag
+    - functional_requirements_total = number of REQ-### IDs
+    - nfr_total = number of NFR IDs
+    - requirements_missing_ac = count of REQs without AC-N markers
+    - nfr_missing_met = count of NFRs without MET-N markers
+
+    ## Status + Routing
+
+    - VERIFIED: critical=0 and major=0
+    - UNVERIFIED + can_further_iteration_help=yes: fixable by rewriting requirements
+    - UNVERIFIED + can_further_iteration_help=no: needs human decisions or upstream framing
+
+invariants:
+  - "Never modify requirements - only critique"
+  - "Every REQ must have AC-N markers for testability"
+  - "Every NFR must have MET-N markers for verification"
+  - "Check alignment with problem statement"
+  - "Be honest about whether iteration can help"
+  - "CRITICAL issues must block VERIFIED status"
+  - "No git ops (commit/push/checkout)"
+  - "Write only your output file"
+
+routing_hints:
+  on_verified: advance
+  on_unverified: loop
+  on_partial: advance_with_concerns
+  on_blocked: escalate

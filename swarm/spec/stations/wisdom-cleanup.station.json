@@ -1,0 +1,102 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "wisdom-cleanup",
+  "version": 1,
+  "title": "Wisdom Cleanup",
+  "category": "infra",
+  "sdk": {
+    "model": "haiku",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_write",
+    "allowed_tools": ["Read", "Write", "Bash", "Grep", "Glob", "Skill"],
+    "denied_tools": ["Edit"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": true,
+      "excluded_commands": ["git", "gh", "rm"]
+    },
+    "max_turns": 15,
+    "context_budget": {
+      "total_chars": 100000,
+      "recent_chars": 40000,
+      "older_chars": 10000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Wisdom Cleanup Agent. Seal the envelope at the end of Flow 7. Produce the structured summary (receipt) of the wisdom outcome. The receipt captures learnings extracted and feedback actions proposed - it is a log, not a gatekeeper.",
+    "longform_ref": "prompts/agentic_steps/wisdom-cleanup.md",
+    "tone": "neutral"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [],
+    "optional_inputs": [
+      "wisdom/learnings.md",
+      "wisdom/feedback_actions.md",
+      "wisdom/artifact_audit.md",
+      "wisdom/regression_report.md",
+      "wisdom/flow_history.json",
+      "signal/signal_receipt.json",
+      "plan/plan_receipt.json",
+      "build/build_receipt.json",
+      "gate/gate_receipt.json",
+      "deploy/deploy_receipt.json"
+    ],
+    "required_outputs": [
+      "wisdom/wisdom_receipt.json",
+      "wisdom/cleanup_report.md"
+    ],
+    "optional_outputs": [
+      "wisdom/github_report.md",
+      "_wisdom/latest.md"
+    ]
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/wisdom/wisdom_receipt.json",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "routing_signal"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "wisdom/wisdom_receipt.json",
+      "wisdom/cleanup_report.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nFinalize Flow 7 (Wisdom) by verifying artifacts, mechanically deriving counts, writing wisdom_receipt.json, and updating .runs/index.json.\n\n## Steps\n\n1. Preflight: Verify read/write access\n2. Artifact existence: Required (learnings.md OR feedback_actions.md), optional\n3. Mechanical counts: learnings extracted, feedback actions, regressions, flows completed\n4. Aggregate prior receipts: Read status from each flow receipt\n5. Write wisdom_receipt.json\n6. Update .runs/index.json\n7. Write cleanup_report.md + github_report.md\n8. Write _wisdom/latest.md broadcast file\n\n## Output\n\n- {{run.base}}/wisdom/wisdom_receipt.json\n- {{run.base}}/wisdom/cleanup_report.md\n- {{run.base}}/wisdom/github_report.md\n- .runs/_wisdom/latest.md (broadcast)"
+  },
+  "invariants": [
+    "Mechanical derivation only - no estimates",
+    "Null over guess - explain every null",
+    "Always write wisdom_receipt.json + cleanup_report.md unless IO prevents it",
+    "Do not reorder .runs/index.json",
+    "Runs before secrets-sanitizer - no publishing",
+    "run_complete: true marks end of SDLC cycle"
+  ],
+  "routing_hints": {
+    "on_verified": "complete",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

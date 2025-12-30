@@ -1,0 +1,132 @@
+# Station: test-strategist
+# Source: swarm/prompts/agentic_steps/test-strategist.md
+# Role: Map BDD scenarios and risks to test types and coverage thresholds
+
+id: test-strategist
+version: 2
+title: Test Strategist
+category: design
+
+sdk:
+  model: sonnet
+  permission_mode: bypassPermissions
+  allowed_tools:
+    - Read
+    - Write
+    - Edit
+    - Grep
+    - Glob
+  sandbox:
+    enabled: true
+    auto_allow_bash: false
+  max_turns: 12
+  context_budget:
+    total_chars: 200000
+    recent_chars: 60000
+    older_chars: 10000
+
+identity:
+  system_append: |
+    You are the Test Strategist.
+
+    You do not write tests. You produce an executable test plan contract that
+    Flow 3 can implement and Flow 5 can audit.
+
+    Key rules:
+    - Use scenario-level @REQ-### tags as traceability source
+    - Map scenarios to test types (Unit, Integration, Contract, E2E, Fuzz, Perf)
+    - Define coverage thresholds with stable markers
+    - Create AC matrix as build contract for Flow 3
+    - Assess mutation testing requirements
+    - Check test fixture impact for schema changes
+  longform_ref: prompts/agentic_steps/test-strategist.md
+  tone: analytical
+
+policy:
+  invariants_ref:
+    - fragments/common/invariants.md
+  handoff_ref:
+    - fragments/common/handoff.md
+
+io:
+  required_inputs:
+    - signal/features/*.feature
+    - signal/requirements.md
+  optional_inputs:
+    - signal/example_matrix.md
+    - signal/verification_notes.md
+    - plan/impact_map.json
+    - plan/observability_spec.md
+    - plan/api_contracts.yaml
+    - plan/schema.md
+    - signal/early_risks.md
+  required_outputs:
+    - plan/test_plan.md
+    - plan/ac_matrix.md
+  optional_outputs: []
+
+handoff:
+  draft_path_template: "{{run.base}}/handoff/test-strategist.draft.json"
+  schema_ref: schemas/handoff.schema.json
+  required_fields:
+    - status
+    - summary
+    - artifacts
+    - can_further_iteration_help
+
+verify:
+  required_artifacts:
+    - plan/test_plan.md
+    - plan/ac_matrix.md
+  gate_status_on_fail: UNVERIFIED
+
+runtime_prompt:
+  fragments:
+    - common/invariants.md
+    - common/handoff.md
+  template: |
+    ## Test Strategy Approach
+
+    1. Build scenario inventory from .feature files
+    2. Map scenarios to test types (Unit/Integration/Contract/E2E/Fuzz/Perf)
+    3. Bind contracts to ACs when api_contracts.yaml exists
+    4. Define risk-based priorities (P0/P1/P2)
+    5. Set coverage thresholds with stable markers
+    6. Assess mutation testing requirements
+    7. Check test fixture impact for schema changes
+
+    ## Test Plan Structure
+
+    Include:
+    - Machine Summary with status and counts
+    - Coverage Thresholds (COVERAGE_LINE_REQUIRED, COVERAGE_BRANCH_REQUIRED)
+    - Mutation Testing requirements
+    - Scenario -> Test Type Matrix
+    - Requirement Coverage Summary
+    - Contract Test Plan (if contracts exist)
+    - Gaps and Questions
+
+    ## AC Matrix Structure
+
+    Each AC includes:
+    - AC-ID: Stable identifier (AC-001, AC-002, ...)
+    - Source: Traceability to REQ tags and/or feature file:line
+    - Description: One-sentence "done" statement
+    - Priority: P0/P1/P2
+    - Test Types: From test plan mapping
+    - Impl Hints: Affected module/component
+    - Verification: How to confirm AC satisfied
+
+invariants:
+  - "Use scenario-level @REQ-### tags for traceability"
+  - "Include coverage thresholds with stable markers"
+  - "AC matrix is build contract for Flow 3"
+  - "Each AC should be completable in one microloop iteration"
+  - "Check test fixture impact when schema changes"
+  - "Prefer smallest set of tests that provide confidence"
+
+routing_hints:
+  on_verified: advance
+  on_unverified: loop
+  on_partial: advance_with_concerns
+  on_blocked: escalate

@@ -1,0 +1,106 @@
+# Station: policy-analyst
+# Role: Map policy requirements to evidence in the current change
+
+id: policy-analyst
+version: 1
+title: Map Policy Requirements to Evidence
+category: cross-cutting
+
+sdk:
+  model: inherit
+  permission_mode: default
+  allowed_tools:
+    - Read
+    - Glob
+    - Grep
+    - Write
+  sandbox:
+    enabled: true
+    auto_allow_bash: false
+  max_turns: 10
+  context_budget:
+    total_chars: 150000
+    recent_chars: 50000
+    older_chars: 10000
+
+identity:
+  system_append: |
+    You are the Policy Analyst.
+
+    Your job is to:
+    - Map policy requirements to evidence in the current change
+    - Identify compliance gaps and violations
+    - Classify violations by severity (CRITICAL/HIGH/MEDIUM/LOW)
+    - Distinguish waivers from violations
+
+    You do NOT change code, grant waivers, or post to GitHub.
+    Read-only analysis that produces a policy_analysis.md report.
+  tone: neutral
+
+io:
+  required_inputs: []
+  optional_inputs:
+    - run_meta.json
+    - plan/adr.md
+    - plan/api_contracts.yaml
+    - plan/schema.md
+    - plan/observability_spec.md
+    - gate/receipt_audit.md
+    - gate/contract_compliance.md
+    - gate/security_scan.md
+    - build/impl_changes_summary.md
+  required_outputs:
+    - "{{flow}}/policy_analysis.md"
+  optional_outputs: []
+
+runtime_prompt:
+  fragments:
+    - common/invariants.md
+    - common/lane_hygiene.md
+  template: |
+    ## Policy Analysis Approach
+
+    1. Determine current flow (plan or gate) from context
+    2. Locate policy corpus from configured roots or defaults
+    3. Extract testable requirements from policy documents
+    4. Determine applicability to current change
+    5. Map each requirement to evidence with status
+    6. Write policy_analysis.md with compliance register
+
+    ## Policy Locations (search order)
+
+    - demo-swarm.config.json policy_roots (if present)
+    - policies/
+    - docs/policies/
+    - .policies/
+
+    ## Compliance Statuses
+
+    - COMPLIANT: clear evidence supports compliance
+    - NON-COMPLIANT: clear evidence indicates violation
+    - UNKNOWN: cannot determine (missing evidence or ambiguous policy)
+    - NOT-APPLICABLE: not relevant to this change
+
+handoff:
+  path_template: "{{run.base}}/handoff/{{step.id}}.draft.json"
+  required_fields:
+    - status
+    - summary
+    - policies_found
+    - compliant_count
+    - non_compliant_count
+    - waivers_needed
+
+invariants:
+  - "Write exactly one file per invocation: {{flow}}/policy_analysis.md"
+  - "Do not modify any other files"
+  - "Do not invent policy requirements - mark ambiguous policies as UNKNOWN"
+  - "Each requirement gets stable ID (POL-001, POL-002, etc.)"
+  - "Evidence citations use path:Lx-Ly or path + Section/Key locator"
+  - "If no policies found, proceed with documented uncertainty"
+
+routing_hints:
+  on_verified: proceed
+  on_unverified: proceed_with_concerns
+  on_critical_violation: bounce
+  on_blocked: escalate

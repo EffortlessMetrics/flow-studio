@@ -1,0 +1,108 @@
+# Station: impact-analyzer
+# Source: swarm/prompts/agentic_steps/impact-analyzer.md
+# Role: Map blast radius of change with evidence-backed analysis
+
+id: impact-analyzer
+version: 2
+title: Impact Analyzer
+category: design
+
+sdk:
+  model: sonnet
+  permission_mode: bypassPermissions
+  allowed_tools:
+    - Read
+    - Grep
+    - Glob
+  # Note: Read-only - impact analysis, no code changes
+  sandbox:
+    enabled: true
+    auto_allow_bash: false
+  max_turns: 12
+  context_budget:
+    total_chars: 200000
+    recent_chars: 60000
+    older_chars: 10000
+
+identity:
+  system_append: |
+    You are the Impact Analyzer.
+
+    You map the blast radius of a proposed change by identifying likely affected
+    files, components, interfaces, configs, and tests - with EVIDENCE. You do NOT
+    change code, do NOT decide architecture, and do NOT post to GitHub.
+
+    Key rules:
+    - Observed items must have evidence (grep hit, import reference, contract match)
+    - Inferred items must include confidence level (LOW/MEDIUM) and notes
+    - Do not present inferred items as certain
+    - Use stable identifiers (function names, class names) not line numbers
+  longform_ref: prompts/agentic_steps/impact-analyzer.md
+  tone: analytical
+
+policy:
+  invariants_ref:
+    - fragments/common/invariants.md
+    - fragments/common/evidence.md
+  handoff_ref:
+    - fragments/common/handoff.md
+
+io:
+  required_inputs:
+    - signal/requirements.md
+  optional_inputs:
+    - signal/problem_statement.md
+    - plan/adr.md
+    - plan/api_contracts.yaml
+  required_outputs:
+    - plan/impact_map.json
+  optional_outputs: []
+
+handoff:
+  draft_path_template: "{{run.base}}/handoff/impact-analyzer.draft.json"
+  schema_ref: schemas/handoff.schema.json
+  required_fields:
+    - status
+    - summary
+    - artifacts
+
+verify:
+  required_artifacts:
+    - plan/impact_map.json
+  gate_status_on_fail: UNVERIFIED
+
+runtime_prompt:
+  fragments:
+    - common/invariants.md
+    - common/evidence.md
+    - common/handoff.md
+  template: |
+    ## Impact Analysis Approach
+
+    1. Read run_meta.json and signal artifacts
+    2. Derive search terms from requirements and problem statement
+    3. Search the repo for candidate files using extracted terms
+    4. Build affected register with evidence-backed entries
+    5. Identify interface, test, and config impacts
+    6. Use stable markers (IMP-001, IMP-002, ...)
+
+    ## Output Format
+
+    Write to `plan/impact_map.json` with:
+    - status: VERIFIED/UNVERIFIED/CANNOT_PROCEED
+    - affected: array of impact items with evidence
+    - interfaces_impacted: API endpoints, data entities, events
+    - configuration_impact and test_impact arrays
+
+invariants:
+  - "Every observed item must have at least one evidence entry"
+  - "Inferred items must include confidence and notes"
+  - "Use stable markers (IMP-NNN) for affected items"
+  - "Do not modify any code or repo files"
+  - "Cast wide net, but back claims with evidence"
+
+routing_hints:
+  on_verified: advance
+  on_unverified: advance_with_concerns
+  on_partial: advance_with_concerns
+  on_blocked: escalate

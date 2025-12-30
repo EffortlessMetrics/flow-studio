@@ -1,0 +1,185 @@
+# Flow: 6-deploy
+# Purpose: Artifact -> Prod: Execute deployment, verify health, create audit trail
+
+id: 6-deploy
+version: 1
+title: "Flow 6 - Deploy"
+description: |
+  Move approved artifact from ready-to-merge to deployed.
+  Execute merge, monitor CI, verify health, create audit trail.
+  Always runs after Gate - even if Gate said BOUNCE, Deploy records
+  WHY deployment did not happen for complete audit trail.
+
+defaults:
+  context_pack:
+    include_upstream_artifacts: true
+    include_previous_envelopes: true
+    max_envelopes: 6
+    include_scent_trail: true
+  sdk_overrides: {}
+
+# Macro-level flow routing
+on_complete:
+  next_flow: 7-wisdom
+  reason: "Deployment complete; proceed to retrospective analysis"
+
+on_failure:
+  next_flow: 5-gate
+  reason: "Deployment failed; bounce to Gate for rollback decision"
+
+steps:
+  # Step 1: Read gate decision (early routing)
+  - id: read_gate
+    station: deploy-decider
+    objective: |
+      Read gate verdict for routing decision.
+      Return gate_verdict: MERGE or BOUNCE.
+      Early call before any merge operations.
+    inputs:
+      - gate/merge_decision.md
+      - gate/gate_receipt.json
+    outputs:
+      - deploy/gate_verdict.md
+    routing:
+      kind: branch
+      when:
+        - condition:
+            field: gate_verdict
+            operator: equals
+            value: MERGE
+          next: execute_merge
+        - condition:
+            field: gate_verdict
+            operator: equals
+            value: BOUNCE
+          next: record_not_deployed
+      default: record_not_deployed
+    teaching:
+      highlight: true
+      note: "Gate verdict routing: MERGE or skip deployment"
+
+  # Step 2a: Execute merge (if MERGE)
+  - id: execute_merge
+    station: repo-operator
+    objective: |
+      Merge PR to target branch, create git tag and GitHub release.
+      Record all actions in deployment_log.md.
+      Handle rebase if origin/main has diverged.
+    inputs:
+      - gate/merge_decision.md
+      - gate/gate_receipt.json
+    outputs:
+      - deploy/deployment_log.md
+    routing:
+      kind: linear
+      next: monitor_ci
+    teaching:
+      highlight: true
+      note: "Point of no return: merge and create release"
+
+  # Step 2b: Record not deployed (if BOUNCE)
+  - id: record_not_deployed
+    station: deploy-decider
+    objective: |
+      Record that deployment did not happen.
+      Write deployment_log.md with Gate's bounce reason.
+      Set verdict: NOT_DEPLOYED or BLOCKED_BY_GATE.
+    inputs:
+      - gate/merge_decision.md
+    outputs:
+      - deploy/deployment_log.md
+    routing:
+      kind: linear
+      next: finalize
+    teaching:
+      note: "Record non-deployment for audit trail"
+
+  # Step 3: Monitor CI/deployment events
+  - id: monitor_ci
+    station: deploy-monitor
+    objective: |
+      Watch CI and deployment events after merge.
+      Track GitHub Actions status on main branch.
+      Record CI status and deployment events.
+    inputs:
+      - deploy/deployment_log.md
+    outputs:
+      - deploy/ci_status.md
+    routing:
+      kind: linear
+      next: verify_smoke
+    teaching:
+      highlight: true
+      note: "CI monitoring: watch post-merge events"
+
+  # Step 4: Run smoke tests and health checks
+  - id: verify_smoke
+    station: smoke-verifier
+    objective: |
+      Run health checks if endpoints available.
+      Verify artifact/release existence.
+      Append results to verification report.
+    inputs:
+      - deploy/deployment_log.md
+      - deploy/ci_status.md
+    outputs:
+      - deploy/verification_report.md
+    routing:
+      kind: branch
+      when:
+        - condition:
+            field: smoke_passed
+            operator: equals
+            value: true
+          next: decide_deploy
+        - condition:
+            field: smoke_passed
+            operator: equals
+            value: false
+          next: verify_smoke
+      default: decide_deploy
+    teaching:
+      highlight: true
+      note: "Smoke tests: verify deployed artifact works"
+
+  # Step 5: Make deployment decision
+  - id: decide_deploy
+    station: deploy-decider
+    objective: |
+      Synthesize CI + smoke results into deployment decision.
+      Produce verdict: STABLE, NOT_DEPLOYED, or BLOCKED_BY_GATE.
+      STABLE means merge succeeded, CI passing, smoke checks green.
+    inputs:
+      - deploy/deployment_log.md
+      - deploy/ci_status.md
+      - deploy/verification_report.md
+      - gate/merge_decision.md
+    outputs:
+      - deploy/deployment_decision.md
+    routing:
+      kind: linear
+      next: finalize
+    teaching:
+      highlight: true
+      note: "Deployment verdict: STABLE, NOT_DEPLOYED, or BLOCKED_BY_GATE"
+
+  # Step 6: Finalize and write receipt
+  - id: finalize
+    station: deploy-cleanup
+    objective: |
+      Write deploy_receipt.json, update index.json.
+      Compute counts mechanically.
+    inputs:
+      - deploy/deployment_decision.md
+      - deploy/deployment_log.md
+    outputs:
+      - deploy/deploy_receipt.json
+      - deploy/cleanup_report.md
+    routing:
+      kind: terminal
+    teaching:
+      note: "Cleanup: seal the deploy receipt"
+
+cross_cutting_stations:
+  - repo-operator
+  - gh-reporter

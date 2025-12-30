@@ -1,0 +1,82 @@
+# Station: build-cleanup
+# Role: Finalize build flow - write receipts and commit
+
+id: build-cleanup
+version: 1
+title: Build Finalization
+category: verification
+
+sdk:
+  model: haiku
+  permission_mode: bypassPermissions
+  allowed_tools:
+    - Read
+    - Write
+    - Grep
+    - Glob
+    - Bash
+  sandbox:
+    enabled: true
+    auto_allow_bash: true
+  max_turns: 8
+  context_budget:
+    total_chars: 100000
+    recent_chars: 40000
+    older_chars: 5000
+
+identity:
+  system_append: |
+    You are the Build Cleanup station.
+
+    Your job is mechanical finalization:
+    - Derive counts from stable markers (REQ-NNN, AC-N)
+    - Write the build_receipt.json
+    - Update ac_status.json based on test results
+    - Verify all required artifacts exist
+
+    This is bookkeeping, not implementation. Be precise and complete.
+  tone: neutral
+
+io:
+  required_inputs:
+    - build/impl_changes_summary.md
+    - build/test_changes_summary.md
+  optional_inputs:
+    - build/code_critique.md
+    - build/test_critique.md
+  required_outputs:
+    - build/build_receipt.json
+  optional_outputs:
+    - build/ac_status.json
+
+runtime_prompt:
+  fragments:
+    - common/evidence.md
+  template: |
+    ## Cleanup Tasks
+
+    1. Count REQs implemented (grep for REQ-NNN in impl_changes_summary)
+    2. Count tests written (from test_changes_summary)
+    3. Verify test results (check for pass/fail)
+    4. Write build_receipt.json with derived counts
+    5. Update ac_status.json if AC markers present
+
+    Never estimate - derive all counts from stable markers.
+
+handoff:
+  path_template: "{{run.base}}/handoff/{{step.id}}.draft.json"
+  required_fields:
+    - status
+    - summary
+    - artifacts
+
+invariants:
+  - "Derive counts mechanically - never estimate"
+  - "All artifacts must be verified to exist"
+  - "Receipt fields must match actual work done"
+
+routing_hints:
+  on_verified: advance
+  on_unverified: advance_with_concerns
+  on_partial: advance_with_concerns
+  on_blocked: escalate

@@ -1,0 +1,121 @@
+# Station: observability-designer
+# Source: swarm/prompts/agentic_steps/observability-designer.md
+# Role: Define metrics, logs, traces, SLOs, and alerts for planned change
+
+id: observability-designer
+version: 2
+title: Observability Designer
+category: design
+
+sdk:
+  model: sonnet
+  permission_mode: bypassPermissions
+  allowed_tools:
+    - Read
+    - Write
+    - Edit
+    - Grep
+    - Glob
+  sandbox:
+    enabled: true
+    auto_allow_bash: false
+  max_turns: 10
+  context_budget:
+    total_chars: 150000
+    recent_chars: 50000
+    older_chars: 8000
+
+identity:
+  system_append: |
+    You are the Observability Designer.
+
+    You define the observability contract for the planned change BEFORE
+    implementation. Your spec must be readable AND mechanically countable.
+
+    Key rules:
+    - Define metrics with naming + label/cardinality rules
+    - Define logs with event taxonomy and required fields
+    - Define traces with span model and attributes
+    - Set SLOs with SLIs, targets, and error budget policy
+    - Define actionable alerts with runbook pointers
+    - Include machine-countable inventory markers
+  longform_ref: prompts/agentic_steps/observability-designer.md
+  tone: neutral
+
+policy:
+  invariants_ref:
+    - fragments/common/invariants.md
+  handoff_ref:
+    - fragments/common/handoff.md
+
+io:
+  required_inputs:
+    - plan/adr.md
+    - signal/requirements.md
+  optional_inputs:
+    - signal/early_risks.md
+    - signal/risk_assessment.md
+    - signal/stakeholders.md
+  required_outputs:
+    - plan/observability_spec.md
+  optional_outputs: []
+
+handoff:
+  draft_path_template: "{{run.base}}/handoff/observability-designer.draft.json"
+  schema_ref: schemas/handoff.schema.json
+  required_fields:
+    - status
+    - summary
+    - artifacts
+
+verify:
+  required_artifacts:
+    - plan/observability_spec.md
+  gate_status_on_fail: UNVERIFIED
+
+runtime_prompt:
+  fragments:
+    - common/invariants.md
+    - common/handoff.md
+  template: |
+    ## Observability Design Approach
+
+    1. Extract system shape from ADR (boundaries, components, failure modes)
+    2. Extract expectations from requirements (latency, availability, correctness)
+    3. Define signal design rules (metric naming, label rules, logging, tracing)
+    4. For each critical journey, define golden signals and trace/log anchors
+    5. For each key NFR, define SLI and SLO target
+    6. Define actionable alerts with condition, severity, and runbook
+
+    ## Required Sections
+
+    - Overview (system boundary, critical paths, environments)
+    - Metrics (naming, labels, cardinality)
+    - Logs (event taxonomy, required fields, PII guidance)
+    - Traces (span model, propagation, attributes)
+    - SLOs (SLIs, targets, windows, error budget)
+    - Alerts (paging vs ticketing, severity, runbook)
+    - Dashboards (what to graph and why)
+    - Traceability (REQ/NFR + risks -> signals + alerts)
+
+    ## Inventory Markers
+
+    Include machine-countable inventory:
+    - METRIC: <name> type=<counter|gauge|histogram> labels=[...]
+    - LOG_EVENT: <name> level=<...> fields=[...]
+    - TRACE_SPAN: <name> parent=<...> attrs=[...]
+    - SLO: <name> target=<...> window=<...>
+    - ALERT: <name> severity=<...> runbook=<path-or-TBD>
+
+invariants:
+  - "Include machine-countable inventory markers"
+  - "Alerts must be actionable (condition, severity, runbook)"
+  - "Avoid high-cardinality labels (user_id, email, full path)"
+  - "Map REQ/NFR to signals and alerts for traceability"
+  - "SLOs must have measurable SLIs and explicit targets"
+
+routing_hints:
+  on_verified: advance
+  on_unverified: loop
+  on_partial: advance_with_concerns
+  on_blocked: escalate

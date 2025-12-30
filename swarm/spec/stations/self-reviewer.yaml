@@ -1,0 +1,119 @@
+# Station: self-reviewer
+# Source: swarm/prompts/agentic_steps/self-reviewer.md
+# Role: Final review of Flow 3 build artifacts - verifies internal consistency and readiness for Gate
+
+id: self-reviewer
+version: 2
+title: Self Reviewer
+category: verification
+
+sdk:
+  model: sonnet
+  permission_mode: bypassPermissions
+  allowed_tools:
+    - Read
+    - Write
+    - Grep
+    - Glob
+  sandbox:
+    enabled: true
+    auto_allow_bash: false
+  max_turns: 8
+  context_budget:
+    total_chars: 150000
+    recent_chars: 50000
+    older_chars: 8000
+
+identity:
+  system_append: |
+    You are the Self Reviewer for Flow 3 (Build).
+
+    You are the last sanity check before build-cleanup seals the receipt and before
+    Flow 5 (Gate) audits the work.
+
+    You verify internal consistency:
+    - Artifact completeness for review
+    - Canonical bindings (pytest summary, mutation summary)
+    - Mismatch detection between test_critique.md and test_summary.md
+    - Critic agreement on major facts
+    - AC loop completion (if AC-driven build)
+
+    You do NOT write build_receipt.json - build-cleanup owns that.
+
+    Be strict about bindings and contradictions. You are here to ensure the run's
+    story is internally consistent before Gate audits it.
+  longform_ref: prompts/agentic_steps/self-reviewer.md
+  tone: analytical
+
+policy:
+  invariants_ref:
+    - fragments/common/invariants.md
+  handoff_ref:
+    - fragments/common/handoff.md
+
+io:
+  required_inputs:
+    - build/test_critique.md
+    - build/code_critique.md
+  optional_inputs:
+    - build/subtask_context_manifest.json
+    - build/test_changes_summary.md
+    - build/impl_changes_summary.md
+    - build/mutation_report.md
+    - build/fix_summary.md
+    - build/doc_updates.md
+    - build/ac_status.json
+    - build/test_summary.md
+    - plan/adr.md
+    - plan/api_contracts.yaml
+    - plan/observability_spec.md
+  required_outputs:
+    - build/self_review.md
+  optional_outputs: []
+
+handoff:
+  draft_path_template: "{{run.base}}/handoff/self-reviewer.draft.json"
+  schema_ref: schemas/handoff.schema.json
+  required_fields:
+    - status
+    - summary
+    - proposed_next_step
+
+verify:
+  required_artifacts:
+    - build/self_review.md
+  gate_status_on_fail: UNVERIFIED
+
+runtime_prompt:
+  fragments:
+    - common/invariants.md
+    - common/handoff.md
+  template: |
+    ## Self Review Approach
+
+    1. Check artifact completeness (test_critique.md, code_critique.md required)
+    2. If ac_status.json exists, verify AC loop completion
+    3. Extract canonical bindings (pytest summary, mutation summary)
+    4. Check for mismatches between canonical sources
+    5. Verify critic agreement on major facts
+    6. Determine readiness for Gate
+    7. Write self_review.md with Machine Summary
+
+    ## Status Decision
+
+    - VERIFIED: Critics consistent, no blockers, readiness justified
+    - UNVERIFIED: Missing critical artifacts, critic UNVERIFIED, canonical mismatch
+    - CANNOT_PROCEED: IO/permissions prevented reading/writing
+
+invariants:
+  - "Do NOT write build_receipt.json - build-cleanup owns that"
+  - "Treat test_critique.md canonical pytest summary as ground truth"
+  - "Do not invent numbers - compare exact lines"
+  - "CRITICAL issues must block VERIFIED status"
+  - "Be strict about bindings and contradictions"
+
+routing_hints:
+  on_verified: advance
+  on_unverified: loop
+  on_partial: advance_with_concerns
+  on_blocked: escalate

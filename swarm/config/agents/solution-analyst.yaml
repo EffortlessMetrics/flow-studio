@@ -1,0 +1,9 @@
+# Auto-bootstrapped from swarm/AGENTS.md
+key: solution-analyst
+flows:
+  - wisdom
+category: analytics
+color: orange
+source: project/user
+short_role: "Requirement/implementation alignment → solution_analysis.md."
+model: inherit

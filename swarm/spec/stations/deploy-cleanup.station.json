@@ -1,0 +1,96 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "deploy-cleanup",
+  "version": 1,
+  "title": "Deploy Cleanup",
+  "category": "infra",
+  "sdk": {
+    "model": "haiku",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_write",
+    "allowed_tools": ["Read", "Write", "Bash", "Grep", "Glob", "Skill"],
+    "denied_tools": ["Edit"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": true,
+      "excluded_commands": ["git", "gh", "rm"]
+    },
+    "max_turns": 15,
+    "context_budget": {
+      "total_chars": 100000,
+      "recent_chars": 40000,
+      "older_chars": 10000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Deploy Cleanup Agent. Seal the envelope at the end of deployment. Produce the structured summary (receipt) of the deploy outcome. The receipt captures the deployment decision and verification status - it is a log, not a gatekeeper.",
+    "longform_ref": "prompts/agentic_steps/deploy-cleanup.md",
+    "tone": "neutral"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [],
+    "optional_inputs": [
+      "deploy/deployment_decision.md",
+      "deploy/deployment_log.md",
+      "deploy/verification_report.md",
+      "deploy/flow_plan.md"
+    ],
+    "required_outputs": [
+      "deploy/deploy_receipt.json",
+      "deploy/cleanup_report.md"
+    ],
+    "optional_outputs": [
+      "deploy/github_report.md"
+    ]
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/deploy/deploy_receipt.json",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "routing_signal"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "deploy/deploy_receipt.json",
+      "deploy/cleanup_report.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nFinalize Flow 6 (Deploy) by verifying artifacts, deriving mechanical counts, writing deploy_receipt.json, and updating .runs/index.json.\n\n## Steps\n\n1. Preflight: Verify read/write access\n2. Artifact existence: Required (deployment_decision.md), recommended, optional\n3. Extract domain verdicts from YAML block (deployment_verdict, gate_verdict)\n4. Extract routing signals from Machine Summary\n5. Mechanical counts: failed_checks, ci_checks_total, verification_checks\n6. Determine receipt status + recommended_action\n7. Write deploy_receipt.json\n8. Update .runs/index.json\n9. Write cleanup_report.md + github_report.md\n\n## Output\n\n- {{run.base}}/deploy/deploy_receipt.json\n- {{run.base}}/deploy/cleanup_report.md\n- {{run.base}}/deploy/github_report.md"
+  },
+  "invariants": [
+    "Mechanical counts only - stable markers or Machine Summary numeric fields",
+    "Null over guess - explain every null in blockers/concerns",
+    "Always write receipt + cleanup report unless IO prevents it",
+    "Idempotent (timestamps aside)",
+    "Do not reorder .runs/index.json",
+    "Respect domain verdicts exactly as emitted by deploy-decider",
+    "VERIFIED requires deployment_verdict == STABLE"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

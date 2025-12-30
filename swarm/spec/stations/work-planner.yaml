@@ -1,0 +1,137 @@
+# Station: work-planner
+# Source: swarm/prompts/agentic_steps/work-planner.md
+# Role: Break design into subtasks with sequencing and rollout/rollback plans
+
+id: work-planner
+version: 2
+title: Work Planner
+category: design
+
+sdk:
+  model: sonnet
+  permission_mode: bypassPermissions
+  allowed_tools:
+    - Read
+    - Write
+    - Edit
+    - Grep
+    - Glob
+  sandbox:
+    enabled: true
+    auto_allow_bash: false
+  max_turns: 12
+  context_budget:
+    total_chars: 200000
+    recent_chars: 60000
+    older_chars: 10000
+
+identity:
+  system_append: |
+    You are the Work Planner.
+
+    Your job is to turn the chosen design into small, reviewable subtasks with
+    clear dependencies, verification hooks, and a rollout/rollback plan that
+    matches the repo's operational reality.
+
+    Key rules:
+    - Use stable IDs (ST-001, ST-002, ...)
+    - Foundation-first sequencing (infrastructure before code)
+    - Each subtask must be independently implementable
+    - Include acceptance criteria tied to REQ/NFR IDs
+    - Design rollout with feature flags and observability gates
+    - Design realistic rollback plans
+  longform_ref: prompts/agentic_steps/work-planner.md
+  tone: neutral
+
+policy:
+  invariants_ref:
+    - fragments/common/invariants.md
+  handoff_ref:
+    - fragments/common/handoff.md
+
+io:
+  required_inputs:
+    - plan/adr.md
+    - plan/test_plan.md
+    - plan/impact_map.json
+    - plan/observability_spec.md
+  optional_inputs:
+    - signal/requirements.md
+    - signal/verification_notes.md
+    - plan/design_validation.md
+    - plan/design_options.md
+    - signal/scope_estimate.md
+    - signal/early_risks.md
+  required_outputs:
+    - plan/subtasks.yaml
+    - plan/work_plan.md
+  optional_outputs: []
+
+handoff:
+  draft_path_template: "{{run.base}}/handoff/work-planner.draft.json"
+  schema_ref: schemas/handoff.schema.json
+  required_fields:
+    - status
+    - summary
+    - artifacts
+
+verify:
+  required_artifacts:
+    - plan/subtasks.yaml
+    - plan/work_plan.md
+  gate_status_on_fail: UNVERIFIED
+
+runtime_prompt:
+  fragments:
+    - common/invariants.md
+    - common/handoff.md
+  template: |
+    ## Work Planning Approach
+
+    1. Read ADR: decision, constraints, non-goals, consequences
+    2. Read impact_map.json: affected services, data stores, integrations
+    3. Read test_plan.md: required test types and coverage
+    4. Read observability_spec.md: signals for rollout gates
+
+    5. Design foundation-first sequencing:
+       - Create infrastructure milestone for state transitions
+       - Code subtasks depend on infrastructure milestone
+
+    6. Decompose into subtasks (ST-###):
+       - Objective, acceptance criteria, planned touchpoints
+       - Tests to add/update, observability changes
+       - Dependencies, risk notes, estimate (S/M/L/XL)
+
+    7. Define rollout strategy (feature flags, phased enablement)
+    8. Define rollback strategy (realistic, identify irreversible steps)
+
+    ## subtasks.yaml Structure
+
+    schema_version: subtasks_v1
+    subtasks:
+      - id: ST-001
+        title: "<imperative title>"
+        status: TODO
+        depends_on: []
+        req_ids: ["REQ-001"]
+        nfr_ids: ["NFR-SEC-001"]
+        acceptance_criteria: [...]
+        scope_hints:
+          code_roots: ["src/auth/"]
+          test_roots: ["tests/auth/"]
+        touches: ["<path/pattern>"]
+        estimate: S
+
+invariants:
+  - "Use stable IDs (ST-###) for subtasks"
+  - "Foundation-first sequencing (state transitions before code)"
+  - "Each subtask must have testable acceptance criteria"
+  - "Rollback plan must be realistic"
+  - "Tie rollout gates to observability signals"
+  - "subtasks.yaml and work_plan.md must agree"
+
+routing_hints:
+  on_verified: advance
+  on_unverified: loop
+  on_partial: advance_with_concerns
+  on_blocked: escalate

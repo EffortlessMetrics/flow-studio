@@ -1,10 +1,34 @@
-# Flow 5 - Artifact → Prod (Deploy)
+# Flow 6 - Artifact → Prod (Deploy)
 # Source of truth for deployment flow ordering and agent roles
 # This config drives generation of Mermaid diagrams and flow documentation
 
 key: deploy
-title: "Flow 5 - Artifact → Prod (Deploy)"
+title: "Flow 6 - Artifact → Prod (Deploy)"
 description: "Move an approved artifact from 'ready to merge' to 'deployed'—execute deployment, verify health, create audit trail."
+
+charter:
+  goal: "Execute deployment safely and produce a verified deployment decision (STABLE, INVESTIGATE, ROLLBACK, or NOT_DEPLOYED)"
+  exit_criteria:
+    - "PR merged to target branch (or NOT_DEPLOYED if Gate bounced)"
+    - "Git tag and GitHub release created"
+    - "CI/deployment events monitored and recorded"
+    - "Smoke verification completed"
+    - "deployment_decision.md produced with clear status"
+  non_goals:
+    - "Modifying code (deploy is read-only post-merge)"
+    - "Fixing deployment failures (rollback and report only)"
+    - "Making architectural decisions"
+    - "Debugging production issues beyond smoke tests"
+  offroad_policy:
+    justified:
+      - "DETOUR to extended monitoring when initial smoke tests are inconclusive"
+      - "DETOUR to rollback when smoke tests fail critically"
+      - "INJECT_NODES for additional health checks if deployment environment differs from expected"
+    not_justified:
+      - "INJECT_FLOW to build to fix deployment issues"
+      - "Modifying code to fix deployment failures"
+      - "Skipping smoke verification to accelerate deployment"
+      - "Overriding Gate BOUNCE decision"
 
 teaching:
   title: "Artifact to Production: Safe Deployment and Verification"

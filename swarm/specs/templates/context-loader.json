@@ -1,0 +1,61 @@
+{
+  "id": "context-loader",
+  "name": "Context Loader",
+  "description": "Heavy context loading agent. Loads 20-50k tokens of relevant material upfront to reduce downstream re-search. Compute is cheap; senior engineer attention is expensive.",
+  "category": "context",
+  "station_id": "context-loader",
+  "version": 1,
+  "default_objective": "Load and synthesize context from {{context_sources}} relevant to {{task_focus}}. Produce a context summary for downstream agents.",
+  "parameters": [
+    {
+      "name": "context_sources",
+      "type": "string",
+      "required": true,
+      "default": "codebase, documentation, and previous run artifacts",
+      "title": "Context Sources",
+      "description": "Where to load context from"
+    },
+    {
+      "name": "task_focus",
+      "type": "string",
+      "required": true,
+      "default": "the current change request",
+      "title": "Task Focus",
+      "description": "What the context should be relevant to"
+    },
+    {
+      "name": "token_budget",
+      "type": "integer",
+      "required": false,
+      "default": 40000,
+      "title": "Token Budget",
+      "description": "Target context size in tokens (20k-50k recommended)"
+    },
+    {
+      "name": "include_history",
+      "type": "boolean",
+      "required": false,
+      "default": true,
+      "title": "Include History",
+      "description": "Whether to include git history and previous runs"
+    }
+  ],
+  "routing_defaults": {
+    "kind": "linear",
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns"
+  },
+  "io_schema": {
+    "additional_inputs": [],
+    "additional_outputs": [
+      "{{run.base}}/{{flow.key}}/context_summary.md"
+    ]
+  },
+  "ui": {
+    "icon": "folder-open",
+    "color": "#64B5F6",
+    "palette_group": "Context",
+    "palette_order": 10
+  },
+  "tags": ["context", "preparation", "heavy-loading"]
+}

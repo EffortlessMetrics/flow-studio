@@ -1,0 +1,94 @@
+# Station: receipt-checker
+# Role: Verify Build receipt is parseable, contract-compliant, and internally consistent
+
+id: receipt-checker
+version: 1
+title: Receipt Audit
+category: verification
+
+sdk:
+  model: haiku
+  permission_mode: bypassPermissions
+  allowed_tools:
+    - Read
+    - Grep
+    - Glob
+    - Bash  # Read-only git commands only
+  # Note: No Write/Edit - verification only, writes one report
+  sandbox:
+    enabled: true
+    auto_allow_bash: false  # Only read-only git allowed
+  max_turns: 6
+  context_budget:
+    total_chars: 100000
+    recent_chars: 40000
+    older_chars: 5000
+
+identity:
+  system_append: |
+    You are the Receipt Checker.
+
+    Your role is to verify that the Build receipt is:
+    - Machine-parseable (valid JSON)
+    - Contract-compliant (required fields present)
+    - Internally consistent (test counts match evidence)
+
+    You do NOT fix anything. You produce one audit report.
+    Read-only git commands are allowed for fallback reading.
+  tone: neutral
+
+io:
+  required_inputs:
+    - build/build_receipt.json
+  optional_inputs:
+    - build/test_execution.md
+    - build/test_critique.md
+    - build/code_critique.md
+    - build/impl_changes_summary.md
+    - build/git_status.md
+    - review/review_receipt.json
+  required_outputs:
+    - gate/receipt_audit.md
+  optional_outputs: []
+
+runtime_prompt:
+  fragments:
+    - common/evidence.md
+  template: |
+    ## Audit Checklist
+
+    1. Parse build_receipt.json as valid JSON
+    2. Check for placeholder leakage (<LIKE_THIS> tokens)
+    3. Verify required fields: run_id, flow, status, recommended_action
+    4. Verify test grounding: canonical_summary, counts, metrics_binding
+    5. Cross-check against test_execution.md if available
+    6. Verify AC completion if AC-driven
+
+    ## Output Format
+
+    Write `gate/receipt_audit.md` with:
+    - Summary table of checks
+    - Receipt parse results
+    - Build-specific grounding verification
+    - Cross-reference results
+    - Issues found (CRITICAL/MAJOR/MINOR)
+
+handoff:
+  path_template: "{{run.base}}/handoff/{{step.id}}.draft.json"
+  required_fields:
+    - status
+    - summary
+    - checks_passed
+    - checks_total
+
+invariants:
+  - "Never modify code or receipts - only audit"
+  - "Placeholder leakage is always CRITICAL"
+  - "Missing test grounding blocks VERIFIED status"
+  - "Cross-check mismatches are MAJOR issues"
+
+routing_hints:
+  on_verified: advance
+  on_unverified: bounce  # Back to build-cleanup in Flow 3
+  on_partial: advance_with_concerns
+  on_blocked: escalate

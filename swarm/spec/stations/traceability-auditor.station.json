@@ -1,0 +1,102 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "traceability-auditor",
+  "version": 1,
+  "title": "Traceability Auditor",
+  "category": "analytics",
+  "sdk": {
+    "model": "haiku",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_only",
+    "allowed_tools": ["Read", "Grep", "Glob", "Bash"],
+    "denied_tools": ["Write", "Edit"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": false,
+      "excluded_commands": ["git add", "git commit", "git push", "rm", "mv", "gh"]
+    },
+    "max_turns": 15,
+    "context_budget": {
+      "total_chars": 150000,
+      "recent_chars": 50000,
+      "older_chars": 10000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Traceability Auditor. A mechanical verifier that answers: 'Is this run traceable end-to-end without guessing?' You check run identity, receipt coherence, index alignment, GitHub markers, and spec traceability (REQ/NFR <-> BDD). You never fix or post; you record evidence and routing.",
+    "longform_ref": "prompts/agentic_steps/traceability-auditor.md",
+    "tone": "analytical"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/lane_discipline.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md",
+      "fragments/common/routing_vocabulary.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "run_meta.json",
+      ".runs/index.json"
+    ],
+    "optional_inputs": [
+      "signal/signal_receipt.json",
+      "plan/plan_receipt.json",
+      "build/build_receipt.json",
+      "gate/gate_receipt.json",
+      "deploy/deploy_receipt.json",
+      "wisdom/wisdom_receipt.json",
+      "signal/requirements.md",
+      "signal/verification_notes.md",
+      "signal/features/*.feature",
+      "plan/ac_matrix.md",
+      "build/ac_status.json"
+    ],
+    "required_outputs": [
+      "{{flow}}/traceability_audit.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/{{flow}}/traceability_audit.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "routing_signal"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "{{flow}}/traceability_audit.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/routing_vocabulary.md"
+    ],
+    "template": "## Mission\n\nVerify end-to-end traceability for run {{run.id}}.\n\n## Checks (ordered)\n\n1. **Run identity coherence**: run_meta.run_id matches dir, index.json entry exists\n2. **Receipt coherence**: each receipt has valid run_id, flow, status\n3. **Index alignment**: last_flow matches actual receipt state\n4. **GitHub observability**: markers present (if github_ops_allowed)\n5. **Spec traceability (REQ <-> BDD)**: REQ IDs unique, scenarios tagged, coverage verified\n6. **AC traceability**: AC matrix linked to REQs and BDD scenarios\n\n## Inventory Markers\n\n- TRC_OK/TRC_MISSING/TRC_MISMATCH for coherence\n- TRS_OK/TRS_MISSING/TRS_REQ_UNCOVERED for spec traceability\n- TRS_AC_OK/TRS_AC_INCOMPLETE for AC traceability\n\n## Routing\n\n- All coherent → CONTINUE\n- Receipt issues → DETOUR to <flow>-cleanup\n- Spec traceability gaps → INJECT_NODES (requirements-author or bdd-author)\n- AC gaps → INJECT_NODES (test-strategist)\n- GH markers missing → INJECT_NODES (gh-issue-manager)\n\n## Output\n\nWrite {{run.base}}/{{flow}}/traceability_audit.md with machine summary, receipt matrix, and inventory."
+  },
+  "invariants": [
+    "Read-only except for your own output file",
+    "No GitHub writes; GitHub reads gated by github_ops_allowed",
+    "Run from repo root; paths are repo-root-relative",
+    "Use closed vocabularies for status and routing",
+    "Count, compare, and record - never fix"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "loop",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

@@ -122,7 +122,7 @@ def test_multiple_nonexistent_references_in_one_flow(temp_repo, run_validator):
     assert_validator_failed(result)
 
     # All 3 errors should be reported
-    assert result.stderr.count("✗") >= 3
+    assert result.stderr.count("[FAIL]") >= 3
 
 
 def test_nonexistent_reference_across_multiple_flows(temp_repo, run_validator):

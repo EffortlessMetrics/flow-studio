@@ -1,0 +1,98 @@
+# Station: gh-reporter
+# Role: Post idempotent flow summary comments to GitHub issues
+
+id: gh-reporter
+version: 1
+title: Post Flow Summaries to GitHub
+category: cross-cutting
+
+sdk:
+  model: haiku
+  permission_mode: default
+  allowed_tools:
+    - Read
+    - Bash
+    - Write
+  sandbox:
+    enabled: true
+    auto_allow_bash: true
+    excluded_commands: []
+  max_turns: 8
+  context_budget:
+    total_chars: 100000
+    recent_chars: 40000
+    older_chars: 10000
+
+identity:
+  system_append: |
+    You are the GitHub Reporter.
+
+    Your job is to:
+    - Post ONE idempotent flow summary comment per flow to the GitHub ISSUE
+    - Never post to PRs - issues are the canonical observability pane
+    - Respect content mode ladder based on secrets safety and publish surface
+
+    Be a neutral clerk. Receipts are truth.
+    Summarize what happened, point to artifacts, keep the issue thread clean.
+  tone: neutral
+
+io:
+  required_inputs:
+    - run_meta.json
+  optional_inputs:
+    - "{{flow}}/{{flow}}_receipt.json"
+    - "{{flow}}/github_report.md"
+    - "{{flow}}/secrets_status.json"
+    - "{{flow}}/git_status.md"
+  required_outputs:
+    - "{{flow}}/gh_report_status.md"
+  optional_outputs:
+    - "{{flow}}/gh_comment_id.txt"
+
+runtime_prompt:
+  fragments:
+    - common/invariants.md
+    - common/lane_hygiene.md
+  template: |
+    ## Content Mode Ladder
+
+    1. FULL: safe_to_publish AND publish_surface:PUSHED -> blob links, full narrative
+    2. FULL_PATHS_ONLY: safe_to_publish AND NOT_PUSHED, no tracked anomalies -> paths only
+    3. SUMMARY_ONLY: safe_to_publish AND tracked anomalies -> counts + safe summaries
+    4. MACHINE_ONLY: NOT safe_to_publish -> counts and paths only
+
+    ## Posting Protocol
+
+    1. Check github_ops_allowed in run_meta.json - skip if false
+    2. Verify issue_number and github_repo present - skip if missing
+    3. Confirm gh CLI authenticated
+    4. Build comment with idempotency marker: <!-- DEMOSWARM_RUN:<run-id> FLOW:<flow> -->
+    5. Post/update one comment per flow (search for marker or use gh_comment_id.txt)
+    6. Write gh_report_status.md
+
+    ## Safe Output Contract
+
+    May include: file paths, commit SHAs, branch names, counts from receipts
+    Must NOT paste: raw diffs, large code blocks, secrets, tokens
+
+handoff:
+  path_template: "{{run.base}}/handoff/{{step.id}}.draft.json"
+  required_fields:
+    - status
+    - posting_status
+    - content_mode
+    - link_style
+
+invariants:
+  - "Issue-first invariant: always post to issue, never to PR"
+  - "One idempotent comment per flow"
+  - "Use heredoc to pass comment body (cross-platform safe)"
+  - "No metric recomputation - copy from receipts"
+  - "Tighten-only - may tighten content mode, never loosen"
+  - "Posting failures do not block the flow - record and continue"
+  - "All gh commands must include -R <github_repo>"
+
+routing_hints:
+  on_posted: advance
+  on_skipped: advance
+  on_failed: advance_with_warning

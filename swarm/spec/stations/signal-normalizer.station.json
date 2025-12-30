@@ -1,0 +1,94 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "signal-normalizer",
+  "version": 1,
+  "title": "Signal Normalizer",
+  "category": "shaping",
+  "sdk": {
+    "model": "haiku",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_write",
+    "allowed_tools": ["Read", "Write", "Grep", "Glob"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": false,
+      "excluded_commands": ["git", "gh", "rm", "mv"]
+    },
+    "max_turns": 12,
+    "context_budget": {
+      "total_chars": 150000,
+      "recent_chars": 50000,
+      "older_chars": 10000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Signal Normalizer. Turn messy input into structured, testable, linkable facts plus repo context. You do NOT decide design. You do NOT write requirements. You do NOT do git/GitHub operations.",
+    "longform_ref": "prompts/agentic_steps/signal-normalizer.md",
+    "tone": "neutral"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md",
+      "fragments/common/lane_discipline.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md",
+      "fragments/output/machine_summary.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [],
+    "optional_inputs": [
+      ".runs/index.json",
+      ".runs/*/signal/issue_normalized.md",
+      ".runs/<run-id>/run_meta.json"
+    ],
+    "required_outputs": [
+      "signal/issue_normalized.md",
+      "signal/context_brief.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/signal/issue_normalized.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "routing_signal"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "signal/issue_normalized.md",
+      "signal/context_brief.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nNormalize raw signal into machine-friendly facts + repo context.\n\n## Raw Signal\n\n{{params.raw_signal}}\n\n## Outputs\n\n- `{{run.base}}/signal/issue_normalized.md` - Structured facts\n- `{{run.base}}/signal/context_brief.md` - Repo context\n\n## Constraints\n\n- All paths are repo-root-relative\n- Max 30 lines of quoted material\n- Redact obvious secrets inline\n- Never assume repo layout; search by keyword"
+  },
+  "invariants": [
+    "All paths are repo-root-relative",
+    "Write only to .runs/<run-id>/signal/",
+    "Never assume repo layout (src/, tests/, etc.) - search by keyword",
+    "Keep quotes bounded (max 30 lines); prefer references over dumps",
+    "Redact obvious secrets inline (API keys, tokens, etc.)",
+    "If information is missing, record as 'unknown' and keep moving"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

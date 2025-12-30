@@ -39,6 +39,15 @@ import {
   renderArtifactProducerHint,
   renderTabs,
 } from "./ui_fragments.js";
+import {
+  RoutingDecisionCard,
+  ForensicVerdictCard,
+  renderInterruptionStackTab,
+} from "./components/index.js";
+import type {
+  RoutingDecisionData,
+  ForensicVerdict,
+} from "./components/index.js";
 
 // ============================================================================
 // Empty State
@@ -590,6 +599,98 @@ function renderRoutingDecision(routing: { loop_iteration: number; max_iterations
 }
 
 // ============================================================================
+// Routing Tab Rendering
+// ============================================================================
+
+/**
+ * Load and render routing information for a step.
+ * Uses the RoutingDecisionCard and ForensicVerdictCard components
+ * when full routing data is available, falls back to simple display otherwise.
+ */
+async function loadRoutingData(
+  container: HTMLElement,
+  runId: string,
+  flowKey: FlowKey,
+  stepId: string
+): Promise<void> {
+  container.innerHTML = '<div class="muted">Loading routing data...</div>';
+
+  try {
+    const resp = await Api.getStepReceipt(runId, flowKey, stepId);
+    const receipt = resp.receipt;
+
+    if (!receipt) {
+      container.innerHTML = '<div class="muted">No routing data available for this step</div>';
+      return;
+    }
+
+    // Clear container for rendering
+    container.innerHTML = '';
+
+    // Check if we have full routing decision data (V3 routing model)
+    // The receipt may include a routing_decision field with candidates
+    const receiptAny = receipt as unknown as Record<string, unknown>;
+    const routingDecision = receiptAny.routing_decision as RoutingDecisionData | undefined;
+    const forensicVerdict = receiptAny.forensic_verdict as ForensicVerdict | undefined;
+
+    // Section: Forensic Verdict (if present)
+    if (forensicVerdict) {
+      const forensicSection = document.createElement("div");
+      forensicSection.className = "routing-tab-section";
+      forensicSection.innerHTML = '<div class="kv-label" style="margin-bottom: 8px;">Forensic Verification</div>';
+
+      const forensicContainer = document.createElement("div");
+      forensicSection.appendChild(forensicContainer);
+
+      const forensicCard = new ForensicVerdictCard({
+        container: forensicContainer,
+        startExpanded: false,
+      });
+      forensicCard.setData(forensicVerdict);
+
+      container.appendChild(forensicSection);
+    }
+
+    // Section: Full Routing Decision Card (if present)
+    if (routingDecision && routingDecision.candidates && routingDecision.candidates.length > 0) {
+      const routingSection = document.createElement("div");
+      routingSection.className = "routing-tab-section";
+      routingSection.innerHTML = '<div class="kv-label" style="margin-bottom: 8px;">Routing Decision</div>';
+
+      const routingCardContainer = document.createElement("div");
+      routingSection.appendChild(routingCardContainer);
+
+      const routingCard = new RoutingDecisionCard({
+        expandedByDefault: false,
+        onCandidateClick: (candidate) => {
+          console.log('Routing candidate clicked:', candidate);
+        },
+      });
+      routingCard.render(routingDecision, routingCardContainer);
+
+      container.appendChild(routingSection);
+    }
+
+    // Section: Simple routing info from receipt (fallback for non-V3 routing)
+    if (receipt.routing) {
+      const simpleRoutingSection = document.createElement("div");
+      simpleRoutingSection.className = "routing-tab-section";
+      simpleRoutingSection.innerHTML = renderRoutingDecision(receipt.routing);
+      container.appendChild(simpleRoutingSection);
+    }
+
+    // If no routing data at all, show empty state
+    if (!forensicVerdict && !routingDecision && !receipt.routing) {
+      container.innerHTML = '<div class="muted">No routing data recorded for this step</div>';
+    }
+
+  } catch (err) {
+    console.error("Failed to load routing data", err);
+    container.innerHTML = '<div class="muted">Routing data not available</div>';
+  }
+}
+
+// ============================================================================
 // Step Details
 // ============================================================================
 
@@ -627,6 +728,8 @@ export async function showStepDetails(
   tabs.innerHTML = renderTabs([
     { id: "node", label: "Node", active: defaultTab === "node" },
     { id: "run", label: "Run", active: defaultTab === "run" },
+    { id: "routing", label: "Routing" },
+    { id: "stack", label: "Stack" },
     { id: "transcript", label: "Transcript" },
     { id: "selftest", label: "Selftest" }
   ]);
@@ -836,6 +939,18 @@ export async function showStepDetails(
   transcriptTab.dataset.tab = "transcript";
   transcriptTab.innerHTML = '<div class="muted">Select a step to view transcript</div>';
 
+  // Routing tab content (lazy-loaded)
+  const routingTab = document.createElement("div");
+  routingTab.className = "tab-content";
+  routingTab.dataset.tab = "routing";
+  routingTab.innerHTML = '<div class="muted">Click to view routing decisions</div>';
+
+  // Stack tab content (lazy-loaded) - shows interruption/detour stack
+  const stackTab = document.createElement("div");
+  stackTab.className = "tab-content";
+  stackTab.dataset.tab = "stack";
+  stackTab.innerHTML = '<div class="muted">Click to view execution stack</div>';
+
   detailsEl.appendChild(h2);
   // Add teaching callout if available and teaching mode is on
   if (teachingCallout.innerHTML) {
@@ -844,6 +959,8 @@ export async function showStepDetails(
   detailsEl.appendChild(tabs);
   detailsEl.appendChild(nodeTab);
   detailsEl.appendChild(runTab);
+  detailsEl.appendChild(routingTab);
+  detailsEl.appendChild(stackTab);
   detailsEl.appendChild(transcriptTab);
   detailsEl.appendChild(selftestTab);
 
@@ -869,6 +986,22 @@ export async function showStepDetails(
       // Lazy load transcript when tab is clicked
       if (tabName === "transcript" && state.currentRunId && data.flow && data.step_id) {
         loadTranscript(transcriptTab, state.currentRunId, data.flow as FlowKey, data.step_id);
+      }
+
+      // Lazy load routing data when tab is clicked
+      if (tabName === "routing" && state.currentRunId && data.flow && data.step_id) {
+        loadRoutingData(routingTab, state.currentRunId, data.flow as FlowKey, data.step_id);
+      }
+
+      // Lazy load stack data when tab is clicked
+      if (tabName === "stack") {
+        renderInterruptionStackTab(
+          stackTab,
+          state.currentRunId,
+          data.flow as FlowKey || null,
+          data.step_id || null,
+          (runId) => Api.getBoundaryReview(runId)
+        );
       }
     });
   });

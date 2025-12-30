@@ -1,0 +1,767 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://flowstudio.dev/schemas/prompt_plan.schema.json",
+  "title": "PromptPlan",
+  "description": "Compiled output from SpecCompiler: fully resolved prompts and SDK options ready for Claude SDK execution. This is the handoff contract between spec layer and runtime layer.",
+  "type": "object",
+  "required": ["system_prompt", "user_prompt", "output_format", "sdk_options", "traceability"],
+  "properties": {
+    "system_prompt": {
+      "$ref": "#/definitions/SystemPrompt",
+      "description": "Fully compiled system prompt with preset and station-specific append"
+    },
+    "user_prompt": {
+      "$ref": "#/definitions/UserPrompt",
+      "description": "Fully compiled user prompt with objective, context, and required outputs"
+    },
+    "output_format": {
+      "$ref": "#/definitions/OutputFormat",
+      "description": "JSON schema and contract for the handoff envelope this step must produce"
+    },
+    "sdk_options": {
+      "$ref": "#/definitions/SdkOptions",
+      "description": "Claude SDK options for execution"
+    },
+    "traceability": {
+      "$ref": "#/definitions/Traceability",
+      "description": "Complete traceability metadata linking plan to specs and templates"
+    },
+    "context_pack": {
+      "$ref": "#/definitions/ContextPack",
+      "description": "Context artifacts included in the prompt (upstream artifacts, previous envelopes, scent trail)"
+    },
+    "fragments_used": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/FragmentReference"
+      },
+      "description": "List of prompt fragments used in compilation for audit trail"
+    },
+    "validation": {
+      "$ref": "#/definitions/ValidationResult",
+      "description": "Pre-flight validation result for the compiled plan"
+    },
+    "verification": {
+      "$ref": "#/definitions/VerificationRequirements",
+      "description": "Post-execution verification requirements (artifacts that must exist, commands that must pass)"
+    }
+  },
+  "definitions": {
+    "SystemPrompt": {
+      "type": "object",
+      "required": ["preset", "append", "combined"],
+      "properties": {
+        "preset": {
+          "type": "string",
+          "enum": ["default", "claude_code", "minimal", "custom"],
+          "default": "claude_code",
+          "description": "Base system prompt preset to use"
+        },
+        "preset_content": {
+          "type": "string",
+          "description": "Resolved preset content (if custom or for audit)"
+        },
+        "append": {
+          "type": "string",
+          "maxLength": 4000,
+          "description": "Station identity and invariants appended to system prompt"
+        },
+        "combined": {
+          "type": "string",
+          "description": "Final combined system prompt ready for SDK (preset + append)"
+        },
+        "invariants": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Station invariants extracted for explicit tracking"
+        },
+        "tone": {
+          "type": "string",
+          "enum": ["neutral", "analytical", "critical", "supportive"],
+          "default": "neutral",
+          "description": "Communication tone for this station"
+        },
+        "scent_trail": {
+          "type": "string",
+          "maxLength": 2000,
+          "description": "Wisdom from previous runs (truncated if over limit)"
+        }
+      },
+      "additionalProperties": false
+    },
+    "UserPrompt": {
+      "type": "object",
+      "required": ["objective", "combined"],
+      "properties": {
+        "objective": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Primary objective from flow step"
+        },
+        "scope": {
+          "type": "string",
+          "description": "Scope constraint (e.g., 'AC-001..AC-003')"
+        },
+        "context_section": {
+          "type": "string",
+          "description": "Compiled context section with artifact pointers and previous envelopes"
+        },
+        "input_requirements": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/InputRequirement"
+          },
+          "description": "Required and optional inputs for this step"
+        },
+        "output_requirements": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/OutputRequirement"
+          },
+          "description": "Required outputs this step must produce"
+        },
+        "guidelines": {
+          "type": "string",
+          "description": "Compiled guidelines from fragments"
+        },
+        "finalization_instructions": {
+          "type": "string",
+          "description": "Handoff file instructions with path and required fields"
+        },
+        "combined": {
+          "type": "string",
+          "description": "Final combined user prompt ready for SDK"
+        }
+      },
+      "additionalProperties": false
+    },
+    "InputRequirement": {
+      "type": "object",
+      "required": ["path", "required"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Path to the input artifact (relative to run_base or repo root)"
+        },
+        "required": {
+          "type": "boolean",
+          "description": "Whether this input must exist before step runs"
+        },
+        "description": {
+          "type": "string",
+          "description": "What this input provides"
+        },
+        "from_step": {
+          "type": "string",
+          "description": "Step that produces this artifact (for dependency tracking)"
+        }
+      },
+      "additionalProperties": false
+    },
+    "OutputRequirement": {
+      "type": "object",
+      "required": ["path", "required"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Path to the output artifact (relative to run_base or repo root)"
+        },
+        "required": {
+          "type": "boolean",
+          "description": "Whether this output must be produced"
+        },
+        "description": {
+          "type": "string",
+          "description": "What this output should contain"
+        },
+        "schema_ref": {
+          "type": "string",
+          "description": "Path to JSON schema for this artifact (relative to swarm/spec/schemas/)"
+        }
+      },
+      "additionalProperties": false
+    },
+    "OutputFormat": {
+      "type": "object",
+      "required": ["handoff_path", "required_fields"],
+      "properties": {
+        "handoff_path": {
+          "type": "string",
+          "description": "Resolved path where handoff envelope must be written"
+        },
+        "schema_ref": {
+          "type": "string",
+          "default": "handoff_envelope.schema.json",
+          "description": "Path to JSON schema for handoff validation"
+        },
+        "required_fields": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "status",
+              "summary",
+              "artifacts",
+              "can_further_iteration_help",
+              "proposed_next_step",
+              "confidence",
+              "blockers",
+              "routing_signal",
+              "file_changes",
+              "assumptions",
+              "concerns"
+            ]
+          },
+          "description": "Fields that MUST be present in the handoff envelope"
+        },
+        "status_values": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["VERIFIED", "UNVERIFIED", "BLOCKED", "PARTIAL"]
+          },
+          "default": ["VERIFIED", "UNVERIFIED", "BLOCKED", "PARTIAL"],
+          "description": "Valid status values for this step"
+        },
+        "example": {
+          "type": "object",
+          "description": "Example handoff envelope for guidance (shown in prompt)"
+        }
+      },
+      "additionalProperties": false
+    },
+    "SdkOptions": {
+      "type": "object",
+      "required": ["model", "permission_mode"],
+      "properties": {
+        "model": {
+          "type": "string",
+          "description": "Model identifier (e.g., 'claude-sonnet-4-20250514', 'claude-opus-4-20250514')"
+        },
+        "model_tier": {
+          "type": "string",
+          "enum": ["haiku", "sonnet", "opus", "inherit"],
+          "description": "Model tier shorthand (resolved to full model ID)"
+        },
+        "permission_mode": {
+          "type": "string",
+          "enum": ["default", "bypassPermissions", "planMode"],
+          "default": "bypassPermissions",
+          "description": "Permission handling mode for tool calls"
+        },
+        "tools": {
+          "$ref": "#/definitions/ToolConfig",
+          "description": "Tool configuration (allowed, denied, profiles)"
+        },
+        "max_turns": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50,
+          "default": 12,
+          "description": "Maximum conversation turns before forcing exit"
+        },
+        "max_thinking_tokens": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum tokens for extended thinking (0 to disable)"
+        },
+        "sandbox": {
+          "$ref": "#/definitions/SandboxConfig",
+          "description": "Sandbox configuration for Bash commands"
+        },
+        "cwd": {
+          "type": "string",
+          "description": "Working directory for execution"
+        },
+        "context_budget": {
+          "$ref": "#/definitions/ContextBudget",
+          "description": "Token/character budget for context loading"
+        },
+        "hooks": {
+          "$ref": "#/definitions/HooksConfig",
+          "description": "Lifecycle hooks for execution events"
+        },
+        "abort_signal": {
+          "type": "object",
+          "description": "Abort signal configuration for cancellation"
+        },
+        "include_partial_messages": {
+          "type": "boolean",
+          "default": false,
+          "description": "Include partial/streaming messages in conversation"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ToolConfig": {
+      "type": "object",
+      "properties": {
+        "allowed": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "Read",
+              "Write",
+              "Edit",
+              "Bash",
+              "Grep",
+              "Glob",
+              "Task",
+              "TodoWrite",
+              "AskUserQuestion",
+              "NotebookEdit",
+              "Skill"
+            ]
+          },
+          "description": "Explicit list of allowed tools"
+        },
+        "denied": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Tools explicitly denied (takes precedence)"
+        },
+        "profile": {
+          "type": "string",
+          "enum": [
+            "read_only",
+            "read_write",
+            "full_access",
+            "critic",
+            "reporter"
+          ],
+          "description": "Predefined tool profile (alternative to explicit allowed list)"
+        },
+        "skills": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Skills available for this execution"
+        }
+      },
+      "additionalProperties": false
+    },
+    "SandboxConfig": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable sandbox mode for Bash commands"
+        },
+        "auto_allow_bash": {
+          "type": "boolean",
+          "default": true,
+          "description": "Auto-approve Bash commands within sandbox"
+        },
+        "excluded_commands": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Bash commands to deny even in sandbox (e.g., 'rm -rf', 'git push --force')"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ContextBudget": {
+      "type": "object",
+      "properties": {
+        "total_chars": {
+          "type": "integer",
+          "default": 200000,
+          "description": "Total character budget for context"
+        },
+        "recent_chars": {
+          "type": "integer",
+          "default": 60000,
+          "description": "Character budget for recent context (prioritized)"
+        },
+        "older_chars": {
+          "type": "integer",
+          "default": 10000,
+          "description": "Character budget for older context (summarized)"
+        }
+      },
+      "additionalProperties": false
+    },
+    "HooksConfig": {
+      "type": "object",
+      "description": "Lifecycle hooks for execution events",
+      "properties": {
+        "on_start": {
+          "$ref": "#/definitions/HookAction",
+          "description": "Action to run before execution starts"
+        },
+        "on_turn_complete": {
+          "$ref": "#/definitions/HookAction",
+          "description": "Action to run after each conversation turn"
+        },
+        "on_tool_use": {
+          "$ref": "#/definitions/HookAction",
+          "description": "Action to run before/after tool use"
+        },
+        "on_complete": {
+          "$ref": "#/definitions/HookAction",
+          "description": "Action to run after execution completes"
+        },
+        "on_error": {
+          "$ref": "#/definitions/HookAction",
+          "description": "Action to run on execution error"
+        }
+      },
+      "additionalProperties": false
+    },
+    "HookAction": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["log", "emit_event", "run_command", "call_function"],
+          "description": "Type of hook action"
+        },
+        "config": {
+          "type": "object",
+          "description": "Action-specific configuration"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Traceability": {
+      "type": "object",
+      "required": ["station_id", "station_version", "flow_id", "flow_version", "step_id", "prompt_hash", "compiled_at"],
+      "properties": {
+        "station_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "description": "Station spec ID that defines this role"
+        },
+        "station_version": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Station spec version for reproducibility"
+        },
+        "template_id": {
+          "type": "string",
+          "description": "Runtime prompt template ID (if using template registry)"
+        },
+        "template_version": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Template version (if using template registry)"
+        },
+        "flow_id": {
+          "type": "string",
+          "pattern": "^[0-9]+-[a-z]+$",
+          "description": "Flow spec ID (e.g., '3-build')"
+        },
+        "flow_version": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Flow spec version for reproducibility"
+        },
+        "flow_key": {
+          "type": "string",
+          "description": "Flow key extracted from flow_id (e.g., 'build' from '3-build')"
+        },
+        "step_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "description": "Step ID within the flow"
+        },
+        "prompt_hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{16,64}$",
+          "description": "SHA-256 hash of compiled prompt content (truncated to 16-64 chars)"
+        },
+        "compiled_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO timestamp of when prompt was compiled"
+        },
+        "compiler_version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+          "description": "Version of SpecCompiler used"
+        },
+        "run_id": {
+          "type": "string",
+          "description": "Run identifier for correlation across steps"
+        },
+        "parent_run_id": {
+          "type": "string",
+          "description": "Parent run ID (for nested or retry runs)"
+        },
+        "iteration": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Iteration number within a microloop"
+        },
+        "fragments_hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{16,64}$",
+          "description": "Combined hash of all fragments used"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ContextPack": {
+      "type": "object",
+      "description": "Hydrated context loaded for this step",
+      "properties": {
+        "upstream_artifacts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ArtifactContext"
+          },
+          "description": "Upstream artifacts included in context"
+        },
+        "previous_envelopes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/EnvelopeSummary"
+          },
+          "description": "Previous handoff envelopes for context"
+        },
+        "scent_trail": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ScentTrailEntry"
+          },
+          "description": "Key insights from previous runs (cross-run wisdom)"
+        },
+        "total_chars": {
+          "type": "integer",
+          "description": "Total character count of context pack"
+        },
+        "budget_remaining": {
+          "type": "integer",
+          "description": "Characters remaining in budget after context pack"
+        },
+        "truncations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "source": { "type": "string" },
+              "original_chars": { "type": "integer" },
+              "truncated_to": { "type": "integer" },
+              "reason": { "type": "string" }
+            },
+            "additionalProperties": false
+          },
+          "description": "Record of any context truncations applied"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ArtifactContext": {
+      "type": "object",
+      "required": ["path"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Path to the artifact"
+        },
+        "name": {
+          "type": "string",
+          "description": "Friendly name for reference in prompt"
+        },
+        "content_preview": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Preview of artifact content"
+        },
+        "included_fully": {
+          "type": "boolean",
+          "description": "Whether the full content was included"
+        },
+        "truncated_at_chars": {
+          "type": "integer",
+          "description": "Character count if truncated"
+        },
+        "hash": {
+          "type": "string",
+          "description": "Content hash for verification"
+        }
+      },
+      "additionalProperties": false
+    },
+    "EnvelopeSummary": {
+      "type": "object",
+      "required": ["step_id", "status"],
+      "properties": {
+        "step_id": {
+          "type": "string",
+          "description": "Step that produced the envelope"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["VERIFIED", "UNVERIFIED", "BLOCKED", "PARTIAL"],
+          "description": "Status from the envelope"
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Summary from the envelope (truncated)"
+        },
+        "iteration": {
+          "type": "integer",
+          "description": "Iteration number if in a microloop"
+        },
+        "key_artifacts": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Key artifact paths from this envelope"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ScentTrailEntry": {
+      "type": "object",
+      "required": ["step_id", "key_insight"],
+      "properties": {
+        "step_id": {
+          "type": "string",
+          "description": "Step that produced this insight"
+        },
+        "key_insight": {
+          "type": "string",
+          "maxLength": 300,
+          "description": "Key insight to carry forward"
+        },
+        "run_id": {
+          "type": "string",
+          "description": "Run that produced this insight"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the insight was captured"
+        }
+      },
+      "additionalProperties": false
+    },
+    "FragmentReference": {
+      "type": "object",
+      "required": ["path", "hash"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Path to the fragment file"
+        },
+        "hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{16,64}$",
+          "description": "Content hash of the fragment"
+        },
+        "version": {
+          "type": "string",
+          "description": "Fragment version if versioned"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValidationResult": {
+      "type": "object",
+      "required": ["valid"],
+      "properties": {
+        "valid": {
+          "type": "boolean",
+          "description": "Whether the prompt plan passed validation"
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ValidationIssue"
+          },
+          "description": "Validation errors (plan should not be used)"
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ValidationIssue"
+          },
+          "description": "Validation warnings (plan can be used with caution)"
+        },
+        "checked_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When validation was performed"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValidationIssue": {
+      "type": "object",
+      "required": ["code", "message"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Z]{2,4}-[0-9]{3}$",
+          "description": "Issue code (e.g., 'PP-001')"
+        },
+        "message": {
+          "type": "string",
+          "description": "Human-readable issue description"
+        },
+        "path": {
+          "type": "string",
+          "description": "JSON path to the problematic field"
+        },
+        "suggestion": {
+          "type": "string",
+          "description": "Suggested fix"
+        }
+      },
+      "additionalProperties": false
+    },
+    "VerificationRequirements": {
+      "type": "object",
+      "description": "Post-execution verification: what must exist for step to be VERIFIED",
+      "properties": {
+        "required_artifacts": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Artifact paths that must exist after execution"
+        },
+        "verification_commands": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/VerificationCommand"
+          },
+          "description": "Commands that must pass for verification"
+        },
+        "gate_status_on_fail": {
+          "type": "string",
+          "enum": ["UNVERIFIED", "BLOCKED"],
+          "default": "UNVERIFIED",
+          "description": "Status to set if verification fails"
+        }
+      },
+      "additionalProperties": false
+    },
+    "VerificationCommand": {
+      "type": "object",
+      "required": ["command", "success_pattern"],
+      "properties": {
+        "command": {
+          "type": "string",
+          "description": "Command to run for verification"
+        },
+        "success_pattern": {
+          "type": "string",
+          "description": "Regex pattern that indicates success"
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "default": 60,
+          "description": "Command timeout in seconds"
+        },
+        "description": {
+          "type": "string",
+          "description": "What this verification checks"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

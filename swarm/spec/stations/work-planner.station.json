@@ -1,0 +1,101 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "work-planner",
+  "version": 1,
+  "title": "Work Planner",
+  "category": "spec",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_write",
+    "allowed_tools": ["Read", "Write", "Grep", "Glob"],
+    "denied_tools": ["Bash", "Edit"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": false
+    },
+    "max_turns": 18,
+    "context_budget": {
+      "total_chars": 180000,
+      "recent_chars": 60000,
+      "older_chars": 20000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Work Planner. Break the chosen design into small, reviewable subtasks with clear dependencies, verification hooks, and rollout/rollback plans. Write subtasks.yaml (machine canonical) and work_plan.md (human view). Do NOT modify code.",
+    "longform_ref": "prompts/agentic_steps/work-planner.md",
+    "tone": "neutral"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "plan/adr.md",
+      "plan/test_plan.md"
+    ],
+    "optional_inputs": [
+      "plan/impact_map.json",
+      "plan/observability_spec.md",
+      "signal/requirements.md",
+      "signal/verification_notes.md",
+      "plan/design_validation.md",
+      "plan/design_options.md",
+      "plan/open_questions.md",
+      "signal/scope_estimate.md",
+      "signal/early_risks.md"
+    ],
+    "required_outputs": [
+      "plan/subtasks.yaml",
+      "plan/work_plan.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/plan/work_plan.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "proposed_next_step"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "plan/subtasks.yaml",
+      "plan/work_plan.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nDecompose the design into subtasks with dependencies and rollout/rollback plan.\n\n## Context\n\n{{#each inputs}}\n- {{this}}\n{{/each}}\n\n## Objective\n\nProduce:\n- subtasks.yaml (machine canonical, schema_version: subtasks_v1)\n- work_plan.md (human view with dependency graph)\n\n## Constraints\n\n- Use stable ST-### identifiers\n- Foundation-first sequencing: infrastructure subtasks before code subtasks\n- Each subtask must have acceptance_criteria and scope_hints\n- Include rollout strategy with observability gates\n- Include rollback plan with irreversible step callouts"
+  },
+  "invariants": [
+    "Write exactly two files: subtasks.yaml and work_plan.md",
+    "Both outputs must agree - subtasks.yaml is source of truth",
+    "Use stable ST-### identifiers (ST-001, ST-002, ...)",
+    "Foundation-first sequencing: infrastructure before code subtasks",
+    "Each subtask must have: id, title, status, depends_on, acceptance_criteria, scope_hints, estimate",
+    "Do NOT modify code"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "loop",
+    "on_blocked": "escalate"
+  }
+}

@@ -1,59 +1,63 @@
-# The Swarm: Six Flows for Agentic SDLC
+# The Swarm: Seven Flows for Agentic SDLC
 
-This document explains the six flows that make up the Swarm—an agentic software development lifecycle that trades compute for human attention. It's designed for both humans reviewing artifacts and agents implementing changes.
+This document explains the seven flows that make up the Swarm—an agentic software development lifecycle that trades compute for human attention. It's designed for both humans reviewing artifacts and agents implementing changes.
 
 ## Table of Contents
 
-1. [What Are the Six Flows?](#what-are-the-six-flows)
+1. [What Are the Seven Flows?](#what-are-the-seven-flows)
 2. [The Governed Loop](#the-governed-loop)
 3. [Flow 1: Signal → Spec](#flow-1-signal--spec-1)
 4. [Flow 2: Spec → Design](#flow-2-spec--design-1)
 5. [Flow 3: Design → Code](#flow-3-design--code-1)
-6. [Flow 4: Code → Gate](#flow-4-code--gate-1)
-7. [Flow 5: Artifact → Prod](#flow-5-artifact--prod-1)
-8. [Flow 6: Prod → Wisdom](#flow-6-prod--wisdom-1)
-9. [Cross-Flow Patterns](#cross-flow-patterns)
-10. [How to Use Flows](#how-to-use-flows)
-11. [For Agents: Reading This Guide](#for-agents-reading-this-guide)
+6. [Flow 4: Draft → Ready (Review)](#flow-4-draft--ready-review)
+7. [Flow 5: Code → Gate](#flow-5-code--gate)
+8. [Flow 6: Artifact → Prod](#flow-6-artifact--prod)
+9. [Flow 7: Prod → Wisdom](#flow-7-prod--wisdom)
+10. [Routing Contract](#routing-contract)
+11. [Cross-Flow Patterns](#cross-flow-patterns)
+12. [How to Use Flows](#how-to-use-flows)
+13. [For Agents: Reading This Guide](#for-agents-reading-this-guide)
 
 ---
 
-## What Are the Six Flows?
+## What Are the Seven Flows?
 
-The Swarm implements the software development lifecycle as six sequential flows, each transforming input into artifacts that the next flow consumes. Think of it as an assembly line where agents are specialized workers at each station:
+The Swarm implements the software development lifecycle as seven sequential flows, each transforming input into artifacts that the next flow consumes. Think of it as an assembly line where agents are specialized workers at each station:
 
 | Flow | Name | Input | Output | Workers |
 |------|------|-------|--------|---------|
 | 1 | Signal → Spec | Raw issue/request | Requirements, BDD scenarios, risk assessment | 6 domain agents + clarifier, risk-analyst |
 | 2 | Spec → Design | Requirements | ADR, API contracts, test plan, observability spec | 8 domain agents + design-critic, risk-analyst |
 | 3 | Design → Code | Architecture decisions | Code, tests, mutation reports, build receipt | 9 domain agents + test/code critics, mutator |
-| 4 | Code → Gate | Build receipt | Merge decision (MERGE/BOUNCE/ESCALATE) | 6 domain agents + contract enforcer, security scanner |
-| 5 | Artifact → Prod | Merge decision | Deployment log, CI status, deployment decision | 3 domain agents + repo-operator, smoke verifier |
-| 6 | Prod → Wisdom | All flow artifacts + production data | Learnings, regression report, feedback actions | 5 domain agents + artifact auditor, learning synthesizer |
+| 4 | Draft → Ready | Draft PR + feedback | Review worklist, fixes applied, Ready PR | pr-feedback-harvester, worklist-writer, fix agents |
+| 5 | Code → Gate | Build receipt + review receipt | Merge decision (MERGE/BOUNCE/ESCALATE) | 6 domain agents + contract enforcer, security scanner |
+| 6 | Artifact → Prod | Merge decision | Deployment log, CI status, deployment decision | 3 domain agents + repo-operator, smoke verifier |
+| 7 | Prod → Wisdom | All flow artifacts + production data | Learnings, regression report, feedback actions | 5 domain agents + artifact auditor, learning synthesizer |
 
-**Key insight**: Each flow is an attention reducer. Flow 1 clarifies the problem early. Flow 2 builds the gravity well (ADR, contracts, tests) so Build doesn't drift. Flows 3-4 produce receipts so humans don't review line-by-line. Flows 5-6 close the loop and feed learnings back upstream.
+**Key insight**: Each flow is an attention reducer. Flow 1 clarifies the problem early. Flow 2 builds the gravity well (ADR, contracts, tests) so Build doesn't drift. Flows 3-4 produce code and handle PR feedback. Flow 5 verifies contracts. Flows 6-7 close the loop and feed learnings back upstream.
 
 ---
 
 ## The Governed Loop
 
-The six flows form a governed development loop:
+The seven flows form a governed development loop:
 
 ```
-Signal → Plan → Build → Gate → Deploy ↘
-  ↑                                  ↓
-  ←←←←←← Wisdom (learnings feed back) ←←
+Signal → Plan → Build → Review → Gate → Deploy ↘
+  ↑                                            ↓
+  ←←←←←←←←←←← Wisdom (learnings feed back) ←←←←←
 ```
 
 **Human gates sit at flow boundaries:**
 - **After Signal**: "Is this the right problem?" → Gate decides whether to proceed to Plan
 - **After Plan**: "Is this the right design?" → Gate decides whether to proceed to Build
-- **After Build**: Flows 3 and 4 produce receipts; humans review artifacts, not every line
+- **After Build**: Code is drafted; Draft PR is created
+- **After Review**: PR feedback is addressed; Draft flips to Ready
 - **After Gate**: "Is this merge-eligible?" → Merge decision determines if Deploy proceeds
 - **After Deploy**: "Is this healthy?" → Deployment decision determines if Wisdom runs
 - **After Wisdom**: "What should we fix next?" → Feedback actions create GitHub issues
 
-**No hard waits**: Flows don't block each other. If Signal is ambiguous, agents document clarification questions and continue. If Design has concerns, design-critic flags them and the orchestrator routes based on severity. Flow 6 always completes and documents learnings; humans decide what to act on.
+**No hard waits**: Flows don't block each other. If Signal is ambiguous, agents document clarification questions and continue. If Design has concerns, design-critic flags them and the orchestrator routes based on severity. Flow 7 always completes and documents learnings; humans decide what to act on.
 
 ---
 
@@ -212,16 +216,69 @@ Signal → Plan → Build → Gate → Deploy ↘
 
 ---
 
-## Flow 4: Code → Gate
+## Flow 4: Draft → Ready (Review)
+
+**Purpose**: Harvest PR feedback from bots and humans, cluster into actionable work items, apply fixes iteratively, and flip Draft PR to Ready when complete. This is the "finishing school" that polishes code before Gate verification.
+
+**When to run**:
+- After Build (Flow 3) creates a Draft PR
+- Whenever PR feedback accumulates
+
+**Inputs** (reads from `RUN_BASE/build/`, PR comments):
+- From Flow 3: `build_receipt.json`, Draft PR
+- PR feedback: bot comments (linters, CI), human review comments
+- From Flow 2: `adr.md`, `ac_matrix.md` (for design-level feedback)
+
+**Outputs** (written to `RUN_BASE/review/`):
+- `pr_feedback.md` — harvested feedback from all sources
+- `pr_feedback_raw.json` — structured feedback data
+- `review_worklist.md` — clustered work items with RW-NNN IDs
+- `review_worklist.json` — machine-readable worklist state
+- `review_actions.md` — log of fixes applied
+- `review_receipt.json` — final review status
+- `pr_status.md` — Draft → Ready transition status
+
+**Agents**:
+- `pr-feedback-harvester` (harvest) — Pull all feedback from PR
+- `review-worklist-writer` (cluster) — Group feedback into actionable work items
+- `test-author`, `code-implementer`, `fixer`, `doc-writer` (fix) — Apply fixes based on work item type
+- `design-optioneer` (design) — Handle fundamental design feedback
+- `test-executor` (verify) — Verify fixes work
+- `pr-commenter` (report) — Post resolution checklist to PR
+- `pr-status-manager` (status) — Flip Draft to Ready when complete
+- `secrets-sanitizer` (gate) — Scan for secrets before commit
+- Cross-cutting: `repo-operator`, `policy-analyst`, `risk-analyst`, `clarifier`
+
+**Key outcomes**:
+- 50 comments → 5-10 clustered Work Items (RW-001, RW-002, etc.)
+- Markdown nits grouped into single RW-MD-SWEEP item
+- Work items categorized by severity: CRITICAL/MAJOR/MINOR/INFO
+- Iterative fix loop: pick batch → fix → checkpoint → re-harvest → repeat
+- PR flips from Draft to Ready when `pending_blocking == 0`
+
+**Microloop pattern**:
+- `pr-feedback-harvester` grabs available feedback (non-blocking)
+- `review-worklist-writer` clusters into work items
+- Fix agents resolve work items based on type
+- `review-worklist-writer` updates worklist status
+- Checkpoint: stage → sanitize → commit/push → re-harvest
+- Exit when no pending blocking items remain
+
+**Example artifact location**: `swarm/runs/ticket-42/review/review_worklist.json`
+
+---
+
+## Flow 5: Code → Gate
 
 **Purpose**: Second-layer verification before merge. Audit that Build receipts are complete, code matches contracts, test coverage meets expectations, and security is acceptable. This is the last chance to catch violations before merging to main. Gate is fast because it's checking contracts, not reviewing code line-by-line.
 
 **When to run**:
-- After Build (Flow 3) is complete
-- Always (Flow 4 is not optional; it's the merge gate)
+- After Review (Flow 4) completes
+- Always (Flow 5 is not optional; it's the merge gate)
 
-**Inputs** (reads from `RUN_BASE/build/`, `RUN_BASE/signal/`, `RUN_BASE/plan/`):
+**Inputs** (reads from `RUN_BASE/build/`, `RUN_BASE/review/`, `RUN_BASE/signal/`, `RUN_BASE/plan/`):
 - From Flow 3: `build_receipt.json`, `self_review.md`, test/code critiques
+- From Flow 4: `review_receipt.json`, `review_worklist.json`
 - From Flow 1: `requirements.md`, `features/*.feature`
 - From Flow 2: `adr.md`, `api_contracts.yaml`, `test_plan.md`
 - Code diffs (via git, Bash)
@@ -247,7 +304,7 @@ Signal → Plan → Build → Gate → Deploy ↘
 - `merge_decision.md` contains clear decision: MERGE, BOUNCE, or ESCALATE
 - If BOUNCE: routed back to Build (logic/test issues) or Plan (design flaws)
 - If ESCALATE: human reviews the receipts and decides
-- If MERGE: code can proceed to Flow 5 (Deploy)
+- If MERGE: code can proceed to Flow 6 (Deploy)
 
 **Decision rules**:
 - **MERGE** if: receipts are complete, contracts are satisfied, coverage is adequate, security is acceptable
@@ -258,16 +315,16 @@ Signal → Plan → Build → Gate → Deploy ↘
 
 ---
 
-## Flow 5: Artifact → Prod
+## Flow 6: Artifact → Prod
 
-**Purpose**: Execute the merge decision. If Gate said MERGE: merge to main, create a release, monitor CI, run smoke tests, and verify health. If Gate said BOUNCE or ESCALATE: log that no merge happened and explain why. Flow 5 always completes and writes receipts—it's not blocked by Gate's decision.
+**Purpose**: Execute the merge decision. If Gate said MERGE: merge to main, create a release, monitor CI, run smoke tests, and verify health. If Gate said BOUNCE or ESCALATE: log that no merge happened and explain why. Flow 6 always completes and writes receipts—it's not blocked by Gate's decision.
 
 **When to run**:
-- After Gate (Flow 4) completes
-- Always (Flow 5 provides audit trail whether or not deploy happens)
+- After Gate (Flow 5) completes
+- Always (Flow 6 provides audit trail whether or not deploy happens)
 
 **Inputs** (reads from `RUN_BASE/gate/`, plus git state):
-- From Flow 4: `merge_decision.md` (determines behavior)
+- From Flow 5: `merge_decision.md` (determines behavior)
 - From Flow 3: `build_receipt.json` (context about what was built)
 - From Flow 2: `observability_spec.md` (health check expectations)
 - Git state: PR branch, target branch (usually `main`), tags
@@ -298,20 +355,21 @@ Signal → Plan → Build → Gate → Deploy ↘
 
 ---
 
-## Flow 6: Prod → Wisdom
+## Flow 7: Prod → Wisdom
 
-**Purpose**: Close the SDLC loop. Analyze all artifacts from Flows 1-5, detect regressions, extract learnings, and create feedback actions (GitHub issues, doc updates, template improvements). This flow feeds back into Flow 1 for future runs.
+**Purpose**: Close the SDLC loop. Analyze all artifacts from Flows 1-6, detect regressions, extract learnings, and create feedback actions (GitHub issues, doc updates, template improvements). This flow feeds back into Flow 1 for future runs.
 
 **When to run**:
-- After Deploy (Flow 5) completes
+- After Deploy (Flow 6) completes
 - Periodically to analyze batches of deployed changes
 
-**Inputs** (reads from all flows: `RUN_BASE/signal/`, `plan/`, `build/`, `gate/`, `deploy/`):
+**Inputs** (reads from all flows: `RUN_BASE/signal/`, `plan/`, `build/`, `review/`, `gate/`, `deploy/`):
 - From Flow 1: `problem_statement.md`, `requirements.md`, `early_risks.md`
 - From Flow 2: `adr.md`, `design_options.md`, `test_plan.md`
 - From Flow 3: `build_receipt.json`, test and code critiques
-- From Flow 4: `merge_decision.md`, verification results
-- From Flow 5: `deployment_decision.md`, CI status
+- From Flow 4: `review_receipt.json`, review worklist outcomes
+- From Flow 5: `merge_decision.md`, verification results
+- From Flow 6: `deployment_decision.md`, CI status
 - Git history and GitHub issues/PRs (via `gh` CLI)
 
 **Outputs** (written to `RUN_BASE/wisdom/`):
@@ -343,6 +401,71 @@ Signal → Plan → Build → Gate → Deploy ↘
 - → Runbooks: incident response improvements based on production issues
 
 **Example artifact location**: `swarm/runs/ticket-42/wisdom/learnings.md`
+
+---
+
+## Routing Contract
+
+The Navigator (orchestrator) controls flow execution via routing decisions. This section documents the canonical routing vocabulary and constraints.
+
+### Routing Decisions
+
+The Navigator uses these routing decisions to control flow progression:
+
+| Decision | Meaning | Example |
+|----------|---------|---------|
+| **CONTINUE** | Proceed on the golden path (next step in flow) | After test-author completes, continue to test-critic |
+| **DETOUR** | Inject a predefined sidequest chain | Inject security-review sidequest before gate |
+| **INJECT_FLOW** | Inject a named pack flow mid-run | Inject compliance-audit flow after plan |
+| **INJECT_NODES** | Inject ad-hoc spec-backed nodes | Add custom validation step not in standard flow |
+| **EXTEND_GRAPH** | Propose graph improvement for Wisdom | Suggest new step to capture missed pattern |
+
+### Suggested Detours (Not Constraints)
+
+Detours are **suggestions, not constraints**. The Navigator can:
+
+- Follow suggested detours when appropriate
+- Ignore suggested detours if context indicates they're unnecessary
+- Go off-road entirely when the situation demands it
+
+**Key principle**: Detours are hints to help the Navigator make good decisions, not guardrails that limit its options. The Navigator has full authority to deviate from suggestions when it has good reason.
+
+### Justification Requirement
+
+When the Navigator makes an off-road move (ignoring suggested detours or taking non-standard paths), it must provide a **justification field** in its routing decision:
+
+```json
+{
+  "decision": "INJECT_NODES",
+  "nodes": ["emergency-rollback-check"],
+  "justification": "Production alert indicates service degradation. Standard gate flow insufficient—injecting emergency rollback verification before proceeding."
+}
+```
+
+**Justification requirements**:
+- **Required for**: DETOUR (when ignoring suggestions), INJECT_FLOW, INJECT_NODES, EXTEND_GRAPH
+- **Not required for**: CONTINUE (standard path progression)
+- **Purpose**: Create evidence trail for why deviation happened
+
+The justification creates an audit trail that Wisdom (Flow 7) can analyze to understand routing patterns and propose graph improvements.
+
+### Prime Directive: Flow Constitutions
+
+Each flow has a **Prime Directive**—a focused constitution that guides Navigator decisions within that flow. The Prime Directive is the ultimate arbiter when routing decisions conflict.
+
+| Flow | Prime Directive |
+|------|-----------------|
+| **Flow 1 (Signal)** | "Clarify the problem. Only detach if signal is physically absent." |
+| **Flow 2 (Plan)** | "Build the gravity well. Only detach if requirements are structurally incomplete." |
+| **Flow 3 (Build)** | "Maximize passing tests. Only detach if build is physically blocked." |
+| **Flow 4 (Review)** | "Address feedback systematically. Only detach if feedback sources are unavailable." |
+| **Flow 5 (Gate)** | "Verify contracts. Only detach if verification is impossible." |
+| **Flow 6 (Deploy)** | "Execute merge decision safely. Only detach if deployment infrastructure fails." |
+| **Flow 7 (Wisdom)** | "Extract learnings. Only detach if artifacts are corrupted or missing." |
+
+**Interpretation**: "Detach" means making a routing decision that exits the standard flow progression (BOUNCE, ESCALATE, or early termination). The Prime Directive defines when such exits are legitimate.
+
+**Example (Flow 3)**: If tests are failing but code can be written, the Navigator should CONTINUE and let test-critic document issues. Only if the build environment itself is broken (missing dependencies, corrupted toolchain) should the Navigator consider detaching.
 
 ---
 
@@ -399,19 +522,19 @@ Gate (Flow 4) may **bounce** work back to Build (Flow 3) or Plan (Flow 2) if iss
 
 ### Feedback Loops: Wisdom → Future Flows
 
-Flow 6 (Wisdom) feeds learnings back to previous flows. These are **recommendations**, not blocking constraints.
+Flow 7 (Wisdom) feeds learnings back to previous flows. These are **recommendations**, not blocking constraints.
 
-**Flow 6 → Flow 3** (Build):
+**Flow 7 → Flow 3** (Build):
 - "Test-author consistently missed edge case X; update the BDD template to flag it"
 - "Mutation tests revealed weak spots in error handling; add examples to test-strategist guide"
 - → Creates GitHub issues for next Build run
 
-**Flow 6 → Flow 2** (Plan):
+**Flow 7 → Flow 2** (Plan):
 - "ADR section Y is hard to follow; update template"
 - "Observability spec didn't capture production pain point Z; add example"
 - → Updates artifacts for next Plan run
 
-**Flow 6 → Flow 1** (Signal):
+**Flow 7 → Flow 1** (Signal):
 - "Problem statements tend to miss non-functional requirements; improve template"
 - "Stakeholder analysis often incomplete; add checklist"
 - → Updates templates for next Signal run
@@ -539,7 +662,7 @@ make flow-studio
 ```
 
 **What you'll see**:
-- Left sidebar: all 6 flows
+- Left sidebar: all 7 flows
 - Center graph: flow structure (steps, agents, connections)
 - Right panel: details for selected step or agent
 
@@ -705,9 +828,10 @@ The Swarm is a governed SDLC where:
 1. **Signal** clarifies the problem early (saves rework downstream)
 2. **Plan** builds the gravity well (ADR, contracts, tests) that constrains Build
 3. **Build** produces code and receipts via adversarial iteration
-4. **Gate** verifies contracts and decides merge eligibility
-5. **Deploy** executes the merge decision and monitors health
-6. **Wisdom** analyzes what happened and feeds learnings back upstream
+4. **Review** harvests PR feedback and applies fixes (Draft → Ready)
+5. **Gate** verifies contracts and decides merge eligibility
+6. **Deploy** executes the merge decision and monitors health
+7. **Wisdom** analyzes what happened and feeds learnings back upstream
 
 Each flow trades compute (tokens, agents iterating) for human attention (clear artifacts, quick gates, no line-by-line reviews). Microloops keep work honest. Bounce-backs keep the system tight. Feedback loops keep the swarm improving.
 

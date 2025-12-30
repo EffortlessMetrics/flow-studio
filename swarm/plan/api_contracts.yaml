@@ -1,0 +1,2270 @@
+openapi: 3.0.3
+info:
+  title: Flow Studio SpecManager API
+  description: |
+    API contracts for the SpecManager service that powers the Flow Studio TypeScript frontend.
+
+    This API provides:
+    - **Spec Management**: CRUD operations for FlowGraphs and StepTemplates
+    - **Validation**: Dry-run validation of spec changes
+    - **Compilation**: Preview PromptPlan compilation from specs
+    - **Run State**: Execution state management with GPS-style detour routing
+    - **Event Streaming**: Server-Sent Events for real-time run updates
+
+    ## Concurrency Model
+
+    All mutable resources use **optimistic concurrency control** via ETags:
+    - GET responses include `ETag` header with resource version hash
+    - PATCH/PUT requests must include `If-Match` header with expected ETag
+    - 409 Conflict returned if resource has been modified
+
+    ## Error Handling
+
+    All errors return `SpecError` with:
+    - `error`: Machine-readable error code (e.g., `FLOW_NOT_FOUND`, `VALIDATION_FAILED`)
+    - `message`: Human-readable description
+    - `details`: Structured error context (optional)
+
+  version: 2.0.0
+  contact:
+    name: Flow Studio Team
+  license:
+    name: MIT
+
+servers:
+  - url: /api
+    description: Local development server
+
+tags:
+  - name: Flows
+    description: Flow graph management
+  - name: Templates
+    description: Step template palette management
+  - name: Validation
+    description: Spec validation and compilation
+  - name: Runs
+    description: Run state and execution management
+  - name: Events
+    description: Real-time event streaming
+
+paths:
+  # ============================================================
+  # FLOW GRAPH ENDPOINTS
+  # ============================================================
+
+  /spec/flows:
+    get:
+      operationId: listFlows
+      summary: List all flow graphs
+      description: |
+        Returns all registered flow graphs with their metadata.
+        Does not include full node/edge data; use GET /spec/flows/{flow_id} for details.
+      tags:
+        - Flows
+      parameters:
+        - name: include_deprecated
+          in: query
+          description: Include deprecated flows in the response
+          schema:
+            type: boolean
+            default: false
+        - name: category
+          in: query
+          description: Filter by flow category
+          schema:
+            type: string
+            enum: [sdlc, teaching, utility, custom]
+      responses:
+        '200':
+          description: List of flow graphs
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: Caching directive (e.g., "max-age=60")
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - flows
+                  - total
+                properties:
+                  flows:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FlowGraphSummary'
+                  total:
+                    type: integer
+                    description: Total number of flows
+              example:
+                flows:
+                  - id: "build-flow"
+                    version: 1
+                    title: "Flow 3 - Build"
+                    flow_number: 3
+                    description: "Transform design artifacts into working code"
+                    node_count: 12
+                    edge_count: 15
+                    updated_at: "2025-12-28T10:00:00Z"
+                total: 6
+
+  /spec/flows/{flow_id}:
+    parameters:
+      - $ref: '#/components/parameters/FlowId'
+
+    get:
+      operationId: getFlow
+      summary: Get a specific flow graph
+      description: |
+        Returns the complete flow graph including all nodes, edges, policy, and subflows.
+        The response conforms to `flow_graph.schema.json`.
+      tags:
+        - Flows
+      responses:
+        '200':
+          description: Flow graph details
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+            Last-Modified:
+              schema:
+                type: string
+                format: date-time
+              description: Last modification timestamp
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlowGraph'
+        '404':
+          description: Flow not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpecError'
+              example:
+                error: "FLOW_NOT_FOUND"
+                message: "Flow 'invalid-flow' does not exist"
+                details:
+                  flow_id: "invalid-flow"
+                  available_flows: ["signal-flow", "plan-flow", "build-flow"]
+
+    patch:
+      operationId: updateFlow
+      summary: Update flow graph (JSON Patch + If-Match)
+      description: |
+        Applies a partial update to the flow graph using JSON Patch (RFC 6902) format.
+
+        **Optimistic Concurrency**: The `If-Match` header must contain the ETag from
+        the most recent GET. If the flow has been modified since, returns 409 Conflict.
+
+        **Validation**: The update is validated against `flow_graph.schema.json` before
+        being applied. If validation fails, returns 400 with validation errors.
+
+        **Common Operations**:
+        - Add a node: `[{"op": "add", "path": "/nodes/-", "value": {...}}]`
+        - Remove a node: `[{"op": "remove", "path": "/nodes/3"}]`
+        - Update node position: `[{"op": "replace", "path": "/nodes/0/ui/position", "value": {"x": 100, "y": 200}}]`
+        - Add an edge: `[{"op": "add", "path": "/edges/-", "value": {...}}]`
+      tags:
+        - Flows
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json-patch+json:
+            schema:
+              $ref: '#/components/schemas/JsonPatch'
+            example:
+              - op: "replace"
+                path: "/nodes/0/ui/position"
+                value:
+                  x: 150
+                  y: 250
+              - op: "add"
+                path: "/nodes/-"
+                value:
+                  node_id: "new-step"
+                  template_id: "code-critic"
+                  ui:
+                    type: "step"
+                    position:
+                      x: 300
+                      y: 300
+      responses:
+        '200':
+          description: Flow updated successfully
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlowGraph'
+        '400':
+          description: Invalid patch or validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '404':
+          description: Flow not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpecError'
+        '409':
+          description: Conflict - flow modified since last read
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpecError'
+              example:
+                error: "ETAG_MISMATCH"
+                message: "Flow has been modified since your last read"
+                details:
+                  expected_etag: "abc123"
+                  current_etag: "def456"
+                  modified_by: "user@example.com"
+                  modified_at: "2025-12-28T10:30:00Z"
+        '412':
+          description: Precondition Failed - If-Match header missing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpecError'
+
+  # ============================================================
+  # STEP TEMPLATE ENDPOINTS
+  # ============================================================
+
+  /spec/templates:
+    get:
+      operationId: listTemplates
+      summary: List all step templates (palette)
+      description: |
+        Returns all available step templates for the drag-and-drop palette.
+        Templates are grouped by category for UI organization.
+      tags:
+        - Templates
+      parameters:
+        - name: category
+          in: query
+          description: Filter by template category
+          schema:
+            type: string
+            enum: [shaping, spec, design, implementation, critic, verification, analytics, reporter, infra, router, custom]
+        - name: tags
+          in: query
+          description: Filter by tags (comma-separated, OR logic)
+          schema:
+            type: string
+          example: "security,testing"
+        - name: include_deprecated
+          in: query
+          description: Include deprecated templates
+          schema:
+            type: boolean
+            default: false
+        - name: flow_id
+          in: query
+          description: Filter to templates allowed in this flow
+          schema:
+            type: string
+          example: "3-build"
+      responses:
+        '200':
+          description: List of step templates
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - templates
+                  - total
+                  - categories
+                properties:
+                  templates:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StepTemplateSummary'
+                  total:
+                    type: integer
+                  categories:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        count:
+                          type: integer
+                        color:
+                          type: string
+                          pattern: '^#[0-9A-Fa-f]{6}$'
+              example:
+                templates:
+                  - id: "code-critic-template"
+                    version: 1
+                    title: "Code Critic"
+                    category: "critic"
+                    tags: ["review", "quality"]
+                    icon: "magnifying-glass"
+                    color_scheme: "critic"
+                total: 42
+                categories:
+                  - name: "critic"
+                    count: 8
+                    color: "#D94A4A"
+                  - name: "implementation"
+                    count: 12
+                    color: "#4A90D9"
+
+  /spec/templates/{template_id}:
+    parameters:
+      - $ref: '#/components/parameters/TemplateId'
+
+    get:
+      operationId: getTemplate
+      summary: Get a specific template
+      description: |
+        Returns the complete step template definition including:
+        - Parameterized objective
+        - I/O overrides
+        - Routing defaults
+        - UI configuration
+        - Parameter schema for the properties panel
+        - Usage constraints
+      tags:
+        - Templates
+      responses:
+        '200':
+          description: Template details
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StepTemplate'
+        '404':
+          description: Template not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpecError'
+
+  # ============================================================
+  # VALIDATION ENDPOINTS
+  # ============================================================
+
+  /spec/validate:
+    post:
+      operationId: validateSpec
+      summary: Dry-run validation
+      description: |
+        Validates spec changes without persisting them.
+
+        **Validation Levels**:
+        - `schema`: JSON Schema validation only
+        - `references`: Schema + reference resolution (stations exist, fragments exist)
+        - `routing`: Schema + references + routing consistency (valid next steps, loop targets)
+        - `full`: All validations including cross-flow dependencies
+
+        Returns structured validation feedback suitable for UI error display.
+      tags:
+        - Validation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidateRequest'
+            examples:
+              flow_validation:
+                summary: Validate a flow graph
+                value:
+                  spec_type: "flow"
+                  spec:
+                    id: "custom-flow"
+                    version: 1
+                    title: "Custom Flow"
+                    flow_number: 3
+                    nodes: []
+                    edges: []
+                  level: "routing"
+              template_validation:
+                summary: Validate a template
+                value:
+                  spec_type: "template"
+                  spec:
+                    id: "custom-template"
+                    version: 1
+                    title: "Custom Template"
+                    station_id: "code-critic"
+                    objective:
+                      template: "Review {{target}} for {{criteria}}"
+                  level: "references"
+      responses:
+        '200':
+          description: Validation result (may contain errors)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationResult'
+              examples:
+                valid:
+                  summary: Validation passed
+                  value:
+                    valid: true
+                    errors: []
+                    warnings:
+                      - code: "VAL-101"
+                        message: "Flow has no terminal node"
+                        path: "/nodes"
+                        severity: "warning"
+                        suggestion: "Add a node with routing_defaults.kind='terminal'"
+                    checked_at: "2025-12-28T10:00:00Z"
+                invalid:
+                  summary: Validation failed
+                  value:
+                    valid: false
+                    errors:
+                      - code: "VAL-001"
+                        message: "Required field 'title' is missing"
+                        path: "/title"
+                        severity: "error"
+                      - code: "VAL-020"
+                        message: "Station 'nonexistent-station' not found"
+                        path: "/nodes/0/template_id"
+                        severity: "error"
+                        suggestion: "Did you mean 'code-critic'?"
+                    warnings: []
+                    checked_at: "2025-12-28T10:00:00Z"
+
+  # ============================================================
+  # COMPILATION ENDPOINTS
+  # ============================================================
+
+  /spec/compile:
+    post:
+      operationId: compileSpec
+      summary: Preview PromptPlan compilation
+      description: |
+        Compiles a flow step into a PromptPlan ready for Claude SDK execution.
+
+        This is a preview/dry-run; it does not execute the step. Use this to:
+        - Preview the compiled system and user prompts
+        - Verify SDK options are correctly resolved
+        - Check traceability metadata
+        - Debug prompt fragment composition
+
+        The response conforms to `prompt_plan.schema.json`.
+      tags:
+        - Validation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompileRequest'
+            example:
+              flow_id: "build-flow"
+              step_id: "author_tests"
+              run_context:
+                run_id: "run-20251228-100000-abc123"
+                run_base: "swarm/runs/preview-run"
+                iteration: 1
+              include_context_pack: true
+      responses:
+        '200':
+          description: Compiled PromptPlan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromptPlan'
+        '400':
+          description: Compilation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '404':
+          description: Flow or step not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpecError'
+
+  # ============================================================
+  # RUN STATE ENDPOINTS
+  # ============================================================
+
+  /runs:
+    post:
+      operationId: createRun
+      summary: Create a new run with initial state
+      tags:
+        - Runs
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRunRequest'
+      responses:
+        '201':
+          description: Run created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunState'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpecError'
+
+    get:
+      operationId: listRuns
+      summary: List runs with optional filtering
+      tags:
+        - Runs
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, running, succeeded, failed, canceled, paused, interrupted]
+        - name: flow_key
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: since
+          in: query
+          description: Filter runs created after this timestamp
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: List of runs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  runs:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RunStateSummary'
+                  total:
+                    type: integer
+                  has_more:
+                    type: boolean
+
+  /runs/{run_id}:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+
+    get:
+      operationId: getRunState
+      summary: Get current run state
+      tags:
+        - Runs
+      responses:
+        '200':
+          description: Current run state
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunState'
+        '404':
+          description: Run not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpecError'
+
+    patch:
+      operationId: updateRunState
+      summary: Update run state (partial update)
+      tags:
+        - Runs
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunStateUpdate'
+      responses:
+        '200':
+          description: Updated run state
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunState'
+        '400':
+          description: Invalid update
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpecError'
+        '409':
+          description: Conflict (state has changed since read)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpecError'
+
+  # ============================================================
+  # RUN EVENT STREAMING
+  # ============================================================
+
+  /runs/{run_id}/events:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+
+    get:
+      operationId: streamRunEvents
+      summary: Stream run events (SSE)
+      description: |
+        Opens a Server-Sent Events (SSE) stream for real-time run updates.
+
+        **Event Types**:
+        - `state_change`: Run status or step changed
+        - `step_started`: Step execution began
+        - `step_completed`: Step execution finished
+        - `handoff_received`: Handoff envelope received
+        - `routing_decision`: Routing decision made
+        - `detour_started`: Detour sequence began
+        - `detour_completed`: Detour sequence finished
+        - `error`: Error occurred
+        - `metrics_update`: Metrics updated
+
+        **Reconnection**: Include `Last-Event-ID` header to resume from a specific event.
+      tags:
+        - Events
+      parameters:
+        - name: Last-Event-ID
+          in: header
+          description: Resume from this event ID
+          schema:
+            type: string
+        - name: events
+          in: query
+          description: Filter event types (comma-separated)
+          schema:
+            type: string
+          example: "state_change,step_completed"
+      responses:
+        '200':
+          description: SSE event stream
+          headers:
+            Content-Type:
+              schema:
+                type: string
+                enum: ["text/event-stream"]
+            Cache-Control:
+              schema:
+                type: string
+                enum: ["no-cache"]
+            Connection:
+              schema:
+                type: string
+                enum: ["keep-alive"]
+          content:
+            text/event-stream:
+              schema:
+                type: string
+              example: |
+                event: state_change
+                id: evt-001
+                data: {"run_id":"run-20251228-100000-abc123","status":"running","current_step_id":"author_tests"}
+
+                event: step_completed
+                id: evt-002
+                data: {"step_id":"author_tests","status":"VERIFIED","duration_ms":45000}
+
+        '404':
+          description: Run not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpecError'
+
+  # ============================================================
+  # RUN CONTROL ENDPOINTS
+  # ============================================================
+
+  /runs/{run_id}/interrupt:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+
+    post:
+      operationId: interruptRun
+      summary: Push an interruption frame onto the interruption stack
+      description: |
+        Triggers a GPS-style detour. The current execution position is saved
+        to the resume stack, and the orchestrator switches to executing the
+        detour steps.
+      tags:
+        - Runs
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InterruptionRequest'
+      responses:
+        '200':
+          description: Interruption accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InterruptionResponse'
+        '400':
+          description: Invalid interruption request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpecError'
+        '409':
+          description: Cannot interrupt (run not running, or higher-priority interruption active)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpecError'
+
+  /runs/{run_id}/resume:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+
+    post:
+      operationId: resumeRun
+      summary: Pop from resume stack and continue execution
+      description: |
+        Completes the current detour and resumes from the saved position.
+        The interruption frame is popped and the resume frame determines
+        where execution continues.
+      tags:
+        - Runs
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResumeRequest'
+      responses:
+        '200':
+          description: Resume successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunState'
+        '400':
+          description: Cannot resume (no resume point, detour incomplete)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpecError'
+
+  /runs/{run_id}/inject:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+
+    post:
+      operationId: injectNode
+      summary: Inject a dynamic node into the flow
+      description: |
+        Adds a step, gate, or other node to be executed during this run.
+        The injection is tracked in injected_nodes[] and can trigger an
+        immediate detour or be scheduled for later execution.
+      tags:
+        - Runs
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InjectionRequest'
+      responses:
+        '200':
+          description: Injection accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InjectionResponse'
+        '400':
+          description: Invalid injection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpecError'
+
+# ============================================================
+# COMPONENTS
+# ============================================================
+
+components:
+  # ----------------------------------------------------------
+  # PARAMETERS
+  # ----------------------------------------------------------
+
+  parameters:
+    FlowId:
+      name: flow_id
+      in: path
+      required: true
+      description: Flow graph identifier (kebab-case)
+      schema:
+        type: string
+        pattern: '^[a-z][a-z0-9-]*$'
+      example: "build-flow"
+
+    TemplateId:
+      name: template_id
+      in: path
+      required: true
+      description: Template identifier (kebab-case)
+      schema:
+        type: string
+        pattern: '^[a-z][a-z0-9-]*$'
+      example: "code-critic-template"
+
+    RunId:
+      name: run_id
+      in: path
+      required: true
+      description: Unique run identifier
+      schema:
+        type: string
+        pattern: '^run-[0-9]{8}-[0-9]{6}-[a-z0-9]{6,8}$'
+      example: "run-20251228-100000-abc123"
+
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: ETag from the most recent GET (for optimistic concurrency)
+      schema:
+        type: string
+      example: '"abc123def456"'
+
+  # ----------------------------------------------------------
+  # HEADERS
+  # ----------------------------------------------------------
+
+  headers:
+    ETag:
+      description: Resource version hash for optimistic concurrency
+      schema:
+        type: string
+      example: '"abc123def456"'
+
+  # ----------------------------------------------------------
+  # SCHEMAS
+  # ----------------------------------------------------------
+
+  schemas:
+    # ========== FLOW SCHEMAS ==========
+
+    FlowGraphSummary:
+      type: object
+      description: Abbreviated flow graph for list views
+      required:
+        - id
+        - version
+        - title
+        - flow_number
+      properties:
+        id:
+          type: string
+          pattern: '^[a-z][a-z0-9-]*$'
+        version:
+          type: integer
+          minimum: 1
+        title:
+          type: string
+        flow_number:
+          type: integer
+          minimum: 1
+          maximum: 7
+        description:
+          type: string
+        node_count:
+          type: integer
+        edge_count:
+          type: integer
+        updated_at:
+          type: string
+          format: date-time
+        deprecated:
+          type: boolean
+          default: false
+        category:
+          type: string
+          enum: [sdlc, teaching, utility, custom]
+
+    FlowGraph:
+      type: object
+      description: |
+        Complete flow graph specification. Conforms to flow_graph.schema.json.
+        Maps 1:1 to React Flow node/edge format while supporting stepwise execution,
+        policy enforcement, and subflow composition.
+      required:
+        - id
+        - version
+        - title
+        - flow_number
+        - nodes
+        - edges
+      properties:
+        id:
+          type: string
+          pattern: '^[a-z][a-z0-9-]*$'
+          description: Unique graph identifier (kebab-case)
+        version:
+          type: integer
+          minimum: 1
+          description: Graph specification version
+        title:
+          type: string
+          maxLength: 120
+        flow_number:
+          type: integer
+          minimum: 1
+          maximum: 7
+          description: SDLC flow number (1=Signal, 2=Plan, etc.)
+        description:
+          type: string
+          maxLength: 1000
+        nodes:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/GraphNode'
+        edges:
+          type: array
+          items:
+            $ref: '#/components/schemas/GraphEdge'
+        policy:
+          $ref: '#/components/schemas/GraphPolicy'
+        subflows:
+          type: array
+          items:
+            $ref: '#/components/schemas/Subflow'
+        defaults:
+          $ref: '#/components/schemas/GraphDefaults'
+        on_complete:
+          $ref: '#/components/schemas/FlowTransition'
+        on_failure:
+          $ref: '#/components/schemas/FlowTransition'
+        metadata:
+          $ref: '#/components/schemas/GraphMetadata'
+
+    GraphNode:
+      type: object
+      required:
+        - node_id
+        - template_id
+      properties:
+        node_id:
+          type: string
+          pattern: '^[a-z][a-z0-9_-]*$'
+        template_id:
+          type: string
+          description: Reference to station template
+        params:
+          type: object
+          properties:
+            objective:
+              type: string
+            scope:
+              type: string
+            inputs:
+              type: array
+              items:
+                type: string
+            outputs:
+              type: array
+              items:
+                type: string
+            context:
+              type: object
+        overrides:
+          type: object
+          properties:
+            sdk:
+              type: object
+              properties:
+                model:
+                  type: string
+                  enum: [haiku, sonnet, opus, inherit]
+                max_turns:
+                  type: integer
+                allowed_tools:
+                  type: array
+                  items:
+                    type: string
+            identity:
+              type: object
+              properties:
+                system_append:
+                  type: string
+                tone:
+                  type: string
+                  enum: [neutral, analytical, critical, supportive]
+        ui:
+          $ref: '#/components/schemas/NodeUI'
+
+    NodeUI:
+      type: object
+      description: React Flow visual configuration
+      properties:
+        position:
+          type: object
+          required:
+            - x
+            - y
+          properties:
+            x:
+              type: number
+            y:
+              type: number
+        type:
+          type: string
+          enum: [step, agent, artifact, subflow, decision, join]
+          default: step
+        label:
+          type: string
+          maxLength: 50
+        color:
+          type: string
+          pattern: '^#[0-9a-fA-F]{6}$'
+        icon:
+          type: string
+        width:
+          type: integer
+          minimum: 50
+          maximum: 400
+        height:
+          type: integer
+          minimum: 30
+          maximum: 200
+        collapsed:
+          type: boolean
+          default: false
+        hidden:
+          type: boolean
+          default: false
+        teaching:
+          type: object
+          properties:
+            highlight:
+              type: boolean
+            note:
+              type: string
+              maxLength: 500
+
+    GraphEdge:
+      type: object
+      required:
+        - edge_id
+        - from
+        - to
+      properties:
+        edge_id:
+          type: string
+          pattern: '^[a-z][a-z0-9_-]*$'
+        from:
+          type: string
+          description: Source node_id
+        to:
+          type: string
+          description: Target node_id
+        from_handle:
+          type: string
+        to_handle:
+          type: string
+        condition:
+          $ref: '#/components/schemas/EdgeCondition'
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 100
+          default: 50
+        type:
+          type: string
+          enum: [sequence, loop, branch, detour, injection, subflow]
+          default: sequence
+        ui:
+          type: object
+          properties:
+            label:
+              type: string
+              maxLength: 50
+            style:
+              type: string
+              enum: [solid, dashed, dotted]
+              default: solid
+            animated:
+              type: boolean
+              default: false
+            color:
+              type: string
+              pattern: '^#[0-9a-fA-F]{6}$'
+            width:
+              type: number
+              minimum: 1
+              maximum: 10
+              default: 2
+
+    EdgeCondition:
+      type: object
+      properties:
+        field:
+          type: string
+          description: Handoff field to evaluate (e.g., 'status')
+        operator:
+          type: string
+          enum: [equals, not_equals, in, not_in, contains, gt, lt, gte, lte, matches]
+          default: equals
+        value:
+          oneOf:
+            - type: string
+            - type: boolean
+            - type: number
+            - type: array
+              items:
+                type: string
+        expression:
+          type: string
+          description: CEL or JSONPath expression for complex conditions
+
+    GraphPolicy:
+      type: object
+      properties:
+        allowed_detours:
+          type: array
+          items:
+            type: object
+        allowed_injections:
+          type: array
+          items:
+            type: object
+        max_depth:
+          type: integer
+          minimum: 1
+          maximum: 20
+          default: 10
+        max_loop_iterations:
+          type: integer
+          minimum: 1
+          maximum: 50
+          default: 5
+        escalation:
+          type: object
+          properties:
+            on_blocked:
+              type: string
+              enum: [human_review, bounce_to_flow, terminate, continue_with_concerns]
+              default: continue_with_concerns
+            max_unverified_streak:
+              type: integer
+              minimum: 1
+              maximum: 10
+              default: 3
+        timeout:
+          type: object
+          properties:
+            node_timeout_seconds:
+              type: integer
+              default: 600
+            flow_timeout_seconds:
+              type: integer
+              default: 3600
+        retry:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+              default: false
+            max_attempts:
+              type: integer
+              default: 2
+
+    Subflow:
+      type: object
+      required:
+        - subflow_id
+        - title
+        - entry_node
+        - exit_nodes
+      properties:
+        subflow_id:
+          type: string
+          pattern: '^[a-z][a-z0-9_-]*$'
+        title:
+          type: string
+          maxLength: 80
+        description:
+          type: string
+          maxLength: 500
+        entry_node:
+          type: string
+        exit_nodes:
+          type: array
+          items:
+            type: string
+          minItems: 1
+        contained_nodes:
+          type: array
+          items:
+            type: string
+        ui:
+          type: object
+          properties:
+            color:
+              type: string
+              pattern: '^#[0-9a-fA-F]{6}$'
+            collapsed_by_default:
+              type: boolean
+              default: false
+
+    GraphDefaults:
+      type: object
+      properties:
+        context_pack:
+          type: object
+          properties:
+            include_upstream_artifacts:
+              type: boolean
+              default: true
+            include_previous_envelopes:
+              type: boolean
+              default: true
+            max_envelopes:
+              type: integer
+              default: 12
+        sdk:
+          type: object
+
+    FlowTransition:
+      type: object
+      properties:
+        next_flow:
+          type: string
+          pattern: '^[0-9]+-[a-z]+$'
+        reason:
+          type: string
+          maxLength: 500
+        pass_artifacts:
+          type: array
+          items:
+            type: string
+
+    GraphMetadata:
+      type: object
+      properties:
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        author:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        cross_cutting_stations:
+          type: array
+          items:
+            type: string
+
+    # ========== TEMPLATE SCHEMAS ==========
+
+    StepTemplateSummary:
+      type: object
+      description: Abbreviated template for palette list
+      required:
+        - id
+        - version
+        - title
+        - station_id
+      properties:
+        id:
+          type: string
+          pattern: '^[a-z][a-z0-9-]*$'
+        version:
+          type: integer
+          minimum: 1
+        title:
+          type: string
+          maxLength: 60
+        description:
+          type: string
+          maxLength: 300
+        station_id:
+          type: string
+        category:
+          type: string
+          enum: [shaping, spec, design, implementation, critic, verification, analytics, reporter, infra, router, custom]
+        tags:
+          type: array
+          items:
+            type: string
+        icon:
+          type: string
+        color_scheme:
+          type: string
+        deprecated:
+          type: boolean
+          default: false
+
+    StepTemplate:
+      type: object
+      description: |
+        Complete step template definition. Conforms to step_template.schema.json.
+        Templates are reusable blueprints that users drag onto the flow canvas.
+      required:
+        - id
+        - version
+        - title
+        - station_id
+        - objective
+      properties:
+        id:
+          type: string
+          pattern: '^[a-z][a-z0-9-]*$'
+        version:
+          type: integer
+          minimum: 1
+        title:
+          type: string
+          maxLength: 60
+        description:
+          type: string
+          maxLength: 300
+        station_id:
+          type: string
+        station_version:
+          type: integer
+        objective:
+          $ref: '#/components/schemas/ParameterizedObjective'
+        io_overrides:
+          type: object
+          properties:
+            additional_inputs:
+              type: array
+              items:
+                type: string
+            additional_outputs:
+              type: array
+              items:
+                type: string
+            remove_inputs:
+              type: array
+              items:
+                type: string
+            remove_outputs:
+              type: array
+              items:
+                type: string
+        routing_defaults:
+          type: object
+          properties:
+            kind:
+              type: string
+              enum: [linear, microloop, branch, terminal]
+              default: linear
+            on_verified:
+              type: string
+              enum: [advance, complete]
+              default: advance
+            on_unverified:
+              type: string
+              enum: [loop, advance_with_concerns, block]
+              default: advance_with_concerns
+            max_iterations:
+              type: integer
+              minimum: 1
+              maximum: 20
+              default: 3
+            exit_on:
+              type: object
+        ui_defaults:
+          type: object
+          properties:
+            icon:
+              type: string
+            color:
+              type: string
+              pattern: '^#[0-9A-Fa-f]{6}$'
+            color_scheme:
+              type: string
+            palette_group:
+              type: string
+            palette_order:
+              type: integer
+            width:
+              type: integer
+              default: 200
+            height:
+              type: integer
+              default: 100
+            show_status_badge:
+              type: boolean
+              default: true
+            show_iteration_count:
+              type: boolean
+              default: false
+        constraints:
+          type: object
+          properties:
+            allowed_flows:
+              type: array
+              items:
+                type: string
+            disallowed_flows:
+              type: array
+              items:
+                type: string
+            requires_predecessor:
+              type: array
+              items:
+                type: string
+            incompatible_with:
+              type: array
+              items:
+                type: string
+            max_instances_per_flow:
+              type: integer
+            singleton:
+              type: boolean
+              default: false
+        parameters:
+          $ref: '#/components/schemas/ParameterSchema'
+        tags:
+          type: array
+          items:
+            type: string
+            maxLength: 30
+        category:
+          type: string
+          enum: [shaping, spec, design, implementation, critic, verification, analytics, reporter, infra, router, custom]
+        deprecated:
+          type: boolean
+          default: false
+        replaced_by:
+          type: string
+
+    ParameterizedObjective:
+      type: object
+      required:
+        - template
+      properties:
+        template:
+          type: string
+          minLength: 10
+          maxLength: 500
+          description: Objective template with {{parameter}} placeholders
+        default_params:
+          type: object
+          additionalProperties:
+            oneOf:
+              - type: string
+              - type: number
+              - type: boolean
+
+    ParameterSchema:
+      type: object
+      description: JSON Schema for user-configurable parameters
+      properties:
+        type:
+          type: string
+          const: object
+        properties:
+          type: object
+          additionalProperties:
+            type: object
+        required:
+          type: array
+          items:
+            type: string
+        ui_order:
+          type: array
+          items:
+            type: string
+
+    # ========== VALIDATION SCHEMAS ==========
+
+    ValidateRequest:
+      type: object
+      required:
+        - spec_type
+        - spec
+      properties:
+        spec_type:
+          type: string
+          enum: [flow, template, station]
+          description: Type of spec being validated
+        spec:
+          type: object
+          description: The spec to validate
+        level:
+          type: string
+          enum: [schema, references, routing, full]
+          default: full
+          description: Validation depth
+        context:
+          type: object
+          description: Additional context for validation
+          properties:
+            flow_id:
+              type: string
+              description: Flow context for template validation
+            existing_templates:
+              type: array
+              items:
+                type: string
+              description: Templates already in the flow (for constraint checking)
+
+    ValidationResult:
+      type: object
+      required:
+        - valid
+        - errors
+        - warnings
+      properties:
+        valid:
+          type: boolean
+          description: Whether the spec passed validation
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationIssue'
+          description: Critical issues that prevent use
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationIssue'
+          description: Non-blocking issues
+        checked_at:
+          type: string
+          format: date-time
+
+    ValidationIssue:
+      type: object
+      required:
+        - code
+        - message
+        - severity
+      properties:
+        code:
+          type: string
+          pattern: '^[A-Z]{2,4}-[0-9]{3}$'
+          description: Issue code (e.g., 'VAL-001')
+        message:
+          type: string
+          description: Human-readable description
+        path:
+          type: string
+          description: JSON path to the problematic field
+        severity:
+          type: string
+          enum: [error, warning, info]
+        suggestion:
+          type: string
+          description: Suggested fix
+        related:
+          type: array
+          items:
+            type: string
+          description: Related paths or resources
+
+    ValidationError:
+      type: object
+      description: Error response for validation failures
+      required:
+        - error
+        - message
+        - validation_result
+      properties:
+        error:
+          type: string
+          example: "VALIDATION_FAILED"
+        message:
+          type: string
+        validation_result:
+          $ref: '#/components/schemas/ValidationResult'
+
+    # ========== COMPILATION SCHEMAS ==========
+
+    CompileRequest:
+      type: object
+      required:
+        - flow_id
+        - step_id
+      properties:
+        flow_id:
+          type: string
+          description: Flow containing the step
+        step_id:
+          type: string
+          description: Step to compile
+        run_context:
+          type: object
+          description: Context for prompt rendering
+          properties:
+            run_id:
+              type: string
+            run_base:
+              type: string
+              description: Base path for artifact resolution
+            iteration:
+              type: integer
+              description: Iteration number (for microloops)
+        include_context_pack:
+          type: boolean
+          default: false
+          description: Include resolved context artifacts
+        template_overrides:
+          type: object
+          description: Override template parameters
+
+    PromptPlan:
+      type: object
+      description: |
+        Compiled output ready for Claude SDK execution.
+        Conforms to prompt_plan.schema.json.
+      required:
+        - system_prompt
+        - user_prompt
+        - output_format
+        - sdk_options
+        - traceability
+      properties:
+        system_prompt:
+          type: object
+          required:
+            - preset
+            - append
+            - combined
+          properties:
+            preset:
+              type: string
+              enum: [default, claude_code, minimal, custom]
+            append:
+              type: string
+            combined:
+              type: string
+            invariants:
+              type: array
+              items:
+                type: string
+            tone:
+              type: string
+              enum: [neutral, analytical, critical, supportive]
+        user_prompt:
+          type: object
+          required:
+            - objective
+            - combined
+          properties:
+            objective:
+              type: string
+            scope:
+              type: string
+            context_section:
+              type: string
+            combined:
+              type: string
+        output_format:
+          type: object
+          required:
+            - handoff_path
+            - required_fields
+          properties:
+            handoff_path:
+              type: string
+            required_fields:
+              type: array
+              items:
+                type: string
+            status_values:
+              type: array
+              items:
+                type: string
+        sdk_options:
+          type: object
+          required:
+            - model
+            - permission_mode
+          properties:
+            model:
+              type: string
+            model_tier:
+              type: string
+              enum: [haiku, sonnet, opus, inherit]
+            permission_mode:
+              type: string
+              enum: [default, bypassPermissions, planMode]
+            tools:
+              type: object
+            max_turns:
+              type: integer
+            sandbox:
+              type: object
+            cwd:
+              type: string
+        traceability:
+          type: object
+          required:
+            - station_id
+            - station_version
+            - flow_id
+            - flow_version
+            - step_id
+            - prompt_hash
+            - compiled_at
+          properties:
+            station_id:
+              type: string
+            station_version:
+              type: integer
+            template_id:
+              type: string
+            template_version:
+              type: integer
+            flow_id:
+              type: string
+            flow_version:
+              type: integer
+            step_id:
+              type: string
+            prompt_hash:
+              type: string
+            compiled_at:
+              type: string
+              format: date-time
+            run_id:
+              type: string
+            iteration:
+              type: integer
+        context_pack:
+          type: object
+          properties:
+            upstream_artifacts:
+              type: array
+              items:
+                type: object
+            previous_envelopes:
+              type: array
+              items:
+                type: object
+            scent_trail:
+              type: array
+              items:
+                type: object
+            total_chars:
+              type: integer
+        validation:
+          type: object
+          properties:
+            valid:
+              type: boolean
+            errors:
+              type: array
+              items:
+                type: object
+            warnings:
+              type: array
+              items:
+                type: object
+
+    # ========== RUN STATE SCHEMAS ==========
+
+    CreateRunRequest:
+      type: object
+      required:
+        - flow_key
+      properties:
+        flow_key:
+          type: string
+          description: Flow to execute
+        capture_spec_versions:
+          type: boolean
+          default: true
+          description: Whether to capture spec hashes at run start
+        annotations:
+          type: object
+          additionalProperties: true
+          description: User-defined annotations
+
+    RunState:
+      type: object
+      description: |
+        Full run state conforming to run_state.schema.json.
+        Durable program counter for stepwise flow execution with GPS-style detour routing support.
+      required:
+        - run_id
+        - flow_key
+        - status
+        - timestamp
+      properties:
+        run_id:
+          type: string
+        flow_key:
+          type: string
+        current_step_id:
+          type: string
+          nullable: true
+        step_index:
+          type: integer
+        status:
+          type: string
+          enum: [pending, running, succeeded, failed, canceled, paused, interrupted]
+        timestamp:
+          type: string
+          format: date-time
+        loop_state:
+          type: object
+          additionalProperties:
+            type: integer
+        handoff_envelopes:
+          type: object
+        current_flow_index:
+          type: integer
+        flow_transition_history:
+          type: array
+          items:
+            type: object
+        interruption_stack:
+          type: array
+          items:
+            $ref: '#/components/schemas/InterruptionFrame'
+        resume_stack:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResumeFrame'
+        spec_versions:
+          $ref: '#/components/schemas/SpecVersions'
+        injected_nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/InjectedNode'
+        routing_cursor:
+          $ref: '#/components/schemas/RoutingCursor'
+        metrics:
+          $ref: '#/components/schemas/RunMetrics'
+        annotations:
+          type: object
+          additionalProperties: true
+
+    RunStateSummary:
+      type: object
+      description: Abbreviated run state for list views
+      properties:
+        run_id:
+          type: string
+        flow_key:
+          type: string
+        current_step_id:
+          type: string
+          nullable: true
+        status:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        steps_completed:
+          type: integer
+        has_active_detour:
+          type: boolean
+
+    RunStateUpdate:
+      type: object
+      description: Partial update to run state
+      properties:
+        status:
+          type: string
+          enum: [pending, running, succeeded, failed, canceled, paused, interrupted]
+        current_step_id:
+          type: string
+        step_index:
+          type: integer
+        annotations:
+          type: object
+          additionalProperties: true
+
+    InterruptionFrame:
+      type: object
+      required:
+        - id
+        - type
+        - timestamp
+        - trigger
+      properties:
+        id:
+          type: string
+          pattern: '^int-[a-z0-9]{8}$'
+        type:
+          type: string
+          enum: [human_injection, policy_enforcement, error_recovery, priority_override, branch_detour, external_event]
+        timestamp:
+          type: string
+          format: date-time
+        trigger:
+          type: object
+          required:
+            - source
+          properties:
+            source:
+              type: string
+              enum: [operator, policy_engine, step_output, external_api, timeout, signal]
+            source_id:
+              type: string
+            payload:
+              type: object
+        detour_steps:
+          type: array
+          items:
+            type: string
+        current_detour_index:
+          type: integer
+          default: 0
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 100
+          default: 50
+        can_abort:
+          type: boolean
+          default: true
+        completion_condition:
+          type: object
+
+    ResumeFrame:
+      type: object
+      required:
+        - flow_key
+        - step_id
+        - step_index
+        - interruption_id
+      properties:
+        flow_key:
+          type: string
+        step_id:
+          type: string
+        step_index:
+          type: integer
+        interruption_id:
+          type: string
+        loop_state_snapshot:
+          type: object
+          additionalProperties:
+            type: integer
+        resume_mode:
+          type: string
+          enum: [continue, retry, skip, conditional]
+          default: continue
+
+    SpecVersions:
+      type: object
+      properties:
+        flow_hash:
+          type: string
+          pattern: '^[a-f0-9]{64}$'
+        station_hashes:
+          type: object
+          additionalProperties:
+            type: string
+        template_hashes:
+          type: object
+          additionalProperties:
+            type: string
+        prompt_hashes:
+          type: object
+          additionalProperties:
+            type: string
+        captured_at:
+          type: string
+          format: date-time
+        drift_detected:
+          type: boolean
+          default: false
+
+    InjectedNode:
+      type: object
+      required:
+        - id
+        - type
+        - injected_at
+        - source
+      properties:
+        id:
+          type: string
+          pattern: '^inj-[a-z0-9]{8}$'
+        type:
+          type: string
+          enum: [step, checkpoint, gate, fork, join, conditional]
+        injected_at:
+          type: string
+          format: date-time
+        source:
+          type: string
+          enum: [operator, policy, api, self_heal, auto_scale]
+        position:
+          type: object
+          properties:
+            relative_to:
+              type: string
+            placement:
+              type: string
+              enum: [before, after, replace, parallel]
+        executed:
+          type: boolean
+          default: false
+        reason:
+          type: string
+
+    RoutingCursor:
+      type: object
+      properties:
+        decision_history:
+          type: array
+          items:
+            type: object
+        pending_branches:
+          type: array
+          items:
+            type: object
+        route_overrides:
+          type: object
+          additionalProperties:
+            type: string
+        blacklisted_steps:
+          type: array
+          items:
+            type: string
+        preferred_route:
+          type: array
+          items:
+            type: string
+
+    RunMetrics:
+      type: object
+      properties:
+        total_duration_ms:
+          type: integer
+          minimum: 0
+        steps_completed:
+          type: integer
+          minimum: 0
+        steps_failed:
+          type: integer
+          minimum: 0
+        steps_skipped:
+          type: integer
+          minimum: 0
+        total_iterations:
+          type: integer
+          minimum: 0
+        detours_taken:
+          type: integer
+          minimum: 0
+        injections_processed:
+          type: integer
+          minimum: 0
+        token_usage:
+          type: object
+          properties:
+            input_tokens:
+              type: integer
+            output_tokens:
+              type: integer
+            total_tokens:
+              type: integer
+        cost_estimate_usd:
+          type: number
+          minimum: 0
+
+    InterruptionRequest:
+      type: object
+      required:
+        - type
+        - trigger
+      properties:
+        type:
+          type: string
+          enum: [human_injection, policy_enforcement, error_recovery, priority_override, branch_detour, external_event]
+        trigger:
+          type: object
+          required:
+            - source
+          properties:
+            source:
+              type: string
+              enum: [operator, policy_engine, step_output, external_api, timeout, signal]
+            source_id:
+              type: string
+            payload:
+              type: object
+        detour_steps:
+          type: array
+          items:
+            type: string
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 100
+          default: 50
+        completion_condition:
+          type: object
+        context:
+          type: object
+          additionalProperties: true
+
+    InterruptionResponse:
+      type: object
+      properties:
+        interruption_id:
+          type: string
+        accepted:
+          type: boolean
+        resume_point:
+          $ref: '#/components/schemas/ResumeFrame'
+        message:
+          type: string
+
+    ResumeRequest:
+      type: object
+      properties:
+        override_resume_mode:
+          type: string
+          enum: [continue, retry, skip]
+        inject_context:
+          type: object
+          additionalProperties: true
+
+    InjectionRequest:
+      type: object
+      required:
+        - type
+        - position
+      properties:
+        type:
+          type: string
+          enum: [step, checkpoint, gate, fork, join, conditional]
+        position:
+          type: object
+          required:
+            - relative_to
+            - placement
+          properties:
+            relative_to:
+              type: string
+            placement:
+              type: string
+              enum: [before, after, replace, parallel]
+        step_definition:
+          type: object
+        gate_definition:
+          type: object
+        trigger_detour:
+          type: boolean
+          default: false
+        ttl_steps:
+          type: integer
+          minimum: 1
+        reason:
+          type: string
+
+    InjectionResponse:
+      type: object
+      properties:
+        injection_id:
+          type: string
+        accepted:
+          type: boolean
+        detour_triggered:
+          type: boolean
+        message:
+          type: string
+
+    # ========== ERROR SCHEMAS ==========
+
+    SpecError:
+      type: object
+      description: Standard error response for spec operations
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          description: Machine-readable error code
+          enum:
+            - FLOW_NOT_FOUND
+            - TEMPLATE_NOT_FOUND
+            - RUN_NOT_FOUND
+            - VALIDATION_FAILED
+            - COMPILATION_FAILED
+            - ETAG_MISMATCH
+            - PRECONDITION_FAILED
+            - INVALID_PATCH
+            - INVALID_REQUEST
+            - CONFLICT
+            - INTERNAL_ERROR
+        message:
+          type: string
+          description: Human-readable error description
+        details:
+          type: object
+          additionalProperties: true
+          description: Additional error context
+
+    JsonPatch:
+      type: array
+      description: JSON Patch document (RFC 6902)
+      items:
+        type: object
+        required:
+          - op
+          - path
+        properties:
+          op:
+            type: string
+            enum: [add, remove, replace, move, copy, test]
+          path:
+            type: string
+            description: JSON Pointer to the target location
+          value:
+            description: Value for add/replace operations
+          from:
+            type: string
+            description: Source path for move/copy operations

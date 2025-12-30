@@ -1,0 +1,278 @@
+# Flow: 3-build
+# Purpose: Design -> Code: Implement via adversarial microloops
+
+id: 3-build
+version: 1
+title: "Flow 3 - Build"
+description: |
+  Transform design artifacts (ADR, contracts) into working code.
+  Uses adversarial microloops between authors and critics.
+  Iterates per AC until tests pass and critics are satisfied.
+  Exit when VERIFIED or no further iteration can help.
+
+defaults:
+  context_pack:
+    include_upstream_artifacts: true
+    include_previous_envelopes: true
+    max_envelopes: 12
+    include_scent_trail: true
+  sdk_overrides: {}
+
+# Macro-level flow routing
+on_complete:
+  next_flow: 4-review
+  reason: "Build complete; proceed to PR review and feedback harvesting"
+
+on_failure:
+  next_flow: 2-plan
+  reason: "Implementation issues may require design changes; bounce to Plan"
+
+steps:
+  # Step 1: Load context
+  - id: load_context
+    station: context-loader
+    objective: |
+      Assemble the working set for implementation.
+      Heavy context loading (20-50k tokens) to surface all relevant code.
+      Create subtask context manifest for downstream agents.
+    inputs:
+      - plan/adr.md
+      - plan/api_contracts.yaml
+      - plan/work_plan.md
+      - plan/ac_matrix.md
+    outputs:
+      - build/subtask_context_manifest.json
+    routing:
+      kind: linear
+      next: author_tests
+    teaching:
+      highlight: true
+      note: "Context loading: surface all relevant code and dependencies"
+
+  # Step 2: Write tests first
+  - id: author_tests
+    station: test-author
+    objective: |
+      Write or update tests based on BDD scenarios and test plan.
+      Tests should initially fail (proving they test real behavior).
+      Scope to current AC from ac_matrix.md.
+    inputs:
+      - plan/test_plan.md
+      - plan/ac_matrix.md
+      - signal/features/*.feature
+      - build/test_critique.md  # If iterating
+    outputs:
+      - build/test_changes_summary.md
+    routing:
+      kind: linear
+      next: critique_tests
+    teaching:
+      highlight: true
+      note: "Test-first: tests should fail before implementation"
+
+  # Step 3: Review tests (microloop)
+  - id: critique_tests
+    station: test-critic
+    objective: |
+      Harsh review of test quality, coverage, and alignment with BDD.
+      Check edge cases, error paths, and assertion quality.
+      Emit routing signal for normalized routing decisions.
+    inputs:
+      - build/test_changes_summary.md
+      - signal/features/*.feature
+      - signal/requirements.md
+    outputs:
+      - build/test_critique.md
+    routing:
+      kind: microloop
+      loop_target: author_tests
+      next: implement
+      exit_on:
+        status:
+          - VERIFIED
+          - verified
+        can_further_iteration_help: false
+      max_iterations: 3
+    teaching:
+      highlight: true
+      note: "MICROLOOP: test-author <-> test-critic until VERIFIED"
+
+  # Step 4: Implement code
+  - id: implement
+    station: code-implementer
+    objective: |
+      Implement code to pass tests and satisfy requirements.
+      Follow ADR decisions and honor API contracts.
+      Add observability hooks per spec.
+    inputs:
+      - build/subtask_context_manifest.json
+      - plan/adr.md
+      - plan/api_contracts.yaml
+      - plan/interface_spec.md
+      - plan/observability_spec.md
+      - build/code_critique.md  # If iterating
+    outputs:
+      - build/impl_changes_summary.md
+    routing:
+      kind: linear
+      next: critique_code
+    teaching:
+      highlight: true
+      note: "Implementation: make tests pass while following ADR"
+
+  # Step 5: Review implementation (microloop)
+  - id: critique_code
+    station: code-critic
+    objective: |
+      Harsh review of implementation against ADR and contracts.
+      Check correctness, edge cases, error handling, security.
+      Emit routing signal for normalized routing decisions.
+    inputs:
+      - build/impl_changes_summary.md
+      - plan/adr.md
+      - plan/api_contracts.yaml
+      - plan/interface_spec.md
+    outputs:
+      - build/code_critique.md
+    routing:
+      kind: microloop
+      loop_target: implement
+      next: run_tests
+      exit_on:
+        status:
+          - VERIFIED
+          - verified
+        can_further_iteration_help: false
+      max_iterations: 4
+    teaching:
+      highlight: true
+      note: "MICROLOOP: implementer <-> critic until VERIFIED"
+
+  # Step 6: Run tests
+  - id: run_tests
+    station: test-executor
+    objective: |
+      Execute test suite for current AC scope.
+      Report AC status in handoff.
+      Capture test output and coverage metrics.
+    inputs:
+      - build/test_changes_summary.md
+      - build/impl_changes_summary.md
+    outputs:
+      - build/test_execution.md
+    routing:
+      kind: branch
+      when:
+        - condition:
+            field: tests_passed
+            operator: equals
+            value: true
+          next: mutate
+        - condition:
+            field: tests_passed
+            operator: equals
+            value: false
+          next: implement
+      default: mutate
+    teaching:
+      note: "Test execution: verify implementation passes tests"
+
+  # Step 7: Mutation testing (hardening)
+  - id: mutate
+    station: mutation-auditor
+    objective: |
+      Run bounded mutation testing on changed files.
+      Identify weak spots in test coverage.
+      Route survivors to fixer.
+    inputs:
+      - build/impl_changes_summary.md
+      - build/test_changes_summary.md
+    outputs:
+      - build/mutation_report.md
+    routing:
+      kind: linear
+      next: fix
+    teaching:
+      note: "Mutation testing: find weak spots in test coverage"
+
+  # Step 8: Apply fixes
+  - id: fix
+    station: fixer
+    objective: |
+      Apply targeted fixes from critics and mutation reports.
+      Address surviving mutants and critique violations.
+      Keep changes scoped to current AC.
+    inputs:
+      - build/code_critique.md
+      - build/test_critique.md
+      - build/mutation_report.md
+    outputs:
+      - build/fix_summary.md
+    routing:
+      kind: linear
+      next: write_docs
+    teaching:
+      note: "Targeted fixes: address critique and mutation findings"
+
+  # Step 9: Update documentation
+  - id: write_docs
+    station: doc-writer
+    objective: |
+      Update documentation for changed code.
+      Keep docs in sync with implementation.
+      Only create docs if explicitly requested.
+    inputs:
+      - build/impl_changes_summary.md
+      - plan/adr.md
+    outputs:
+      - build/doc_updates.md
+    routing:
+      kind: linear
+      next: self_review
+    teaching:
+      note: "Documentation: keep docs in sync with code"
+
+  # Step 10: Self review
+  - id: self_review
+    station: self-reviewer
+    objective: |
+      Final consistency check before commit.
+      Holistic quality assessment with per-dimension verdicts.
+      Identify remaining risks for Gate review.
+    inputs:
+      - build/impl_changes_summary.md
+      - build/test_changes_summary.md
+      - build/code_critique.md
+      - build/test_critique.md
+      - build/fix_summary.md
+      - plan/adr.md
+    outputs:
+      - build/self_review.md
+    routing:
+      kind: linear
+      next: finalize
+    teaching:
+      note: "Self-review: holistic quality assessment"
+
+  # Step 11: Finalize and commit
+  - id: finalize
+    station: build-cleanup
+    objective: |
+      Write build_receipt.json, update ac_status.json, verify all artifacts.
+      Stage changes for commit.
+    inputs:
+      - build/impl_changes_summary.md
+      - build/test_changes_summary.md
+      - build/self_review.md
+    outputs:
+      - build/build_receipt.json
+      - build/ac_status.json
+    routing:
+      kind: terminal
+    teaching:
+      note: "Cleanup: seal the build receipt"
+
+cross_cutting_stations:
+  - clarifier
+  - risk-analyst
+  - repo-operator

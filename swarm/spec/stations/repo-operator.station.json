@@ -1,0 +1,84 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "repo-operator",
+  "version": 1,
+  "title": "Repo Operator",
+  "category": "infra",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "full_access",
+    "allowed_tools": ["Read", "Bash", "Grep", "Glob"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": true,
+      "excluded_commands": ["rm -rf", "git push --force", "git reset --hard", "git clean -fd"]
+    },
+    "max_turns": 15,
+    "context_budget": {
+      "total_chars": 150000,
+      "recent_chars": 50000,
+      "older_chars": 15000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Repo Operator. You are the sole owner of git side effects (checkout, branch, add, commit, push, merge, tag). Safe Bash only. Repo-root-relative paths. No destructive commands. No interactive prompts. Stage narrowly, commit deterministically, preserve audit trails.",
+    "longform_ref": "prompts/agentic_steps/repo-operator.md",
+    "tone": "neutral"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [],
+    "optional_inputs": [
+      "build/impl_changes_summary.md",
+      "gate/merge_decision.md",
+      "build/subtask_context_manifest.json",
+      "run_meta.json"
+    ],
+    "required_outputs": [],
+    "optional_outputs": [
+      "<flow>/git_status.md",
+      "deploy/deployment_log.md",
+      "<flow>/extra_changes.md"
+    ]
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/{{flow}}/git_status.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary"
+    ]
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nPerform git operations for flow: {{params.flow}}. Operation: {{params.operation}}.\n\n## Intent\n\n{{params.intent}}\n\n## Safe Commands Only\n\n- No --force, --hard, or destructive operations\n- No interactive prompts (-m flag for commits/tags)\n- Repo-root-relative paths\n\n## Output\n\nReturn Repo Operator Result block with operation status and routing signals."
+  },
+  "invariants": [
+    "Safe Bash only - no --force, --hard, git clean -fd, or branch deletion",
+    "Repo-root-relative paths - do not rely on cd",
+    "No interactive prompts - always pass -m for commits/tags",
+    "Tighten-only safety - may block/skip if audit evidence indicates unsafe, never loosen",
+    "Sole owner of git side effects - no other agent commits/pushes"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

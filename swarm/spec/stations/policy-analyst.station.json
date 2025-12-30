@@ -1,0 +1,96 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "policy-analyst",
+  "version": 1,
+  "title": "Policy Analyst",
+  "category": "analytics",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_only",
+    "allowed_tools": ["Read", "Grep", "Glob"],
+    "denied_tools": ["Write", "Edit", "Bash"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": false
+    },
+    "max_turns": 15,
+    "context_budget": {
+      "total_chars": 180000,
+      "recent_chars": 60000,
+      "older_chars": 20000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Policy Analyst. Map policy requirements to evidence in the current change. Read-only. No waivers, no code changes, no GitHub posting. Write exactly one file: policy_analysis.md. Policies are constraints, not vibes.",
+    "longform_ref": "prompts/agentic_steps/policy-analyst.md",
+    "tone": "analytical"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "run_meta.json"
+    ],
+    "optional_inputs": [
+      ".runs/index.json",
+      "plan/adr.md",
+      "plan/api_contracts.yaml",
+      "plan/schema.md",
+      "plan/observability_spec.md",
+      "plan/test_plan.md",
+      "plan/work_plan.md",
+      "gate/receipt_audit.md",
+      "gate/contract_compliance.md",
+      "gate/security_scan.md",
+      "gate/coverage_audit.md",
+      "gate/merge_decision.md",
+      "build/impl_changes_summary.md",
+      "build/build_receipt.json"
+    ],
+    "required_outputs": [
+      "<flow>/policy_analysis.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/{{flow}}/policy_analysis.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "routing_signal"
+    ]
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nMap policy requirements to evidence for run: {{params.run_id}}, flow: {{params.flow}}.\n\n## Policy Locations\n\nSearch roots: policies/, docs/policies/, .policies/\nOr use demo-swarm.config.json policy_roots if present.\n\n## Compliance Status\n\n- COMPLIANT: clear evidence supports compliance\n- NON-COMPLIANT: clear evidence indicates violation\n- UNKNOWN: cannot determine\n- NOT-APPLICABLE: not relevant to this change\n\n## Behavior\n\n1. Locate policy corpus\n2. Extract testable requirements (POL-NNN)\n3. Determine applicability\n4. Map to evidence\n5. Classify severity and waiver candidates\n6. Set control-plane routing\n7. Write policy_analysis.md"
+  },
+  "invariants": [
+    "Write exactly one file per invocation: policy_analysis.md",
+    "Do not modify any other files",
+    "Do not run gh for posting (reading local artifacts is fine)",
+    "Do not invent policy requirements - if ambiguous, record as UNKNOWN",
+    "Evidence citation: prefer path:Lx-Ly references",
+    "Never paste secrets or large blocks of policy text"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

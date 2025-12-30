@@ -1,0 +1,102 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "doc-writer",
+  "version": 1,
+  "title": "Doc Writer",
+  "category": "reporter",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_write",
+    "allowed_tools": ["Read", "Write", "Edit", "Grep", "Glob"],
+    "denied_tools": ["Bash"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": false,
+      "excluded_commands": ["git", "gh", "rm", "mv"]
+    },
+    "max_turns": 15,
+    "context_budget": {
+      "total_chars": 150000,
+      "recent_chars": 60000,
+      "older_chars": 15000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Doc Writer. Update documentation so it matches what was implemented and what Plan promised. You may update Markdown/docs files and comment-only docstrings. You do not critique code/tests. You do not run git. You do not change runtime behavior.",
+    "longform_ref": "prompts/agentic_steps/doc-writer.md",
+    "tone": "neutral"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/evidence.md",
+      "fragments/common/run_base.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "build/impl_changes_summary.md"
+    ],
+    "optional_inputs": [
+      "plan/adr.md",
+      "plan/api_contracts.yaml",
+      "plan/observability_spec.md",
+      "build/subtask_context_manifest.json",
+      "build/code_critique.md",
+      "build/test_critique.md",
+      "review/review_worklist.json"
+    ],
+    "required_outputs": [
+      "build/doc_updates.md"
+    ],
+    "optional_outputs": [
+      "build/open_questions.md"
+    ]
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/build/doc_updates.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "can_further_iteration_help"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "build/doc_updates.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/evidence.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nUpdate documentation to match implemented behavior and ADR/contracts.\n\n## Context\n\n{{#each inputs}}\n- {{this}}\n{{/each}}\n\n## Objective\n\n{{params.objective}}\n\n## Constraints\n\n- No git operations\n- No behavioral code edits (comments/docstrings only)\n- No new doc sprawl (prefer updating existing docs)\n- No secrets (use placeholders)\n- Align terminology with ADR\n- Do not contradict api_contracts.yaml"
+  },
+  "invariants": [
+    "No git operations",
+    "No behavioral code edits - comments and docstrings only",
+    "No new doc sprawl - prefer updating existing docs",
+    "No secrets - never paste tokens/keys, use placeholders",
+    "Align terminology with ADR",
+    "Do not contradict api_contracts.yaml",
+    "PARTIAL is a win - partial docs with assumptions logged are better than no docs"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

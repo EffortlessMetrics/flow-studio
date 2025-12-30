@@ -1,0 +1,853 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://flowstudio.dev/schemas/step_template.schema.json",
+  "title": "StepTemplate",
+  "description": "A step template defines a reusable blueprint that users drag onto the flow canvas. Templates reference a station and provide parameterized configuration for common use cases like critics, implementers, and verifiers.",
+  "type": "object",
+  "required": ["id", "version", "title", "station_id", "objective"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "Unique template identifier (kebab-case). Must be globally unique across all templates."
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Template spec version for traceability, migration, and cache invalidation."
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 60,
+      "description": "Human-readable template title displayed in the palette and canvas nodes."
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 300,
+      "description": "Brief description shown in template library tooltips and detail panels."
+    },
+    "station_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "Reference to the underlying station spec that powers this template. The station defines the runtime profile, SDK config, and base I/O contract."
+    },
+    "station_version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Optional pinned station version. If omitted, uses the latest compatible station version."
+    },
+    "objective": {
+      "$ref": "#/definitions/ParameterizedObjective",
+      "description": "Parameterized objective template with placeholder substitution for step-specific goals."
+    },
+    "io_overrides": {
+      "$ref": "#/definitions/IoOverrides",
+      "description": "Modifications to the station's default I/O contract for this template's use case."
+    },
+    "routing_defaults": {
+      "$ref": "#/definitions/RoutingDefaults",
+      "description": "Default routing behavior for steps created from this template."
+    },
+    "ui_defaults": {
+      "$ref": "#/definitions/UiDefaults",
+      "description": "Visual defaults for display in Flow Studio canvas and palette."
+    },
+    "constraints": {
+      "$ref": "#/definitions/TemplateConstraints",
+      "description": "Restrictions on where and how this template can be used within flows."
+    },
+    "parameters": {
+      "$ref": "#/definitions/ParameterSchema",
+      "description": "JSON Schema defining user-configurable parameters shown in UI forms when instantiating the template."
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*$",
+        "maxLength": 30
+      },
+      "uniqueItems": true,
+      "maxItems": 10,
+      "description": "Tags for filtering and discovery in the template library (e.g., 'security', 'testing', 'documentation')."
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "shaping",
+        "spec",
+        "design",
+        "implementation",
+        "critic",
+        "verification",
+        "analytics",
+        "reporter",
+        "infra",
+        "router",
+        "custom"
+      ],
+      "description": "Category for grouping in the template palette. Inherits from station if not specified."
+    },
+    "deprecated": {
+      "type": "boolean",
+      "default": false,
+      "description": "Mark template as deprecated. Deprecated templates are hidden from palette but remain usable in existing flows."
+    },
+    "replaced_by": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "If deprecated, the template ID that replaces this one. Used for migration guidance."
+    }
+  },
+  "definitions": {
+    "ParameterizedObjective": {
+      "type": "object",
+      "required": ["template"],
+      "properties": {
+        "template": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 500,
+          "description": "Objective template string with {{parameter}} placeholders for substitution. Placeholders are replaced with values from default_params or user-provided parameters."
+        },
+        "default_params": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              { "type": "string" },
+              { "type": "number" },
+              { "type": "boolean" }
+            ]
+          },
+          "description": "Default values for template placeholders. Users can override these when instantiating the template."
+        }
+      },
+      "additionalProperties": false
+    },
+    "IoOverrides": {
+      "type": "object",
+      "properties": {
+        "additional_inputs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_./-]+$"
+          },
+          "description": "Additional required inputs beyond the station's defaults. Paths relative to RUN_BASE."
+        },
+        "additional_optional_inputs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_./-]+$"
+          },
+          "description": "Additional optional inputs beyond the station's defaults."
+        },
+        "additional_outputs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_./-]+$"
+          },
+          "description": "Additional required outputs beyond the station's defaults."
+        },
+        "additional_optional_outputs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_./-]+$"
+          },
+          "description": "Additional optional outputs beyond the station's defaults."
+        },
+        "remove_inputs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Station default inputs to remove for this template. Use when the template's use case does not require certain base inputs."
+        },
+        "remove_outputs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Station default outputs to remove for this template."
+        }
+      },
+      "additionalProperties": false
+    },
+    "RoutingDefaults": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["linear", "microloop", "branch", "terminal"],
+          "default": "linear",
+          "description": "Default routing kind for steps created from this template. Linear proceeds to next step; microloop iterates; branch conditionally routes; terminal ends flow."
+        },
+        "on_verified": {
+          "type": "string",
+          "enum": ["advance", "complete"],
+          "default": "advance",
+          "description": "Action when step produces VERIFIED status. 'advance' moves to next step; 'complete' ends the flow."
+        },
+        "on_unverified": {
+          "type": "string",
+          "enum": ["loop", "advance_with_concerns", "block"],
+          "default": "advance_with_concerns",
+          "description": "Action when step produces UNVERIFIED status. 'loop' returns to loop_target; 'advance_with_concerns' continues with documented issues; 'block' halts progression."
+        },
+        "on_blocked": {
+          "type": "string",
+          "enum": ["escalate", "terminate"],
+          "default": "terminate",
+          "description": "Action when step produces BLOCKED status. 'escalate' triggers human review; 'terminate' ends the flow."
+        },
+        "max_iterations": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "default": 3,
+          "description": "Maximum iterations for microloop routing before forcing exit. Acts as a safety limit; actual exit determined by can_further_iteration_help."
+        },
+        "exit_on": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["VERIFIED", "BLOCKED"]
+              },
+              "description": "Exit microloop when handoff status matches any of these values."
+            },
+            "can_further_iteration_help": {
+              "type": "boolean",
+              "description": "Exit microloop when can_further_iteration_help equals this value (typically false to exit when no further iteration would help)."
+            }
+          },
+          "additionalProperties": false,
+          "description": "Conditions that trigger microloop exit. Evaluated after each iteration."
+        }
+      },
+      "additionalProperties": false
+    },
+    "UiDefaults": {
+      "type": "object",
+      "properties": {
+        "icon": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Icon identifier for display (e.g., 'code-review', 'test-tube', 'shield-check'). Uses icon library naming convention."
+        },
+        "icon_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Optional custom icon URL. Overrides icon identifier if provided."
+        },
+        "color": {
+          "type": "string",
+          "pattern": "^#[0-9A-Fa-f]{6}$",
+          "description": "Explicit hex color code for the template node (e.g., '#4A90D9'). Takes precedence over color_scheme."
+        },
+        "color_scheme": {
+          "type": "string",
+          "enum": [
+            "shaping",
+            "spec",
+            "design",
+            "implementation",
+            "critic",
+            "verification",
+            "analytics",
+            "reporter",
+            "infra",
+            "router",
+            "neutral"
+          ],
+          "description": "Named color scheme from the palette. Applied if explicit color not specified."
+        },
+        "palette_group": {
+          "type": "string",
+          "maxLength": 40,
+          "description": "Group name for organizing templates in the palette sidebar (e.g., 'Review', 'Testing', 'Documentation')."
+        },
+        "palette_order": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Sort order within palette group. Lower values appear first."
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 400,
+          "default": 200,
+          "description": "Default node width in pixels on the canvas."
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 60,
+          "maximum": 300,
+          "default": 100,
+          "description": "Default node height in pixels on the canvas."
+        },
+        "show_status_badge": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to show execution status badge on the canvas node."
+        },
+        "show_iteration_count": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether to show iteration count indicator (useful for microloop templates)."
+        }
+      },
+      "additionalProperties": false
+    },
+    "TemplateConstraints": {
+      "type": "object",
+      "properties": {
+        "allowed_flows": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9]+-[a-z]+$"
+          },
+          "description": "Flow IDs where this template can be used (e.g., '3-build', '4-gate'). If omitted, template is allowed in all flows."
+        },
+        "disallowed_flows": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9]+-[a-z]+$"
+          },
+          "description": "Flow IDs where this template cannot be used. Takes precedence over allowed_flows."
+        },
+        "requires_predecessor": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*$"
+          },
+          "description": "Template IDs that must precede this template in the flow. Enforced at flow validation time."
+        },
+        "incompatible_with": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*$"
+          },
+          "description": "Template IDs that cannot appear in the same flow as this template."
+        },
+        "max_instances_per_flow": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum number of instances of this template allowed in a single flow."
+        },
+        "singleton": {
+          "type": "boolean",
+          "default": false,
+          "description": "If true, only one instance allowed per flow. Shorthand for max_instances_per_flow: 1."
+        },
+        "required_station_capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Station capabilities that must be present for this template to function correctly."
+        }
+      },
+      "additionalProperties": false
+    },
+    "ParameterSchema": {
+      "type": "object",
+      "description": "JSON Schema subset for defining user-configurable parameters. Follows JSON Schema draft-07 conventions with UI extensions.",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "object",
+          "default": "object"
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/ParameterDefinition"
+          },
+          "description": "Parameter definitions keyed by parameter name."
+        },
+        "required": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of required parameter names."
+        },
+        "ui_order": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Order of parameters in the UI form. Parameters not listed appear at the end."
+        }
+      },
+      "additionalProperties": false
+    },
+    "ParameterDefinition": {
+      "type": "object",
+      "required": ["type", "title"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["string", "number", "integer", "boolean", "array", "enum"],
+          "description": "Parameter data type."
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 60,
+          "description": "Display label for the parameter in the UI form."
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 300,
+          "description": "Help text shown below the input field."
+        },
+        "default": {
+          "description": "Default value for the parameter."
+        },
+        "placeholder": {
+          "type": "string",
+          "description": "Placeholder text for empty inputs."
+        },
+        "enum": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Allowed values for enum type parameters."
+        },
+        "enum_labels": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Human-readable labels for enum values. Keys are enum values, values are display labels."
+        },
+        "minimum": {
+          "type": "number",
+          "description": "Minimum value for number/integer types."
+        },
+        "maximum": {
+          "type": "number",
+          "description": "Maximum value for number/integer types."
+        },
+        "minLength": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Minimum length for string types."
+        },
+        "maxLength": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum length for string types."
+        },
+        "pattern": {
+          "type": "string",
+          "description": "Regex pattern for string validation."
+        },
+        "items": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["string", "number", "integer"]
+            }
+          },
+          "description": "Item schema for array types."
+        },
+        "ui_widget": {
+          "type": "string",
+          "enum": [
+            "text",
+            "textarea",
+            "number",
+            "slider",
+            "toggle",
+            "select",
+            "multi-select",
+            "file-picker",
+            "path-picker",
+            "code-editor"
+          ],
+          "description": "UI widget to use for this parameter. Inferred from type if not specified."
+        },
+        "ui_group": {
+          "type": "string",
+          "description": "Group name for organizing parameters in collapsible sections."
+        },
+        "ui_collapsed": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether the parameter should be collapsed by default (for advanced options)."
+        },
+        "depends_on": {
+          "type": "object",
+          "properties": {
+            "parameter": {
+              "type": "string",
+              "description": "Name of the parameter this depends on."
+            },
+            "value": {
+              "description": "Value(s) that make this parameter visible."
+            }
+          },
+          "additionalProperties": false,
+          "description": "Conditional visibility based on another parameter's value."
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "id": "code-critic-template",
+      "version": 1,
+      "title": "Code Critic",
+      "description": "Review code changes with harsh, specific feedback. Critics never fix; they produce critique reports that implementers must address.",
+      "station_id": "code-critic",
+      "category": "critic",
+      "tags": ["review", "critic", "quality"],
+      "objective": {
+        "template": "Review {{artifact_type}} for {{quality_criteria}} and produce critique report with clear Status and iteration guidance",
+        "default_params": {
+          "artifact_type": "code changes",
+          "quality_criteria": "correctness, maintainability, and adherence to project conventions"
+        }
+      },
+      "io_overrides": {
+        "additional_inputs": [
+          "build/code_changes.diff"
+        ],
+        "additional_outputs": [
+          "build/code_critique.md"
+        ]
+      },
+      "routing_defaults": {
+        "kind": "microloop",
+        "on_verified": "advance",
+        "on_unverified": "loop",
+        "max_iterations": 5,
+        "exit_on": {
+          "status": ["VERIFIED", "BLOCKED"],
+          "can_further_iteration_help": false
+        }
+      },
+      "ui_defaults": {
+        "icon": "magnifying-glass",
+        "color_scheme": "critic",
+        "palette_group": "Review",
+        "palette_order": 10,
+        "show_status_badge": true,
+        "show_iteration_count": true
+      },
+      "constraints": {
+        "allowed_flows": ["3-build", "4-gate"],
+        "requires_predecessor": ["code-implementer-template"]
+      },
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "quality_criteria": {
+            "type": "string",
+            "title": "Quality Criteria",
+            "description": "What aspects to focus critique on",
+            "default": "correctness, maintainability, and adherence to project conventions",
+            "placeholder": "e.g., security, performance, readability",
+            "ui_widget": "textarea"
+          },
+          "severity_threshold": {
+            "type": "enum",
+            "title": "Minimum Severity to Report",
+            "description": "Only report issues at or above this severity level",
+            "enum": ["info", "warning", "error", "critical"],
+            "enum_labels": {
+              "info": "Info - All findings",
+              "warning": "Warning - Potential issues",
+              "error": "Error - Definite problems",
+              "critical": "Critical - Blockers only"
+            },
+            "default": "warning",
+            "ui_widget": "select"
+          },
+          "include_line_references": {
+            "type": "boolean",
+            "title": "Include Line References",
+            "description": "Include specific file:line references in critique",
+            "default": true,
+            "ui_widget": "toggle"
+          }
+        },
+        "required": ["quality_criteria"],
+        "ui_order": ["quality_criteria", "severity_threshold", "include_line_references"]
+      }
+    },
+    {
+      "id": "code-implementer-template",
+      "version": 1,
+      "title": "Code Implementer",
+      "description": "Implement code changes based on design and test specifications. Produces working code that satisfies acceptance criteria.",
+      "station_id": "code-implementer",
+      "category": "implementation",
+      "tags": ["implementation", "coding", "feature"],
+      "objective": {
+        "template": "Implement {{feature_scope}} according to {{specification_source}}, ensuring all acceptance criteria are met",
+        "default_params": {
+          "feature_scope": "the specified feature",
+          "specification_source": "ADR and test plan"
+        }
+      },
+      "io_overrides": {
+        "additional_inputs": [
+          "plan/adr.md",
+          "plan/test_plan.md",
+          "build/test_critique.md"
+        ],
+        "additional_outputs": [
+          "src/**/*.rs",
+          "build/implementation_notes.md"
+        ]
+      },
+      "routing_defaults": {
+        "kind": "linear",
+        "on_verified": "advance",
+        "on_unverified": "advance_with_concerns"
+      },
+      "ui_defaults": {
+        "icon": "code",
+        "color_scheme": "implementation",
+        "palette_group": "Build",
+        "palette_order": 20,
+        "show_status_badge": true,
+        "width": 220,
+        "height": 110
+      },
+      "constraints": {
+        "allowed_flows": ["3-build"],
+        "requires_predecessor": ["test-author-template"]
+      },
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "feature_scope": {
+            "type": "string",
+            "title": "Feature Scope",
+            "description": "What feature or component to implement",
+            "placeholder": "e.g., user authentication module",
+            "ui_widget": "text"
+          },
+          "implementation_strategy": {
+            "type": "enum",
+            "title": "Implementation Strategy",
+            "description": "Approach to take for implementation",
+            "enum": ["minimal", "complete", "refactor-first"],
+            "enum_labels": {
+              "minimal": "Minimal - Just enough to pass tests",
+              "complete": "Complete - Full feature with edge cases",
+              "refactor-first": "Refactor First - Clean up before adding"
+            },
+            "default": "complete",
+            "ui_widget": "select"
+          },
+          "target_directories": {
+            "type": "array",
+            "title": "Target Directories",
+            "description": "Directories where implementation files should be created",
+            "items": {
+              "type": "string"
+            },
+            "default": ["src/"],
+            "ui_widget": "multi-select"
+          },
+          "follow_existing_patterns": {
+            "type": "boolean",
+            "title": "Follow Existing Patterns",
+            "description": "Analyze and follow existing code patterns in the codebase",
+            "default": true,
+            "ui_widget": "toggle"
+          }
+        },
+        "required": ["feature_scope"],
+        "ui_order": ["feature_scope", "implementation_strategy", "target_directories", "follow_existing_patterns"]
+      }
+    },
+    {
+      "id": "test-critic-template",
+      "version": 1,
+      "title": "Test Critic",
+      "description": "Review test code for coverage, edge cases, and test quality. Ensures tests actually verify the intended behavior.",
+      "station_id": "test-critic",
+      "category": "critic",
+      "tags": ["testing", "review", "critic"],
+      "objective": {
+        "template": "Review tests in {{test_scope}} for {{coverage_focus}} and produce critique with specific improvement recommendations",
+        "default_params": {
+          "test_scope": "all test files",
+          "coverage_focus": "edge cases, error handling, and boundary conditions"
+        }
+      },
+      "io_overrides": {
+        "additional_inputs": [
+          "build/test_changes.diff",
+          "signal/requirements.md"
+        ],
+        "additional_outputs": [
+          "build/test_critique.md"
+        ]
+      },
+      "routing_defaults": {
+        "kind": "microloop",
+        "on_verified": "advance",
+        "on_unverified": "loop",
+        "max_iterations": 3,
+        "exit_on": {
+          "status": ["VERIFIED"],
+          "can_further_iteration_help": false
+        }
+      },
+      "ui_defaults": {
+        "icon": "test-tube-diagonal",
+        "color_scheme": "critic",
+        "palette_group": "Review",
+        "palette_order": 15,
+        "show_status_badge": true,
+        "show_iteration_count": true
+      },
+      "constraints": {
+        "allowed_flows": ["3-build"],
+        "requires_predecessor": ["test-author-template"],
+        "singleton": false,
+        "max_instances_per_flow": 2
+      },
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "coverage_focus": {
+            "type": "string",
+            "title": "Coverage Focus",
+            "description": "What test quality aspects to evaluate",
+            "default": "edge cases, error handling, and boundary conditions",
+            "ui_widget": "textarea"
+          },
+          "require_mutation_resistance": {
+            "type": "boolean",
+            "title": "Require Mutation Resistance",
+            "description": "Flag tests that would not catch common mutations",
+            "default": false,
+            "ui_widget": "toggle",
+            "ui_group": "Advanced"
+          },
+          "minimum_assertion_density": {
+            "type": "integer",
+            "title": "Min Assertions per Test",
+            "description": "Minimum number of assertions expected per test function",
+            "minimum": 1,
+            "maximum": 10,
+            "default": 2,
+            "ui_widget": "slider",
+            "ui_group": "Advanced",
+            "ui_collapsed": true
+          }
+        },
+        "ui_order": ["coverage_focus", "require_mutation_resistance", "minimum_assertion_density"]
+      }
+    },
+    {
+      "id": "security-scanner-template",
+      "version": 1,
+      "title": "Security Scanner",
+      "description": "Scan code for security vulnerabilities, injection risks, and authentication issues. Produces security findings with severity ratings.",
+      "station_id": "security-scanner",
+      "category": "verification",
+      "tags": ["security", "scanning", "gate"],
+      "objective": {
+        "template": "Scan {{scan_scope}} for {{vulnerability_categories}} and produce security report with CVSS-style severity ratings",
+        "default_params": {
+          "scan_scope": "all changed files",
+          "vulnerability_categories": "OWASP Top 10 vulnerabilities"
+        }
+      },
+      "io_overrides": {
+        "additional_outputs": [
+          "gate/security_findings.md",
+          "gate/security_summary.json"
+        ]
+      },
+      "routing_defaults": {
+        "kind": "linear",
+        "on_verified": "advance",
+        "on_unverified": "block"
+      },
+      "ui_defaults": {
+        "icon": "shield-check",
+        "color_scheme": "verification",
+        "palette_group": "Verification",
+        "palette_order": 5,
+        "show_status_badge": true
+      },
+      "constraints": {
+        "allowed_flows": ["4-gate"],
+        "singleton": true
+      },
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "vulnerability_categories": {
+            "type": "enum",
+            "title": "Vulnerability Focus",
+            "description": "Category of vulnerabilities to scan for",
+            "enum": [
+              "OWASP Top 10",
+              "Injection attacks",
+              "Authentication/Authorization",
+              "Data exposure",
+              "Cryptographic issues",
+              "All categories"
+            ],
+            "default": "OWASP Top 10",
+            "ui_widget": "select"
+          },
+          "severity_threshold": {
+            "type": "enum",
+            "title": "Fail Threshold",
+            "description": "Minimum severity that causes gate failure",
+            "enum": ["low", "medium", "high", "critical"],
+            "enum_labels": {
+              "low": "Low - Fail on any finding",
+              "medium": "Medium - Fail on medium+",
+              "high": "High - Fail on high+",
+              "critical": "Critical - Fail on critical only"
+            },
+            "default": "high",
+            "ui_widget": "select"
+          },
+          "include_dependencies": {
+            "type": "boolean",
+            "title": "Scan Dependencies",
+            "description": "Include dependency vulnerability scanning (slower)",
+            "default": true,
+            "ui_widget": "toggle"
+          },
+          "allow_known_issues": {
+            "type": "array",
+            "title": "Allowed Known Issues",
+            "description": "CVE IDs or issue hashes to ignore",
+            "items": {
+              "type": "string"
+            },
+            "default": [],
+            "ui_widget": "multi-select",
+            "ui_group": "Exceptions",
+            "ui_collapsed": true
+          }
+        },
+        "required": ["vulnerability_categories", "severity_threshold"],
+        "ui_order": ["vulnerability_categories", "severity_threshold", "include_dependencies", "allow_known_issues"]
+      }
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+# Auto-bootstrapped from swarm/AGENTS.md
+key: traceability-auditor
+flows:
+  - wisdom
+category: verification
+color: blue
+source: project/user
+short_role: "Run-level coherence and spec traceability → traceability_audit.md."
+model: inherit

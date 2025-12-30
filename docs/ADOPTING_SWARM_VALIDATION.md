@@ -21,7 +21,7 @@ description: Guide for teams who want to bring swarm patterns into their own
 This guide is for **platform/DevEx teams** who want to adopt the swarm
 validator and Flow Studio patterns into an existing repository.
 
-**You don't need to adopt the entire 6-flow swarm** to get value. This
+**You don't need to adopt the entire 7-flow swarm** to get value. This
 document shows minimal, intermediate, and advanced adoption paths.
 
 ---
@@ -475,7 +475,7 @@ uv run uvicorn swarm.tools.flow_studio_fastapi:app --port 5001
 
 ### What you get on top of Intermediate
 
-- All 6 flows: Signal → Plan → Build → Gate → Deploy → Wisdom
+- All 7 flows: Signal → Plan → Build → Review → Gate → Deploy → Wisdom
 - Microloops (test ⇄ critic, code ⇄ critic)
 - Governance gates (receipt audits, policy checks, security scans)
 - Artifact-driven feedback (learnings extracted and fed back to earlier flows)
@@ -533,9 +533,9 @@ Start: "We want swarm patterns"
 
 **A:** Yes. Flow Studio is a web UI that reads YAML configs and run artifacts. It works with any orchestrator (GitHub Actions, custom agents, etc.).
 
-### Q: Do I need to adopt all 6 flows?
+### Q: Do I need to adopt all 7 flows?
 
-**A:** No. Most teams start with Flow 3 (Build) with test/code microloops, then add Gate (Flow 4) for CI. Flows 1–2 (Signal/Plan) and 5–6 (Deploy/Wisdom) are optional add-ons.
+**A:** No. Most teams start with Flow 3 (Build) with test/code microloops, then add Gate (Flow 5) for CI. Flows 1–2 (Signal/Plan) and 6–7 (Deploy/Wisdom) are optional add-ons.
 
 ### Q: What if I want to customize agents for my domain?
 

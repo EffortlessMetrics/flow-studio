@@ -1,0 +1,106 @@
+{
+  "$schema": "../schemas/flow_graph.schema.json",
+  "id": "wisdom",
+  "name": "Wisdom",
+  "version": "1.0.0",
+  "nodes": [
+    {
+      "id": "audit",
+      "agents": ["artifact-auditor"],
+      "role": "Verify all expected artifacts from Flows 1-5 exist -> artifact_audit.md.",
+      "objective": "Validate complete SDLC artifact chain",
+      "teaching_note": "First step validates the SDLC produced complete outputs. Missing artifacts indicate flow failures or skipped steps.",
+      "teaching_highlight": true,
+      "inputs": ["RUN_BASE/signal/", "RUN_BASE/plan/", "RUN_BASE/build/", "RUN_BASE/gate/", "RUN_BASE/deploy/"],
+      "outputs": ["RUN_BASE/wisdom/artifact_audit.md"]
+    },
+    {
+      "id": "regression",
+      "agents": ["regression-analyst"],
+      "role": "Analyze tests, coverage, issues, blame for regressions -> regression_report.md.",
+      "objective": "Detect regressions and test failures",
+      "teaching_note": "Regression analysis looks at test results, coverage changes, and production issues. Did this change introduce problems? Did it fix long-standing issues?",
+      "teaching_highlight": true,
+      "inputs": ["RUN_BASE/wisdom/artifact_audit.md", "RUN_BASE/build/test_changes_summary.md", "RUN_BASE/gate/coverage_audit.md", "RUN_BASE/deploy/deployment_decision.md"],
+      "outputs": ["RUN_BASE/wisdom/regression_report.md"]
+    },
+    {
+      "id": "history",
+      "agents": ["flow-historian"],
+      "role": "Compile timeline of all flow activity -> flow_history.json with timestamps and decisions.",
+      "objective": "Create complete SDLC timeline",
+      "teaching_note": "The flow historian creates a complete timeline of all decisions across all flows. This enables post-mortem analysis and helps identify bottlenecks in the SDLC.",
+      "teaching_highlight": true,
+      "inputs": ["RUN_BASE/signal/", "RUN_BASE/plan/", "RUN_BASE/build/", "RUN_BASE/gate/", "RUN_BASE/deploy/"],
+      "outputs": ["RUN_BASE/wisdom/flow_history.json"]
+    },
+    {
+      "id": "learnings",
+      "agents": ["learning-synthesizer"],
+      "role": "Extract lessons from receipts and critiques -> learnings.md with patterns and recommendations.",
+      "objective": "Extract actionable patterns and learnings",
+      "teaching_note": "Learning synthesis extracts actionable patterns: What requirements patterns led to smooth implementation? What design decisions caused friction? These become recommendations for future work.",
+      "teaching_highlight": true,
+      "inputs": ["RUN_BASE/wisdom/artifact_audit.md", "RUN_BASE/wisdom/regression_report.md", "RUN_BASE/wisdom/flow_history.json", "RUN_BASE/build/build_receipt.json", "RUN_BASE/gate/merge_decision.md"],
+      "outputs": ["RUN_BASE/wisdom/learnings.md"]
+    },
+    {
+      "id": "feedback",
+      "agents": ["feedback-applier"],
+      "role": "Create issues and suggest documentation updates -> feedback_actions.md.",
+      "objective": "Create concrete improvement actions",
+      "teaching_note": "CLOSED LOOP: The feedback applier creates concrete actions - GitHub issues for missing test scenarios, documentation updates, template improvements. This is how the system improves itself.",
+      "teaching_highlight": true,
+      "inputs": ["RUN_BASE/wisdom/learnings.md", "RUN_BASE/wisdom/regression_report.md"],
+      "outputs": ["RUN_BASE/wisdom/feedback_actions.md"]
+    },
+    {
+      "id": "wisdom_report",
+      "agents": ["gh-reporter"],
+      "role": "Post wisdom summary to PR/issue to close the loop.",
+      "objective": "Complete SDLC feedback loop",
+      "teaching_note": "Final step posts a wisdom summary to GitHub, completing the SDLC feedback loop.",
+      "teaching_highlight": true,
+      "inputs": ["RUN_BASE/wisdom/learnings.md", "RUN_BASE/wisdom/feedback_actions.md"],
+      "outputs": ["RUN_BASE/wisdom/wisdom_report_posted.md"]
+    }
+  ],
+  "edges": [
+    {
+      "from": "audit",
+      "to": "regression",
+      "kind": "next"
+    },
+    {
+      "from": "regression",
+      "to": "history",
+      "kind": "next"
+    },
+    {
+      "from": "history",
+      "to": "learnings",
+      "kind": "next"
+    },
+    {
+      "from": "learnings",
+      "to": "feedback",
+      "kind": "next"
+    },
+    {
+      "from": "feedback",
+      "to": "wisdom_report",
+      "kind": "next"
+    }
+  ],
+  "entry_node": "audit",
+  "exit_nodes": ["wisdom_report"],
+  "cross_cutting": ["risk-analyst", "gh-reporter"],
+  "metadata": {
+    "title": "Flow 6 - Prod -> Wisdom (Analysis)",
+    "description": "Analyze artifacts, detect regressions, extract learnings, close feedback loops.",
+    "teaching": {
+      "title": "Production to Wisdom: Learning from Every Change",
+      "summary": "The final flow closes the SDLC loop by analyzing what happened across all flows, detecting regressions, extracting learnings, and creating actionable feedback. Insights from here feed back into Flow 1 (requirements patterns), Flow 2 (design templates), and Flow 3 (test scenarios)."
+    }
+  }
+}

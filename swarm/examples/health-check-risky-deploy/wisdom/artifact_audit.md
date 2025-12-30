@@ -86,7 +86,7 @@ Reviewing artifacts from health-check-risky-deploy run after 24-hour monitoring 
 
 ## Gaps Identified
 
-None. This run demonstrates complete artifact production across all 6 flows.
+None. This run demonstrates complete artifact production across all 7 flows.
 
 ## Recommendations
 

@@ -55,16 +55,16 @@ def test_error_message_follows_standard_format(temp_repo, run_validator):
     Scenario: Error message includes problem description and fix action.
 
     Each error message follows format:
-      | ✗ CHECK_TYPE: location problem statement |
-      | Fix: concrete action (one sentence)      |
+      | [FAIL] CHECK_TYPE: location problem statement |
+      | Fix: concrete action (one sentence)           |
     """
     add_agent_to_registry(temp_repo, "missing-agent")
 
     result = run_validator(temp_repo)
     assert_validator_failed(result)
 
-    # Should have ✗ symbol
-    assert "✗" in result.stderr
+    # Should have [FAIL] marker
+    assert "[FAIL]" in result.stderr
 
     # Should have "Fix:" line
     assert "Fix:" in result.stderr
@@ -94,7 +94,7 @@ def test_multiple_errors_all_reported(temp_repo, run_validator):
     assert_validator_failed(result)
 
     # Should report multiple errors (at least 5)
-    assert result.stderr.count("✗") >= 5
+    assert result.stderr.count("[FAIL]") >= 5
 
 
 def test_errors_printed_to_stderr(temp_repo, run_validator):
@@ -112,7 +112,7 @@ def test_errors_printed_to_stderr(temp_repo, run_validator):
 
     # Errors should be in stderr
     assert len(result.stderr) > 0
-    assert "✗" in result.stderr or "error" in result.stderr.lower()
+    assert "[FAIL]" in result.stderr or "error" in result.stderr.lower()
 
     # stdout should be empty or minimal (no error details)
     # Note: Some validators may print summary to stdout
@@ -480,7 +480,7 @@ def test_debug_output_doesnt_bloat_errors(temp_repo, run_validator):
     result = run_validator(temp_repo, flags=["--debug"])
 
     # Errors should still be identifiable
-    assert "✗" in result.stderr or "error" in result.stderr.lower()
+    assert "[FAIL]" in result.stderr or "error" in result.stderr.lower()
 
 
 # ============================================================================

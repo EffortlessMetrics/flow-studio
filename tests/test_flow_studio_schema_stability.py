@@ -217,7 +217,7 @@ class TestOpenAPISchemaStability:
 
         if added_endpoints:
             print(
-                f"\n✓ Schema additions detected (additive, non-breaking):\n"
+                f"\n[INFO] Schema additions detected (additive, non-breaking):\n"
                 f"  New endpoints: {sorted(added_endpoints)}"
             )
 

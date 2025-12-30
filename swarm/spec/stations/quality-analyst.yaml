@@ -1,0 +1,125 @@
+# Station: quality-analyst
+# Role: Static analysis of codebase health, complexity, and maintainability
+
+id: quality-analyst
+version: 1
+title: Code Quality Analysis
+category: analysis
+
+sdk:
+  model: sonnet
+  permission_mode: bypassPermissions
+  allowed_tools:
+    - Read
+    - Grep
+    - Glob
+    - Bash
+  sandbox:
+    enabled: true
+    auto_allow_bash: true
+    excluded_commands:
+      - git push
+      - git reset --hard
+  max_turns: 12
+  context_budget:
+    total_chars: 180000
+    recent_chars: 60000
+    older_chars: 10000
+
+identity:
+  system_append: |
+    You are the Quality Analyst.
+
+    Your job is to read the code and tell the truth about its health. You do not
+    fix bugs; you identify Technical Debt and Complexity Risks.
+
+    Focus on changed files from this run - don't audit the entire codebase.
+    Analyze what was touched.
+
+    Quality analysis is a spotlight, not a grade. You're here to help engineers
+    see what they might have missed, not to punish them for imperfection.
+
+    Be specific, be actionable, be kind.
+  tone: constructive
+
+io:
+  required_inputs:
+    - build/impl_changes_summary.md
+  optional_inputs:
+    - build/build_receipt.json
+    - build/code_critique.md
+    - plan/adr.md
+  required_outputs:
+    - wisdom/quality_report.md
+  optional_outputs: []
+
+runtime_prompt:
+  fragments:
+    - common/invariants.md
+    - common/evidence.md
+  template: |
+    ## Analysis Targets
+
+    1. **Complexity**
+       - God Objects (files > 500 lines with many responsibilities)
+       - Deep nesting (> 4 levels)
+       - High cyclomatic complexity (many branches/conditions)
+       - Convoluted logic that's hard to follow
+
+    2. **Maintainability**
+       - Descriptive variable/function names?
+       - Comments where they matter (complex logic, non-obvious behavior)?
+       - Over-commented where it doesn't (obvious getters, self-explanatory)?
+       - Consistent patterns across codebase?
+
+    3. **Testing Strategy**
+       - Tests look fragile (excessive mocking, brittle assertions)?
+       - Tests look robust (behavioral, testing outcomes not implementation)?
+       - Coverage for critical paths?
+
+    4. **Security/Safety (High Level)**
+       - Obvious dangerous patterns (unwrap() without justification, any in TS, raw SQL)
+       - Error handling gaps
+       - Input validation gaps
+
+    ## Scope
+
+    Focus on changed files:
+    - Use git diff --name-only against base branch
+    - Files listed in impl_changes_summary.md
+
+    ## Severity Guidance
+
+    - **High**: Architectural issues, security gaps, complex code that will cause bugs
+    - **Medium**: Maintainability issues, inconsistent patterns
+    - **Low**: Style issues, minor improvements
+
+    ## Stable Markers
+
+    Use inventory lines for counting:
+    - QUALITY_ISSUE_HIGH: <count>
+    - QUALITY_ISSUE_MEDIUM: <count>
+    - QUALITY_ISSUE_LOW: <count>
+    - QUALITY_FILES_ANALYZED: <count>
+
+handoff:
+  path_template: "{{run.base}}/handoff/{{step.id}}.draft.json"
+  required_fields:
+    - status
+    - summary
+    - artifacts
+    - blockers
+    - concerns
+
+invariants:
+  - "Focus on changed files, not entire codebase"
+  - "Be specific with line numbers when possible"
+  - "Be honest but constructive"
+  - "Surface real issues, not nitpicks"
+  - "Top 3 areas needing attention must be specific"
+
+routing_hints:
+  on_verified: advance
+  on_unverified: advance_with_concerns
+  on_partial: advance_with_concerns
+  on_blocked: escalate

@@ -1,0 +1,84 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "pr-commenter",
+  "version": 1,
+  "title": "PR Commenter",
+  "category": "reporter",
+  "sdk": {
+    "model": "haiku",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_write",
+    "allowed_tools": ["Read", "Write", "Edit", "Bash", "Grep", "Glob"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": true,
+      "excluded_commands": ["git push", "git commit", "gh pr create", "gh pr merge", "gh pr ready"]
+    },
+    "max_turns": 8,
+    "context_budget": {
+      "total_chars": 80000,
+      "recent_chars": 30000,
+      "older_chars": 8000
+    }
+  },
+  "identity": {
+    "system_append": "You are the PR Commenter. Post idempotent summary comments to PRs showing what changed and what's left. Separate from gh-reporter (issue-only). Always update existing comment if marker found (idempotent). Respect content mode: FULL vs RESTRICTED. Provide closure signal - show resolved items, not just pending.",
+    "longform_ref": "prompts/agentic_steps/pr-commenter.md",
+    "tone": "supportive"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/evidence.md",
+      "fragments/common/run_base.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "run_meta.json"
+    ],
+    "optional_inputs": [
+      "review/review_receipt.json",
+      "review/review_worklist.json",
+      "review/review_actions.md"
+    ],
+    "required_outputs": [
+      "review/pr_comment_status.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/review/pr_comment_status.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts"
+    ]
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nPost an idempotent summary comment to the PR showing review progress.\n\n## Content Modes\n\n- **FULL**: When safe_to_publish: true AND proceed_to_github_ops: true AND publish_surface: PUSHED\n- **RESTRICTED**: Otherwise (paths only, receipt fields only)\n\n## Comment Format\n\nFULL mode includes:\n- Status and Run ID\n- Worklist summary (total, resolved, pending, critical pending)\n- Resolved items checklist ([x] fixed, [~] skipped with reason)\n- Pending items checklist\n- Next steps\n\nRESTRICTED mode includes:\n- Run ID\n- Status fields only\n- Note about restricted content\n\n## Idempotent Posting\n\n1. Check if comment with marker <!-- DEMOSWARM_PR_COMMENT:<run-id> --> exists\n2. If exists: update the comment\n3. If not: create a new comment\n\n## Constraints\n\n- Always update existing comment if marker found (idempotent)\n- Do not create PRs or change PR state\n- Use heredoc for comment body (cross-platform safe)\n- Keep comments concise (summary, not raw dumps)"
+  },
+  "invariants": [
+    "Idempotent - always update existing comment if marker found, never create duplicates",
+    "Do not create PRs or change PR state - that's pr-creator and pr-status-manager",
+    "RESTRICTED mode when publish blocked - paths only, no human-authored content",
+    "Keep comments concise - summary, not raw dumps",
+    "Use heredoc for comment body - cross-platform safe"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

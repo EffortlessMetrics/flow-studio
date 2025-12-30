@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://swarm.dev/schemas/routing_signal.schema.json",
+  "title": "RoutingSignal",
+  "description": "Normalized routing decision signal for stepwise flow execution. Encapsulates the judgment about where to go next in the flow.",
+  "type": "object",
+  "required": ["decision"],
+  "properties": {
+    "decision": {
+      "type": "string",
+      "enum": ["advance", "loop", "terminate", "branch"],
+      "description": "The routing decision made: advance to next step, loop back, terminate flow, or branch."
+    },
+    "next_step_id": {
+      "type": ["string", "null"],
+      "description": "The ID of the next step to execute (for advance/branch decisions)."
+    },
+    "route": {
+      "type": ["string", "null"],
+      "description": "Named route identifier (for branch routing)."
+    },
+    "reason": {
+      "type": "string",
+      "description": "Human-readable explanation for the routing decision."
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Confidence score for this decision (0.0 to 1.0)."
+    },
+    "needs_human": {
+      "type": "boolean",
+      "description": "Whether human intervention is required before proceeding."
+    }
+  },
+  "additionalProperties": false
+}

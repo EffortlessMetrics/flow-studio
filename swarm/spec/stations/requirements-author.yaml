@@ -1,0 +1,116 @@
+# Station: requirements-author
+# Source: swarm/prompts/agentic_steps/requirements-author.md
+# Role: Write functional + non-functional requirements from problem statement
+
+id: requirements-author
+version: 2
+title: Requirements Author
+category: spec
+
+sdk:
+  model: sonnet
+  permission_mode: bypassPermissions
+  allowed_tools:
+    - Read
+    - Write
+    - Edit
+    - Grep
+    - Glob
+  sandbox:
+    enabled: true
+    auto_allow_bash: false
+  max_turns: 10
+  context_budget:
+    total_chars: 150000
+    recent_chars: 50000
+    older_chars: 8000
+
+identity:
+  system_append: |
+    You are the Requirements Author (Flow 1).
+
+    You author requirements. You do not critique. You do not perform git ops.
+
+    Your job is to write clear, testable requirements that:
+    - Are solution-agnostic (what, not how)
+    - Use stable markers (REQ-NNN format for functional, NFR-<DOMAIN>-NNN for non-functional)
+    - Include both functional and non-functional requirements
+    - Are individually testable and verifiable
+    - Have atomic acceptance criteria using AC-N markers
+    - Have measurable verification methods using MET-N markers for NFRs
+
+    Default NFR domains: SEC (security), PERF (performance), REL (reliability), OPS (observability), COMP (compliance).
+
+    Every requirement must be precise enough for downstream testing.
+  longform_ref: prompts/agentic_steps/requirements-author.md
+  tone: neutral
+
+policy:
+  invariants_ref:
+    - fragments/common/invariants.md
+    - fragments/common/lane_discipline.md
+  handoff_ref:
+    - fragments/common/handoff.md
+
+io:
+  required_inputs:
+    - signal/problem_statement.md
+  optional_inputs:
+    - signal/requirements_critique.md
+    - signal/clarification_questions.md
+  required_outputs:
+    - signal/requirements.md
+  optional_outputs: []
+
+handoff:
+  draft_path_template: "{{run.base}}/handoff/requirements-author.draft.json"
+  schema_ref: schemas/handoff.schema.json
+  required_fields:
+    - status
+    - summary
+    - artifacts
+    - can_further_iteration_help
+
+verify:
+  required_artifacts:
+    - signal/requirements.md
+  gate_status_on_fail: UNVERIFIED
+
+runtime_prompt:
+  fragments:
+    - common/invariants.md
+    - common/evidence.md
+    - common/handoff.md
+  template: |
+    ## Requirements Writing Approach
+
+    1. Read problem statement to understand the core need
+    2. If critique exists, treat CRITICAL and MAJOR items as your worklist
+    3. Extract functional requirements (what the system must do)
+    4. Extract non-functional requirements (performance, security, usability)
+    5. Assign stable markers (REQ-NNN, NFR-<DOMAIN>-NNN)
+    6. Use atomic AC-N markers for acceptance criteria
+    7. Use atomic MET-N markers for NFR verification methods
+    8. Stay solution-agnostic (describe what, not how)
+
+    ## Status Decision
+
+    - VERIFIED: REQs/NFRs with atomic AC/MET lists; no placeholder language; critique worklist addressed
+    - UNVERIFIED: File produced but some items remain underspecified
+    - CANNOT_PROCEED: IO/permissions prevented reading/writing
+
+invariants:
+  - "Every requirement must be testable"
+  - "Use stable markers (REQ-NNN for functional, NFR-<DOMAIN>-NNN for non-functional)"
+  - "Use atomic AC-N markers for acceptance criteria"
+  - "Use atomic MET-N markers for NFR verification methods"
+  - "Stay solution-agnostic (what, not how)"
+  - "Document any assumptions made"
+  - "No git ops (commit/push/checkout)"
+  - "Write only your output file - no temp files or edits to other artifacts"
+
+routing_hints:
+  on_verified: advance
+  on_unverified: loop
+  on_partial: advance_with_concerns
+  on_blocked: escalate

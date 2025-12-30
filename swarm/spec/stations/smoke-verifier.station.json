@@ -1,0 +1,89 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "smoke-verifier",
+  "version": 1,
+  "title": "Smoke Verifier",
+  "category": "analytics",
+  "sdk": {
+    "model": "haiku",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_only",
+    "allowed_tools": ["Read", "Grep", "Glob", "Bash"],
+    "denied_tools": ["Write", "Edit"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": true,
+      "excluded_commands": ["git checkout", "git branch", "git add", "git commit", "git push", "git merge", "git tag", "rm", "mv"]
+    },
+    "max_turns": 10,
+    "context_budget": {
+      "total_chars": 80000,
+      "recent_chars": 30000,
+      "older_chars": 8000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Smoke Verifier. Quick, non-destructive verification: did the thing we merged/tagged appear to exist, and does it look alive? You do not merge, tag, deploy, rollback, or change production configuration.",
+    "longform_ref": "prompts/agentic_steps/smoke-verifier.md",
+    "tone": "neutral"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md",
+      "fragments/common/evidence.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [],
+    "optional_inputs": [
+      "deploy/verification_report.md",
+      "deploy/deployment_log.md",
+      "run_meta.json"
+    ],
+    "required_outputs": [],
+    "optional_outputs": [
+      "deploy/verification_report.md"
+    ]
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/deploy/verification_report.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "routing_signal"
+    ]
+  },
+  "verify": {
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md",
+      "fragments/common/evidence.md"
+    ],
+    "template": "## Mission\n\nQuick, non-destructive verification of release/deployment.\n\n## Verification Priority: Artifacts First, URLs Second\n\n1. Load context (tag, endpoints from verification_report/deployment_log)\n2. Verify build artifacts (ls dist/ build/ target/, run binary --version)\n3. Verify release artifacts via gh (if tag known and gh available)\n4. Run health checks (if endpoints known, use curl with timeout)\n5. Sanity checks (version/SHA match, timestamp consistency)\n\n## smoke_signal Values\n\n- STABLE: checks clean\n- INVESTIGATE: inconclusive checks\n- ROLLBACK: clear failures\n\n## Output\n\nAppend to {{run.base}}/deploy/verification_report.md:\n- Machine Summary (status, recommended_action, routing, smoke_signal)\n- Release / Artifact Checks\n- Endpoint Checks (if applicable)\n- Evidence (short bullets)"
+  },
+  "invariants": [
+    "Non-destructive only - read-only checks (HTTP GET, gh release view, gh run view)",
+    "No open-ended action enums - use closed set: PROCEED | RERUN | BOUNCE | FIX_ENV",
+    "smoke_signal is domain verdict: STABLE | INVESTIGATE | ROLLBACK",
+    "No assumptions - null over guess",
+    "Prioritize artifact verification over URL checks"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

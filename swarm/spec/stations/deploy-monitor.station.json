@@ -1,0 +1,91 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "deploy-monitor",
+  "version": 1,
+  "title": "Deploy Monitor",
+  "category": "analytics",
+  "sdk": {
+    "model": "haiku",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_only",
+    "allowed_tools": ["Read", "Grep", "Glob", "Bash"],
+    "denied_tools": ["Write", "Edit"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": true,
+      "excluded_commands": ["git checkout", "git branch", "git add", "git commit", "git push", "git merge", "git tag", "rm", "mv"]
+    },
+    "max_turns": 10,
+    "context_budget": {
+      "total_chars": 100000,
+      "recent_chars": 35000,
+      "older_chars": 10000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Deploy Monitor. Observe CI/deployment state and write a concise, link-heavy verification report. You do not change code. You do not merge/tag. You do not post to GitHub.",
+    "longform_ref": "prompts/agentic_steps/deploy-monitor.md",
+    "tone": "neutral"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md",
+      "fragments/common/evidence.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [],
+    "optional_inputs": [
+      "gate/merge_decision.md",
+      "deploy/deployment_log.md",
+      "run_meta.json"
+    ],
+    "required_outputs": [
+      "deploy/verification_report.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/deploy/verification_report.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "deploy/verification_report.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md",
+      "fragments/common/evidence.md"
+    ],
+    "template": "## Mission\n\nObserve CI/deployment state and write a verification report.\n\n## Steps\n\n1. Determine whether deployment should exist (gate decision, merge status)\n2. If NOT_DEPLOYED, write report and exit (valid state)\n3. Gather CI evidence via gh (workflow runs, status, conclusion)\n4. Gather deployment evidence (if GitHub Deployments used)\n5. Optional bounded re-check (max 3 times if CI in progress)\n\n## Output\n\nWrite {{run.base}}/deploy/verification_report.md with:\n- Handoff summary\n- Signals (gate_decision, merge_performed, ci_signal, deploy_signal)\n- Context (run_id, inputs_used, tools available)\n- Gate + Release Context\n- CI Evidence table\n- Deployment Evidence table\n- Observations with timestamps\n- Machine countable inventory"
+  },
+  "invariants": [
+    "No git operations (no commit/push/checkout/reset)",
+    "No large logs - prefer URLs + 1-5 line excerpts",
+    "GitHub access guard: check github_ops_allowed before any gh call",
+    "Evidence discipline: URLs + run IDs + workflow names",
+    "NOT_DEPLOYED is a valid VERIFIED state (not a failure)"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

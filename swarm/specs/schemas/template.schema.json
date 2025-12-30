@@ -1,0 +1,241 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://flowstudio.dev/schemas/step-template.schema.json",
+  "title": "StepTemplateSpec",
+  "description": "A step template is a UI-ergonomic blueprint for common step patterns. Users drag templates onto the flow canvas; after compilation, the orchestrator sees plain nodes with station_id + objective + routing.",
+  "type": "object",
+  "required": ["id", "name", "station_id"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "Unique template identifier (kebab-case). Used in FlowGraph nodes via template_id."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 60,
+      "description": "Human-readable template name displayed in the palette."
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 300,
+      "description": "Brief description shown in template library tooltips."
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "microloop",
+        "implementation",
+        "critic",
+        "verification",
+        "context",
+        "gate",
+        "artifact",
+        "reporter",
+        "custom"
+      ],
+      "description": "Category for grouping in the template palette."
+    },
+    "station_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "Reference to the underlying station spec that powers this template."
+    },
+    "default_objective": {
+      "type": "string",
+      "maxLength": 500,
+      "description": "Default objective template with {{parameter}} placeholders for substitution."
+    },
+    "parameters": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/ParameterDef"
+      },
+      "description": "User-configurable parameters shown in UI forms when instantiating the template."
+    },
+    "routing_defaults": {
+      "$ref": "#/definitions/RoutingDefaults",
+      "description": "Default routing behavior for steps created from this template."
+    },
+    "io_schema": {
+      "$ref": "#/definitions/IoSchema",
+      "description": "Input/output schema overrides for this template."
+    },
+    "ui": {
+      "$ref": "#/definitions/UiDefaults",
+      "description": "Visual defaults for display in Flow Studio canvas."
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*$"
+      },
+      "uniqueItems": true,
+      "description": "Tags for filtering in the template library."
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1,
+      "description": "Template spec version for traceability."
+    }
+  },
+  "definitions": {
+    "ParameterDef": {
+      "type": "object",
+      "required": ["name", "type"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "Parameter name (snake_case). Used in objective template as {{name}}."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["string", "number", "integer", "boolean", "enum"],
+          "description": "Parameter data type."
+        },
+        "required": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether this parameter must be provided."
+        },
+        "default": {
+          "description": "Default value for the parameter."
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 60,
+          "description": "Display label for the parameter in the UI form."
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Help text shown below the input."
+        },
+        "enum": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Allowed values for enum type parameters."
+        }
+      },
+      "additionalProperties": false
+    },
+    "RoutingDefaults": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["linear", "microloop", "branch", "terminal"],
+          "default": "linear",
+          "description": "Default routing kind for steps created from this template."
+        },
+        "on_verified": {
+          "type": "string",
+          "enum": ["advance", "complete"],
+          "default": "advance",
+          "description": "Action when step produces VERIFIED status."
+        },
+        "on_unverified": {
+          "type": "string",
+          "enum": ["loop", "advance_with_concerns", "block"],
+          "default": "advance_with_concerns",
+          "description": "Action when step produces UNVERIFIED status."
+        },
+        "max_iterations": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "default": 3,
+          "description": "Maximum iterations for microloop routing."
+        },
+        "loop_target": {
+          "type": "string",
+          "description": "Step ID to return to on loop (for microloop routing)."
+        }
+      },
+      "additionalProperties": false
+    },
+    "IoSchema": {
+      "type": "object",
+      "properties": {
+        "additional_inputs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Additional required inputs beyond station defaults."
+        },
+        "additional_outputs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Additional required outputs beyond station defaults."
+        }
+      },
+      "additionalProperties": false
+    },
+    "UiDefaults": {
+      "type": "object",
+      "properties": {
+        "icon": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Icon identifier for display."
+        },
+        "color": {
+          "type": "string",
+          "pattern": "^#[0-9A-Fa-f]{6}$",
+          "description": "Hex color code for the template node."
+        },
+        "palette_group": {
+          "type": "string",
+          "maxLength": 40,
+          "description": "Group name for organizing in the palette."
+        },
+        "palette_order": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Sort order within palette group."
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "id": "microloop-writer",
+      "name": "Microloop Writer",
+      "description": "Writer agent in a microloop pattern. Produces artifacts that will be critiqued.",
+      "category": "microloop",
+      "station_id": "requirements-author",
+      "default_objective": "Write {{artifact_type}} based on {{source_input}}",
+      "parameters": [
+        {
+          "name": "artifact_type",
+          "type": "string",
+          "required": true,
+          "default": "requirements",
+          "title": "Artifact Type",
+          "description": "What type of artifact to produce"
+        },
+        {
+          "name": "source_input",
+          "type": "string",
+          "required": true,
+          "default": "upstream context",
+          "title": "Source Input",
+          "description": "What to base the writing on"
+        }
+      ],
+      "routing_defaults": {
+        "kind": "microloop",
+        "on_verified": "advance",
+        "on_unverified": "loop",
+        "max_iterations": 5
+      }
+    }
+  ]
+}

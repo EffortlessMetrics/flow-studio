@@ -1,4 +1,0 @@
-origin	git@github.com:EffortlessMetrics/flow-studio-staging.git (fetch)
-origin	git@github.com:EffortlessMetrics/flow-studio-staging.git (push)
-upstream	git@github.com:EffortlessMetrics/demo-swarm-dev.git (fetch)
-upstream	git@github.com:EffortlessMetrics/demo-swarm-dev.git (push)

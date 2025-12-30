@@ -1,0 +1,256 @@
+# Flow: 5-gate
+# Purpose: Code -> Artifact: Pre-merge gate to verify receipts, contracts, security, policies
+
+id: 5-gate
+version: 1
+title: "Flow 5 - Gate"
+description: |
+  Pre-merge quality gate. Audit receipts, verify contracts, enforce policies.
+  Second-layer gravity that protects maintainer attention.
+  Gate is a verifier, not a builder. Exit with MERGE or BOUNCE decision.
+  Fix-forward lane for deterministic mechanical drift only.
+
+defaults:
+  context_pack:
+    include_upstream_artifacts: true
+    include_previous_envelopes: true
+    max_envelopes: 6
+    include_scent_trail: true
+  sdk_overrides: {}
+
+# Macro-level flow routing
+on_complete:
+  next_flow: 6-deploy
+  reason: "Gate passed; proceed to deployment"
+
+on_failure:
+  next_flow: 4-review
+  reason: "Gate found issues; bounce to Review for fixes"
+
+steps:
+  # Step 1: Verify Build receipts
+  - id: check_receipts
+    station: receipt-checker
+    objective: |
+      Verify build_receipt.json exists and is complete.
+      Check review_receipt.json for unresolved worklist items.
+      Validate AC completion: ac_completed == ac_total.
+    inputs:
+      - build/build_receipt.json
+      - review/review_receipt.json
+      - build/ac_status.json
+    outputs:
+      - gate/receipt_audit.md
+    routing:
+      kind: linear
+      next: enforce_contracts
+    teaching:
+      highlight: true
+      note: "Receipt audit: verify upstream flows produced expected outputs"
+
+  # Step 2: Check API contracts
+  - id: enforce_contracts
+    station: contract-enforcer
+    objective: |
+      Check API changes vs contracts defined in api_contracts.yaml.
+      Verify no breaking changes without version bump.
+      Document any contract violations or additions.
+    inputs:
+      - gate/receipt_audit.md
+      - plan/api_contracts.yaml
+      - plan/interface_spec.md
+      - build/impl_changes_summary.md
+    outputs:
+      - gate/contract_compliance.md
+    routing:
+      kind: linear
+      next: scan_security
+    teaching:
+      note: "Contract check: are API changes backward compatible"
+
+  # Step 3: Security scan
+  - id: scan_security
+    station: security-scanner
+    objective: |
+      Verify security findings from earlier flows were addressed.
+      Checkpoint scan, not full SAST re-run.
+      Document any remaining security concerns.
+    inputs:
+      - gate/receipt_audit.md
+      - build/impl_changes_summary.md
+    outputs:
+      - gate/security_scan.md
+    routing:
+      kind: linear
+      next: enforce_coverage
+    teaching:
+      highlight: true
+      note: "Security verification: check prior findings were addressed"
+
+  # Step 4: Coverage enforcement
+  - id: enforce_coverage
+    station: coverage-enforcer
+    objective: |
+      Verify test coverage meets expectations from test_plan.md.
+      Read coverage results, don't re-run.
+      Document any coverage gaps.
+    inputs:
+      - gate/receipt_audit.md
+      - plan/test_plan.md
+      - build/test_changes_summary.md
+    outputs:
+      - gate/coverage_audit.md
+    routing:
+      kind: linear
+      next: fix_gate_issues
+    teaching:
+      note: "Coverage check: are new paths tested"
+
+  # Step 5: Mechanical fixes report (no mutations)
+  - id: fix_gate_issues
+    station: gate-fixer
+    objective: |
+      Identify mechanical issues: lint, format, docstrings, typos.
+      Emit fix-forward plan if eligible.
+      DO NOT mutate code - report only.
+    inputs:
+      - gate/receipt_audit.md
+      - gate/contract_compliance.md
+      - gate/security_scan.md
+      - gate/coverage_audit.md
+    outputs:
+      - gate/gate_fix_summary.md
+    routing:
+      kind: branch
+      when:
+        - condition:
+            field: fix_forward_eligible
+            operator: equals
+            value: true
+          next: fix_forward
+        - condition:
+            field: fix_forward_eligible
+            operator: equals
+            value: false
+          next: traceability_audit
+      default: traceability_audit
+    teaching:
+      note: "Mechanical issues report: identify lint/format/docs issues"
+
+  # Step 6: Fix-forward runner (conditional)
+  - id: fix_forward
+    station: fix-forward-runner
+    objective: |
+      Execute fix-forward plan for deterministic mechanical drift.
+      Runner-bounded: no git side effects.
+      Confirm via rerun receipt-checker + gate-fixer.
+    inputs:
+      - gate/gate_fix_summary.md
+    outputs:
+      - gate/fix_forward_report.md
+    routing:
+      kind: linear
+      next: traceability_audit
+    teaching:
+      note: "Fix-forward: apply mechanical fixes only"
+
+  # Step 7: Traceability audit
+  - id: traceability_audit
+    station: traceability-auditor
+    objective: |
+      Verify run-level coherence: receipts, index, GitHub markers.
+      Check spec traceability: REQ -> BDD -> Tests -> Code.
+    inputs:
+      - gate/receipt_audit.md
+      - gate/contract_compliance.md
+    outputs:
+      - gate/traceability_audit.md
+    routing:
+      kind: linear
+      next: assess_risk
+    teaching:
+      note: "Traceability: verify end-to-end coherence"
+
+  # Step 8: Risk assessment
+  - id: assess_risk
+    station: risk-analyst
+    objective: |
+      Assess deployment risk based on all gate findings.
+      Compare predicted risks from Signal vs actual findings.
+    inputs:
+      - gate/receipt_audit.md
+      - gate/security_scan.md
+      - gate/coverage_audit.md
+      - signal/early_risks.md
+    outputs:
+      - gate/risk_assessment.md
+    routing:
+      kind: linear
+      next: check_policy
+    teaching:
+      note: "Risk assessment: deployment risk based on all findings"
+
+  # Step 9: Policy compliance
+  - id: check_policy
+    station: policy-analyst
+    objective: |
+      Verify policy compliance for merge.
+      Check organizational and regulatory requirements.
+    inputs:
+      - gate/receipt_audit.md
+      - gate/security_scan.md
+      - gate/coverage_audit.md
+    outputs:
+      - gate/policy_analysis.md
+    routing:
+      kind: linear
+      next: decide_merge
+    teaching:
+      note: "Policy check: verify organizational compliance"
+
+  # Step 10: Merge decision
+  - id: decide_merge
+    station: merge-decider
+    objective: |
+      Synthesize all verification results into final decision.
+      Output: MERGE (proceed to deploy) or BOUNCE (with reason).
+      BOUNCE reasons: NEEDS_HUMAN_REVIEW, FIX_REQUIRED, POLICY_BLOCK.
+    inputs:
+      - gate/receipt_audit.md
+      - gate/contract_compliance.md
+      - gate/security_scan.md
+      - gate/coverage_audit.md
+      - gate/gate_fix_summary.md
+      - gate/traceability_audit.md
+      - gate/risk_assessment.md
+      - gate/policy_analysis.md
+    outputs:
+      - gate/merge_decision.md
+    routing:
+      kind: linear
+      next: finalize
+    teaching:
+      highlight: true
+      note: "Final verdict: MERGE or BOUNCE with rationale"
+
+  # Step 11: Finalize and write receipt
+  - id: finalize
+    station: gate-cleanup
+    objective: |
+      Write gate_receipt.json, update index.json.
+      Compute counts mechanically.
+    inputs:
+      - gate/merge_decision.md
+      - gate/receipt_audit.md
+    outputs:
+      - gate/gate_receipt.json
+      - gate/cleanup_report.md
+    routing:
+      kind: terminal
+    teaching:
+      note: "Cleanup: seal the gate receipt"
+
+cross_cutting_stations:
+  - risk-analyst
+  - policy-analyst
+  - repo-operator

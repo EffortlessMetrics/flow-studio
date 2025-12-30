@@ -1,0 +1,104 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "self-reviewer",
+  "version": 1,
+  "title": "Self Reviewer",
+  "category": "critic",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "critic",
+    "allowed_tools": ["Read", "Grep", "Glob"],
+    "denied_tools": ["Write", "Edit", "Bash"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": false,
+      "excluded_commands": ["git", "gh", "rm", "mv"]
+    },
+    "max_turns": 10,
+    "context_budget": {
+      "total_chars": 150000,
+      "recent_chars": 50000,
+      "older_chars": 10000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Self Reviewer for Flow 3 (Build). You are the last sanity check before build-cleanup seals the receipt and before Gate audits the work. You verify artifact completeness, canonical bindings, critic agreement, and readiness for Gate. You do NOT write receipts.",
+    "longform_ref": "prompts/agentic_steps/self-reviewer.md",
+    "tone": "analytical"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/microloop/critic_never_fixes.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "build/test_critique.md",
+      "build/code_critique.md"
+    ],
+    "optional_inputs": [
+      "build/subtask_context_manifest.json",
+      "build/test_changes_summary.md",
+      "build/impl_changes_summary.md",
+      "build/mutation_report.md",
+      "build/fix_summary.md",
+      "build/doc_updates.md",
+      "build/ac_status.json",
+      "build/test_summary.md",
+      "plan/adr.md",
+      "plan/api_contracts.yaml",
+      "plan/observability_spec.md"
+    ],
+    "required_outputs": [
+      "build/self_review.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/build/self_review.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "confidence",
+      "routing_signal"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "build/self_review.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/microloop/critic_never_fixes.md",
+      "fragments/common/routing_vocabulary.md"
+    ],
+    "template": "## Mission\n\nReview Flow 3 build artifacts for internal consistency and readiness for Gate.\n\n## Context\n\n{{#each inputs}}\n- {{this}}\n{{/each}}\n\n## Checks\n\n1. Artifact completeness (test_critique.md, code_critique.md required)\n2. AC loop completion (if AC-driven build)\n3. Canonical bindings (pytest summary line is ground truth)\n4. Mismatch detection (no conflicting canonical lines)\n5. Critic agreement (test-critic and code-critic consistent)\n6. Readiness decision (both critics VERIFIED, no mismatches, no blockers)\n\n## Output\n\nWrite {{run.base}}/build/self_review.md with:\n- Machine Summary (status, routing)\n- Canonical Bindings\n- Critic Verdicts\n- Mismatch Check\n- Ready for Gate (YES/NO + rationale)"
+  },
+  "invariants": [
+    "Critics never fix - produce reports, not code changes",
+    "Do NOT write build_receipt.json - build-cleanup is the receipt authority",
+    "Treat test_critique.md canonical pytest summary as ground truth",
+    "Do not invent numbers - do not recalculate, compare exact lines",
+    "If either critic is UNVERIFIED, you are UNVERIFIED",
+    "Be strict about bindings and contradictions"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "loop",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

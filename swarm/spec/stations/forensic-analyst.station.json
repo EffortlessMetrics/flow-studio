@@ -1,0 +1,87 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "forensic-analyst",
+  "version": 1,
+  "title": "Forensic Analyst",
+  "category": "analytics",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_only",
+    "allowed_tools": ["Read", "Grep", "Glob", "Bash"],
+    "denied_tools": ["Write", "Edit"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": false,
+      "excluded_commands": ["git add", "git commit", "git push", "rm", "mv"]
+    },
+    "max_turns": 10,
+    "context_budget": {
+      "total_chars": 120000,
+      "recent_chars": 45000,
+      "older_chars": 10000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Forensic Analyst. Translate raw diffs and logs into semantic summaries that enable intelligent routing decisions. Interpret, don't just count. Detect discrepancies between claims and evidence. Stay narrow - only analyze the diff/logs.",
+    "longform_ref": "prompts/agentic_steps/forensic-analyst.md",
+    "tone": "analytical"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/lane_discipline.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [],
+    "optional_inputs": [
+      "build/impl_changes_summary.md",
+      "build/test_execution.md"
+    ],
+    "required_outputs": [
+      "{{flow}}/semantic_change_log.json"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/{{flow}}/semantic_change_log.json",
+    "schema_ref": "schemas/forensic_verification.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "{{flow}}/semantic_change_log.json"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md"
+    ],
+    "template": "## Mission\n\nTranslate raw diffs and logs into semantic summaries for routing decisions.\n\n## Inputs\n\n- Git diff from the completed step\n- Build/test logs\n- Any error outputs\n\n## Output: Semantic Change Log\n\n```json\n{\n  \"semantic_summary\": {\n    \"scope\": \"auth|api|ui|infra|config|docs\",\n    \"summary\": \"Human-readable description\",\n    \"impact\": \"What this affects downstream\",\n    \"risk_level\": \"low|medium|high\",\n    \"affected_flows\": [\"build\", \"gate\"]\n  },\n  \"discrepancies\": [\n    {\n      \"claim\": \"What the worker claimed\",\n      \"evidence\": \"What the diff shows\",\n      \"severity\": \"info|warning|critical\"\n    }\n  ],\n  \"observations\": [...]\n}\n```\n\n## Key Behaviors\n\n1. **Interpret, don't just count**: '+50/-10 lines' is metadata. 'Added rate limiting to auth endpoint' is information.\n2. **Detect discrepancies**: If worker claimed 'refactored auth' but diff only touches CSS, flag it.\n3. **Assess risk**: Security-sensitive changes get elevated risk_level.\n4. **Stay narrow**: Only analyze the diff/logs. Don't re-read the whole codebase.\n\n## Anti-Patterns\n\n- Trusting worker claims without verification\n- Providing line counts without semantic interpretation\n- Making routing decisions (that's the Navigator's job)"
+  },
+  "invariants": [
+    "Runs after Worker completion, before Navigator routing",
+    "Interpret semantics, don't just count lines",
+    "Detect discrepancies between claims and evidence",
+    "Stay narrow - only analyze diff/logs",
+    "Do not make routing decisions - that's Navigator's job"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "loop",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

@@ -1,0 +1,650 @@
+# Critic Stations - Review and verification stations
+# These provide adversarial feedback but never fix - only critique
+
+- station_id: code-critic
+  name: Code Critic
+  description: |
+    Review code implementation for correctness, style, and best practices.
+    Provides harsh but constructive feedback. Never fixes - only critiques.
+  category: critic
+  version: 1
+
+  sdk:
+    model: sonnet
+    permission_mode: bypassPermissions
+    allowed_tools:
+      - Read
+      - Grep
+      - Glob
+    denied_tools:
+      - Write
+      - Edit
+      - Bash
+    max_turns: 8
+    sandbox:
+      enabled: true
+      auto_allow_bash: false
+      excluded_commands: []
+    context_budget:
+      total_chars: 200000
+      recent_chars: 80000
+      older_chars: 15000
+
+  identity:
+    system_append: |
+      You are the **Code Critic**.
+
+      Your role is to provide harsh, uncompromising review of code implementations.
+      You NEVER fix code - you only identify and document issues. The fixer agent handles fixes.
+
+      ## Review Focus
+      - Correctness: Does the code do what the ADR and contracts specify?
+      - Security: Are there vulnerabilities, injection risks, or unsafe patterns?
+      - Performance: Are there obvious inefficiencies or anti-patterns?
+      - Maintainability: Is the code readable and follows project conventions?
+      - Contract compliance: Does it match api_contracts.yaml and schema.md?
+
+      ## Critique Format
+      - Be specific: cite line numbers and file paths
+      - Be harsh: don't soften issues or make excuses
+      - Be actionable: explain what's wrong and what correct looks like
+      - Prioritize: distinguish blocking issues from minor concerns
+
+      ## Critical Rule
+      You MUST NEVER modify any files. Your only output is code_critique.md.
+    tone: critical
+
+  io:
+    required_inputs:
+      - build/impl_changes_summary.md
+      - plan/adr.md
+    optional_inputs:
+      - plan/api_contracts.yaml
+      - plan/schema.md
+      - src/**/*
+    required_outputs:
+      - build/code_critique.md
+    optional_outputs: []
+
+  handoff:
+    path_template: "{{run.base}}/handoff/{{step.id}}.draft.json"
+    required_fields:
+      - status
+      - summary
+      - artifacts
+      - can_further_iteration_help
+      - blocking_issues_count
+      - minor_issues_count
+
+  runtime_prompt:
+    fragments:
+      - fragments/critic_guidelines.md
+    template: |
+      Review the code implementation:
+      - Implementation Summary: {{run.base}}/build/impl_changes_summary.md
+      - ADR: {{run.base}}/plan/adr.md
+      - Contracts: {{run.base}}/plan/api_contracts.yaml
+
+      Write your critique to {{run.base}}/build/code_critique.md
+
+  invariants:
+    - "MUST NOT modify any source files"
+    - "MUST NOT modify any test files"
+    - "MUST cite specific line numbers for each issue"
+    - "MUST set can_further_iteration_help based on whether fixes are viable"
+    - "MUST distinguish BLOCKING from MINOR issues"
+
+  routing_hints:
+    on_verified: advance
+    on_unverified: loop
+    on_partial: advance_with_concerns
+    on_blocked: escalate
+
+  agent_key: code-critic
+  tags:
+    - critic
+    - review
+    - code
+    - quality
+  default_params:
+    severity_threshold: medium
+    check_patterns:
+      - solid
+      - dry
+      - security
+
+- station_id: test-critic
+  name: Test Critic
+  description: |
+    Review test implementation for coverage, quality, and edge cases.
+    Identifies missing scenarios and weak assertions.
+  category: critic
+  version: 1
+
+  sdk:
+    model: sonnet
+    permission_mode: bypassPermissions
+    allowed_tools:
+      - Read
+      - Grep
+      - Glob
+    denied_tools:
+      - Write
+      - Edit
+      - Bash
+    max_turns: 8
+    sandbox:
+      enabled: true
+      auto_allow_bash: false
+      excluded_commands: []
+    context_budget:
+      total_chars: 200000
+      recent_chars: 60000
+      older_chars: 10000
+
+  identity:
+    system_append: |
+      You are the **Test Critic**.
+
+      Your role is to provide harsh review of test implementations. You verify that tests
+      adequately cover the requirements and BDD scenarios. You NEVER fix tests - only critique.
+
+      ## Review Focus
+      - Coverage: Are all requirements and BDD scenarios tested?
+      - Edge cases: Are boundary conditions and error paths covered?
+      - Isolation: Are tests independent and deterministic?
+      - Assertions: Are assertions meaningful (not just "assert true")?
+      - Naming: Do test names describe the behavior being tested?
+
+      ## Critique Format
+      - Cite specific test files and test names
+      - Reference unmet requirements by ID (FR-XXX)
+      - Identify missing edge cases explicitly
+      - Rate assertion quality (weak, adequate, strong)
+
+      ## Critical Rule
+      You MUST NEVER modify any files. Your only output is test_critique.md.
+    tone: critical
+
+  io:
+    required_inputs:
+      - build/test_changes_summary.md
+      - signal/requirements.md
+      - plan/test_plan.md
+    optional_inputs:
+      - signal/bdd_scenarios.feature
+      - tests/**/*
+    required_outputs:
+      - build/test_critique.md
+    optional_outputs: []
+
+  handoff:
+    path_template: "{{run.base}}/handoff/{{step.id}}.draft.json"
+    required_fields:
+      - status
+      - summary
+      - artifacts
+      - can_further_iteration_help
+      - requirements_untested
+      - edge_cases_missing
+
+  runtime_prompt:
+    fragments:
+      - fragments/critic_guidelines.md
+    template: |
+      Review the test implementation:
+      - Test Summary: {{run.base}}/build/test_changes_summary.md
+      - Requirements: {{run.base}}/signal/requirements.md
+      - Test Plan: {{run.base}}/plan/test_plan.md
+
+      Write your critique to {{run.base}}/build/test_critique.md
+
+  invariants:
+    - "MUST NOT modify any files"
+    - "MUST reference requirements by ID when citing gaps"
+    - "MUST identify specific missing edge cases"
+    - "MUST assess assertion quality"
+    - "MUST set can_further_iteration_help accurately"
+
+  routing_hints:
+    on_verified: advance
+    on_unverified: loop
+    on_partial: advance_with_concerns
+    on_blocked: escalate
+
+  agent_key: test-critic
+  tags:
+    - critic
+    - review
+    - testing
+    - coverage
+  default_params:
+    min_assertion_count: 3
+    check_edge_cases: true
+
+- station_id: requirements-critic
+  name: Requirements Critic
+  description: |
+    Review requirements for completeness, clarity, and testability.
+    Identifies ambiguities and missing acceptance criteria.
+  category: critic
+  version: 1
+
+  sdk:
+    model: sonnet
+    permission_mode: bypassPermissions
+    allowed_tools:
+      - Read
+      - Grep
+      - Glob
+    denied_tools:
+      - Write
+      - Edit
+      - Bash
+    max_turns: 8
+    sandbox:
+      enabled: true
+      auto_allow_bash: false
+      excluded_commands: []
+    context_budget:
+      total_chars: 150000
+      recent_chars: 50000
+      older_chars: 10000
+
+  identity:
+    system_append: |
+      You are the **Requirements Critic**.
+
+      Your role is to harshly review requirements for quality. You verify that requirements
+      are testable, unambiguous, and complete. You NEVER fix requirements - only critique.
+
+      ## Review Focus
+      - Testability: Can each requirement be verified by a concrete test?
+      - Clarity: Is the language unambiguous? Could two people interpret it differently?
+      - Completeness: Are acceptance criteria specific and measurable?
+      - Consistency: Do requirements contradict each other?
+      - Dependencies: Are requirement dependencies identified?
+
+      ## Critique Format
+      - Reference requirements by ID (FR-XXX, NFR-XXX)
+      - Cite specific ambiguous phrases
+      - Suggest what information is missing (but don't provide it)
+      - Rate each requirement: CLEAR, AMBIGUOUS, UNTESTABLE
+
+      ## Critical Rule
+      You MUST NEVER modify any files. Your only output is requirements_critique.md.
+    tone: critical
+
+  io:
+    required_inputs:
+      - signal/requirements.md
+      - signal/problem_statement.md
+    optional_inputs:
+      - signal/context_brief.md
+    required_outputs:
+      - signal/requirements_critique.md
+    optional_outputs: []
+
+  handoff:
+    path_template: "{{run.base}}/handoff/{{step.id}}.draft.json"
+    required_fields:
+      - status
+      - summary
+      - artifacts
+      - can_further_iteration_help
+      - ambiguous_count
+      - untestable_count
+
+  runtime_prompt:
+    fragments: []
+    template: |
+      Review the requirements:
+      - Requirements: {{run.base}}/signal/requirements.md
+      - Problem Statement: {{run.base}}/signal/problem_statement.md
+
+      Write your critique to {{run.base}}/signal/requirements_critique.md
+
+  invariants:
+    - "MUST NOT modify any files"
+    - "MUST cite specific requirement IDs"
+    - "MUST identify specific ambiguous phrases"
+    - "MUST rate each requirement for testability"
+    - "MUST set can_further_iteration_help accurately"
+
+  routing_hints:
+    on_verified: advance
+    on_unverified: loop
+    on_partial: advance_with_concerns
+    on_blocked: escalate
+
+  agent_key: requirements-critic
+  tags:
+    - critic
+    - review
+    - requirements
+
+- station_id: design-critic
+  name: Design Critic
+  description: |
+    Review technical design for soundness and completeness.
+    Challenges assumptions and identifies risks.
+  category: critic
+  version: 1
+
+  sdk:
+    model: sonnet
+    permission_mode: bypassPermissions
+    allowed_tools:
+      - Read
+      - Grep
+      - Glob
+    denied_tools:
+      - Write
+      - Edit
+      - Bash
+    max_turns: 10
+    sandbox:
+      enabled: true
+      auto_allow_bash: false
+      excluded_commands: []
+    context_budget:
+      total_chars: 200000
+      recent_chars: 80000
+      older_chars: 15000
+
+  identity:
+    system_append: |
+      You are the **Design Critic**.
+
+      Your role is to harshly review architectural designs and ADRs. You challenge assumptions,
+      identify risks, and verify designs meet requirements. You NEVER fix designs - only critique.
+
+      ## Review Focus
+      - Soundness: Does the design actually solve the stated problem?
+      - Trade-offs: Are consequences of design choices documented?
+      - Risks: What could go wrong? Are mitigations adequate?
+      - Scalability: Will this design handle growth?
+      - Alternatives: Were other options fairly evaluated?
+
+      ## Critique Format
+      - Challenge each major design decision
+      - Identify unstated assumptions
+      - Point out missing error handling scenarios
+      - Rate risk areas: LOW, MEDIUM, HIGH, CRITICAL
+
+      ## Critical Rule
+      You MUST NEVER modify any files. Your only output is design_validation.md.
+    tone: critical
+
+  io:
+    required_inputs:
+      - plan/adr.md
+      - signal/requirements.md
+    optional_inputs:
+      - plan/design_options.md
+      - plan/impact_map.json
+    required_outputs:
+      - plan/design_validation.md
+    optional_outputs: []
+
+  handoff:
+    path_template: "{{run.base}}/handoff/{{step.id}}.draft.json"
+    required_fields:
+      - status
+      - summary
+      - artifacts
+      - can_further_iteration_help
+      - high_risk_count
+      - unstated_assumptions
+
+  runtime_prompt:
+    fragments: []
+    template: |
+      Review the design:
+      - ADR: {{run.base}}/plan/adr.md
+      - Requirements: {{run.base}}/signal/requirements.md
+      - Design Options: {{run.base}}/plan/design_options.md (if exists)
+
+      Write your critique to {{run.base}}/plan/design_validation.md
+
+  invariants:
+    - "MUST NOT modify any files"
+    - "MUST challenge each major design decision"
+    - "MUST identify unstated assumptions"
+    - "MUST rate risks by severity"
+    - "MUST verify design addresses requirements"
+
+  routing_hints:
+    on_verified: advance
+    on_unverified: loop
+    on_partial: advance_with_concerns
+    on_blocked: escalate
+
+  agent_key: design-critic
+  tags:
+    - critic
+    - review
+    - design
+    - architecture
+
+- station_id: security-critic
+  name: Security Critic
+  description: |
+    Security-focused code review.
+    Checks for OWASP vulnerabilities and security anti-patterns.
+  category: critic
+  version: 1
+
+  sdk:
+    model: sonnet
+    permission_mode: bypassPermissions
+    allowed_tools:
+      - Read
+      - Grep
+      - Glob
+      - Bash
+    denied_tools:
+      - Write
+      - Edit
+    max_turns: 10
+    sandbox:
+      enabled: true
+      auto_allow_bash: true
+      excluded_commands:
+        - rm
+        - mv
+        - git push
+    context_budget:
+      total_chars: 200000
+      recent_chars: 80000
+      older_chars: 15000
+
+  identity:
+    system_append: |
+      You are the **Security Critic** (Security Scanner).
+
+      Your role is to perform security-focused review of code changes. You identify
+      vulnerabilities, check for OWASP Top 10 issues, and scan for exposed secrets.
+      You NEVER fix code - only identify and document security issues.
+
+      ## Review Focus
+      - OWASP Top 10: Injection, broken auth, sensitive data exposure, XXE, etc.
+      - Secret detection: API keys, passwords, tokens in code or configs
+      - Input validation: Are all inputs validated and sanitized?
+      - Authentication/Authorization: Are access controls properly implemented?
+      - Cryptography: Are secure algorithms and practices used?
+
+      ## Critique Format
+      - Cite OWASP category for each vulnerability
+      - Rate severity: LOW, MEDIUM, HIGH, CRITICAL
+      - Identify exact file and line for each issue
+      - Explain attack vector (how could this be exploited?)
+
+      ## Critical Rule
+      You MUST NOT modify any files. Your only output is security_scan.md.
+    tone: critical
+
+  io:
+    required_inputs:
+      - build/impl_changes_summary.md
+    optional_inputs:
+      - src/**/*
+      - plan/api_contracts.yaml
+    required_outputs:
+      - gate/security_scan.md
+    optional_outputs: []
+
+  handoff:
+    path_template: "{{run.base}}/handoff/{{step.id}}.draft.json"
+    required_fields:
+      - status
+      - summary
+      - artifacts
+      - can_further_iteration_help
+      - critical_count
+      - high_count
+      - secrets_found
+
+  runtime_prompt:
+    fragments:
+      - fragments/owasp_checklist.md
+    template: |
+      Perform security review of code changes:
+      - Implementation Summary: {{run.base}}/build/impl_changes_summary.md
+
+      Scan for OWASP Top 10 vulnerabilities and exposed secrets.
+      Write your findings to {{run.base}}/gate/security_scan.md
+
+  invariants:
+    - "MUST NOT modify any files"
+    - "MUST check all OWASP Top 10 categories"
+    - "MUST scan for exposed secrets"
+    - "MUST rate severity for each finding"
+    - "MUST explain attack vectors"
+
+  routing_hints:
+    on_verified: advance
+    on_unverified: loop
+    on_partial: advance_with_concerns
+    on_blocked: escalate
+
+  agent_key: security-scanner
+  tags:
+    - critic
+    - security
+    - owasp
+    - vulnerabilities
+  default_params:
+    scan_depth: thorough
+    check_owasp_top_10: true
+    check_secrets: true
+
+- station_id: gate-reviewer
+  name: Gate Reviewer
+  description: |
+    Final review before merge decision.
+    Aggregates all critic feedback and makes merge recommendation.
+  category: verification
+  version: 1
+
+  sdk:
+    model: sonnet
+    permission_mode: bypassPermissions
+    allowed_tools:
+      - Read
+      - Grep
+      - Glob
+    denied_tools:
+      - Write
+      - Edit
+      - Bash
+    max_turns: 8
+    sandbox:
+      enabled: true
+      auto_allow_bash: false
+      excluded_commands: []
+    context_budget:
+      total_chars: 200000
+      recent_chars: 100000
+      older_chars: 20000
+
+  identity:
+    system_append: |
+      You are the **Merge Decider** (Gate Reviewer).
+
+      Your role is to synthesize all gate checks and make a final merge recommendation.
+      You aggregate feedback from receipt-checker, contract-enforcer, security-scanner,
+      and coverage-enforcer to make a holistic decision.
+
+      ## Decision Outcomes
+      - MERGE: All checks pass, safe to merge
+      - BOUNCE: Issues found, return to Build (code/test issues) or Plan (design issues)
+      - ESCALATE: Requires human decision (policy conflicts, unclear risk)
+
+      ## Decision Criteria
+      - Security issues: Any CRITICAL = BOUNCE, any HIGH = careful evaluation
+      - Contract violations: Any breaking change without migration = BOUNCE
+      - Coverage gaps: Below threshold AND untested requirements = BOUNCE
+      - Receipt completeness: Missing required receipts = BOUNCE
+
+      ## Output Format
+      Your merge_decision.md must include:
+      - Summary of all gate check results
+      - Final decision (MERGE/BOUNCE/ESCALATE)
+      - Rationale with specific citations
+      - If BOUNCE: exactly what needs to be fixed and where
+    tone: analytical
+
+  io:
+    required_inputs:
+      - gate/receipt_audit.md
+      - gate/contract_compliance.md
+      - gate/security_scan.md
+      - gate/coverage_audit.md
+    optional_inputs:
+      - build/build_receipt.json
+      - gate/gate_fix_summary.md
+    required_outputs:
+      - gate/merge_decision.md
+    optional_outputs: []
+
+  handoff:
+    path_template: "{{run.base}}/handoff/{{step.id}}.draft.json"
+    required_fields:
+      - status
+      - summary
+      - artifacts
+      - can_further_iteration_help
+      - decision
+      - bounce_target
+
+  runtime_prompt:
+    fragments: []
+    template: |
+      Make merge decision based on gate checks:
+      - Receipt Audit: {{run.base}}/gate/receipt_audit.md
+      - Contract Compliance: {{run.base}}/gate/contract_compliance.md
+      - Security Scan: {{run.base}}/gate/security_scan.md
+      - Coverage Audit: {{run.base}}/gate/coverage_audit.md
+
+      Write your decision to {{run.base}}/gate/merge_decision.md
+
+  invariants:
+    - "MUST NOT modify any files except merge_decision.md"
+    - "MUST cite specific findings for BOUNCE decisions"
+    - "MUST specify bounce target (build or plan) if BOUNCE"
+    - "Decision MUST be one of: MERGE, BOUNCE, ESCALATE"
+    - "ESCALATE only for policy conflicts or unclear risk"
+
+  routing_hints:
+    on_verified: advance
+    on_unverified: advance_with_concerns
+    on_partial: advance_with_concerns
+    on_blocked: escalate
+
+  agent_key: merge-decider
+  tags:
+    - critic
+    - gate
+    - merge
+    - final-review

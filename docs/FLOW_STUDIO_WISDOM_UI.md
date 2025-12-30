@@ -311,7 +311,7 @@ Add a new tab to the inspector panel when viewing a run. The tab displays:
 +------------------------------------------+
 ```
 
-**Flow Status Breakdown (6 flows):**
+**Flow Status Breakdown (7 flows):**
 ```
 +------------------------------------------+
 | Flow Status                              |

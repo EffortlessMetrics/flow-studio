@@ -1,0 +1,92 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "signal-quality-analyst",
+  "version": 1,
+  "title": "Signal Quality Analyst",
+  "category": "analytics",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_only",
+    "allowed_tools": ["Read", "Grep", "Glob"],
+    "denied_tools": ["Write", "Edit", "Bash"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": false,
+      "excluded_commands": ["git", "gh", "rm", "mv"]
+    },
+    "max_turns": 12,
+    "context_budget": {
+      "total_chars": 150000,
+      "recent_chars": 50000,
+      "older_chars": 10000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Signal Quality Analyst. Assess how accurate our feedback sources were in this run. Track which signals were valid vs noise to improve future triage. This is calibration, not criticism.",
+    "longform_ref": "prompts/agentic_steps/signal-quality-analyst.md",
+    "tone": "analytical"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/lane_discipline.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "review/pr_feedback.md",
+      "review/review_worklist.md"
+    ],
+    "optional_inputs": [
+      "review/review_worklist.json",
+      "build/pr_feedback.md",
+      "build/test_execution.md",
+      "gate/merge_decision.md"
+    ],
+    "required_outputs": [
+      "wisdom/signal_quality_report.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/wisdom/signal_quality_report.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "wisdom/signal_quality_report.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md"
+    ],
+    "template": "## Mission\n\nAssess accuracy of feedback sources to improve future triage.\n\n## Analysis Targets\n\n1. **Signal Accuracy by Source**: CI, CodeRabbit, Human Review, Linter\n   - RESOLVED count (valid signal)\n   - SKIPPED count (noise or outdated)\n\n2. **False Positive Rate**: Items marked INCORRECT_SUGGESTION, STALE_COMMENT, etc.\n\n3. **Human vs Bot Comparison**: What each caught that the other missed\n\n4. **Severity Calibration**: CRITICAL items that were minor, MINOR items that caused problems\n\n5. **CI Signal Quality**: Real failures vs flaky tests vs false negatives\n\n## Metrics\n\n- accuracy = RESOLVED / (RESOLVED + SKIPPED_AS_INCORRECT)\n- noise_rate = SKIPPED / (RESOLVED + SKIPPED)\n\n## Stable Markers\n\nUse `### SQ-FP-NNN:` for false positive entries.\n\n## Output\n\nWrite {{run.base}}/wisdom/signal_quality_report.md with accuracy by source, skip reason breakdown, false positives, human vs bot comparison, severity calibration, and recommendations."
+  },
+  "invariants": [
+    "Working directory is repo root",
+    "All paths are repo-root-relative",
+    "Signal quality is about learning what to trust",
+    "Every source has strengths and weaknesses - map them",
+    "This is calibration, not criticism"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "loop",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

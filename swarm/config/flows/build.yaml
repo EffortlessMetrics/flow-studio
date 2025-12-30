@@ -5,6 +5,32 @@ key: build
 title: "Flow 3 - Plan → Code (Build)"
 description: "Implement via adversarial microloops—build code+tests, self-verify, produce receipts that minimize human attention."
 
+charter:
+  goal: "Produce verified code and tests that satisfy the ADR and pass all acceptance criteria"
+  exit_criteria:
+    - "All tests pass (unit, integration, BDD scenarios)"
+    - "Code follows ADR patterns and respects contracts"
+    - "Code critique status is VERIFIED (or UNVERIFIED with can_further_iteration_help: no)"
+    - "Mutation testing identifies no critical weak spots"
+    - "Self-review produces build_receipt.json with per-dimension verdicts"
+    - "Changes committed to feature branch"
+  non_goals:
+    - "Refactoring unrelated code"
+    - "Updating unrelated documentation"
+    - "Modifying design decisions (ADR is authoritative)"
+    - "Adding features beyond the work plan scope"
+  offroad_policy:
+    justified:
+      - "DETOUR to lint-fix when build fails on style issues"
+      - "DETOUR to dependency-update when build is blocked by missing/outdated deps"
+      - "INJECT_FLOW to rebase when upstream has diverged and blocks implementation"
+      - "INJECT_NODES for targeted security hardening if scanner flags critical issues"
+    not_justified:
+      - "Design changes without returning to Flow 2"
+      - "Scope expansion beyond work plan subtasks"
+      - "Refactoring code not touched by this change"
+      - "Nice-to-have improvements that are not blocking"
+
 teaching:
   title: "Plan to Code: Adversarial Microloops in Action"
   summary: "This is where the core 'spend compute to save attention' pattern shines. Two adversarial microloops (test author/critic and code implementer/critic) iterate until verified. Critics never fix - they write harsh feedback that drives improvement."
@@ -129,6 +155,7 @@ steps:
       constraints:
         - "never fix, only critique"
         - "provide clear Status and can_further_iteration_help"
+        - "emit RoutingSignal in receipt.routing_signal for normalized routing decisions"
 
   - id: implement
     agents:
@@ -192,6 +219,7 @@ steps:
       constraints:
         - "never fix, only critique"
         - "provide clear Status and can_further_iteration_help"
+        - "emit RoutingSignal in receipt.routing_signal for normalized routing decisions"
 
   - id: mutate
     agents:

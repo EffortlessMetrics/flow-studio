@@ -16,7 +16,7 @@ Most agent systems treat orchestration as an ad-hoc conversation. This swarm tre
 
 **What that means**:
 
-- Each flow (`signal`, `plan`, `build`, `gate`, `deploy`, `wisdom`) is a **spec** with:
+- Each flow (`signal`, `plan`, `build`, `review`, `gate`, `deploy`, `wisdom`) is a **spec** with:
   - **Mermaid diagram** showing the DAG of steps
   - **Agent roster** listing who does what
   - **RUN_BASE paths** specifying where artifacts go
@@ -66,9 +66,10 @@ Most agent demos hide the mechanics. This swarm exposes them deliberately.
     signal/         ← Flow 1 outputs
     plan/           ← Flow 2 outputs
     build/          ← Flow 3 outputs
-    gate/           ← Flow 4 outputs
-    deploy/         ← Flow 5 outputs
-    wisdom/         ← Flow 6 outputs
+    review/         ← Flow 4 outputs
+    gate/           ← Flow 5 outputs
+    deploy/         ← Flow 6 outputs
+    wisdom/         ← Flow 7 outputs
   ```
 
 - **All inputs/outputs are on disk** — not hidden in agent state, traces, or logs. You can inspect `build_receipt.json`, read `merge_recommendation.md`, compare `test_output.log` before/after.
@@ -155,10 +156,11 @@ make flow-studio      # Visualize flows (http://localhost:5000)
 
 ### Example Artifacts
 
-`swarm/examples/health-check/` contains a **complete, curated run** of all 6 flows showing "add a health check endpoint" flowing through:
+`swarm/examples/health-check/` contains a **complete, curated run** of all 7 flows showing "add a health check endpoint" flowing through:
 - Signal → problem statement, BDD scenarios
 - Plan → ADR, contracts, observability spec
 - Build → code + tests with microloop receipts
+- Review → pre-gate review
 - Gate → audit verdict, merge recommendation
 - Deploy → deployment verification, smoke tests
 - Wisdom → regressions detected, learnings extracted
@@ -204,7 +206,7 @@ This is a **demo repo**, not production infrastructure. Understanding its bounda
 
 **48 Agents**
 - 3 built-in infrastructure agents (`explore`, `plan-subagent`, `general-subagent`)
-- 45 domain agents across 6 flows
+- 45 domain agents across 7 flows
 - All config-backed (`swarm/config/agents/`) with generated adapters
 
 **Validation and Governance**

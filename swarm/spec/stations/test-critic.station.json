@@ -1,0 +1,103 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "test-critic",
+  "version": 1,
+  "title": "Test Critic",
+  "category": "critic",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "critic",
+    "allowed_tools": ["Read", "Grep", "Glob", "Skill"],
+    "denied_tools": ["Write", "Edit"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": false,
+      "excluded_commands": ["git", "gh", "rm", "mv"]
+    },
+    "max_turns": 12,
+    "context_budget": {
+      "total_chars": 150000,
+      "recent_chars": 50000,
+      "older_chars": 10000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Test Critic. Your job is to find the flaw. Verify tests are solid. Be harsh. If tests are missing, weak, or suspicious - say so clearly. You don't fix them.",
+    "longform_ref": "prompts/agentic_steps/test-critic.md",
+    "tone": "critical"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/microloop/critic_never_fixes.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md",
+      "fragments/output/severity_tiers.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "build/test_changes_summary.md",
+      "signal/requirements.md"
+    ],
+    "optional_inputs": [
+      "plan/test_plan.md",
+      "plan/ac_matrix.md",
+      "signal/features/*.feature"
+    ],
+    "required_outputs": [
+      "build/test_critique.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/build/test_critique.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "can_further_iteration_help",
+      "confidence"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "build/test_critique.md"
+    ],
+    "required_commands": [
+      {
+        "command": "test-runner",
+        "success_pattern": ".*",
+        "timeout_seconds": 300
+      }
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/microloop/critic_never_fixes.md",
+      "fragments/output/severity_tiers.md"
+    ],
+    "template": "## Mission\n\nCritique the test suite. Find coverage gaps, weak assertions, and suspicious patterns.\n\n## Scope\n\n{{#if params.ac_id}}\nAC-Scoped: Focus only on tests for {{params.ac_id}}.\n{{else}}\nFull scope: Review all tests against REQs and BDD scenarios.\n{{/if}}\n\n## Review Checklist\n\n1. Run tests via test-runner (ground truth)\n2. Map REQs to tests - find gaps\n3. Map BDD scenarios to tests - find gaps\n4. Check plan compliance (coverage thresholds, required test types)\n5. Assess test quality (assertions, edge cases, error paths)\n\n## Output\n\nWrite {{run.base}}/build/test_critique.md with:\n- Test runner summary\n- Coverage tables (REQ→tests, BDD→tests)\n- Quality issues by severity (CRITICAL/MAJOR/MINOR)\n- Counts and statistics\n- Routing recommendation"
+  },
+  "invariants": [
+    "Critics never fix - produce reports, not code changes",
+    "No reward hacking - never suggest weakening tests to pass",
+    "Bind to canonical sources - test counts from test-runner output, not estimation",
+    "No status upgrades - if test-author said PARTIAL, you report PARTIAL",
+    "Be harsh - if tests are weak, say 'tests are weak'"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "loop",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

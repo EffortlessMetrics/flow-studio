@@ -1,0 +1,109 @@
+# Station: deploy-decider
+# Role: Decide deploy readiness by verifying governance enforcement
+
+id: deploy-decider
+version: 1
+title: Decide Deployment
+category: verification
+
+sdk:
+  model: sonnet
+  permission_mode: bypassPermissions
+  allowed_tools:
+    - Read
+    - Write
+    - Glob
+    - Grep
+    - Bash
+  sandbox:
+    enabled: true
+    auto_allow_bash: true
+  max_turns: 15
+  context_budget:
+    total_chars: 200000
+    recent_chars: 75000
+    older_chars: 10000
+
+identity:
+  system_append: |
+    You are the Deploy Decider.
+
+    Your responsibility: determine whether governance enforcement is verifiable (CI + branch protection) and whether the run is deploy-ready. Missing governance verification is not success.
+
+    You do not merge, tag, release, post comments, or create issues. You only read and write .runs artifacts (and read repo config files).
+
+    Key behaviors:
+    - Verify CI workflow presence (critical)
+    - Verify branch protection (classic or ruleset)
+    - Apply two-axis model: deploy_action x governance_enforcement
+    - Derive combined verdict: STABLE | NOT_DEPLOYED | GOVERNANCE_UNVERIFIABLE | BLOCKED_BY_GATE
+    - Write deployment_decision.md with fenced YAML block
+    - Tighten on uncertainty; produce evidence-tied remediation
+  tone: neutral
+
+io:
+  required_inputs:
+    - "{{run.base}}/gate/merge_decision.md"
+  optional_inputs:
+    - "{{run.base}}/deploy/verification_report.md"
+    - "{{run.base}}/deploy/branch_protection.md"
+    - "{{run.base}}/run_meta.json"
+  required_outputs:
+    - "{{run.base}}/deploy/deployment_decision.md"
+  optional_outputs: []
+
+runtime_prompt:
+  fragments:
+    - common/invariants.md
+    - common/evidence.md
+  template: |
+    ## Deployment Decision Approach
+
+    1. Preflight: verify read/write access to required paths
+    2. Read Gate verdict from merge_decision.md (authoritative)
+    3. If gate verdict != MERGE, set BLOCKED_BY_GATE and skip governance checks
+    4. Determine default branch (from origin/HEAD or branch_protection.md)
+    5. Verify CI workflow presence (inspect .github/workflows/)
+    6. Verify branch protection (classic API, rulesets, or manual snapshot)
+    7. Optional: runtime verification from verification_report.md
+    8. Derive two-axis verdict and write deployment_decision.md
+
+handoff:
+  path_template: "{{run.base}}/handoff/{{step.id}}.draft.json"
+  required_fields:
+    - status
+    - summary
+    - artifacts
+    - deployment_verdict
+    - governance_enforcement
+
+invariants:
+  - "No merging, tagging, releasing, or posting to GitHub"
+  - "Governance is part of the product (GOVERNANCE_UNVERIFIABLE is distinct from NOT_DEPLOYED)"
+  - "Use two-axis model: deploy_action x governance_enforcement"
+  - "Tighten on uncertainty (if runtime verification fails, cannot declare STABLE)"
+  - "Write deployment_decision.md with fenced YAML block"
+  - "Each failed/unknown check must include check, status, and reason"
+
+routing_hints:
+  on_verified: advance
+  on_unverified: advance_with_concerns
+  on_partial: advance_with_concerns
+  on_blocked: bounce
+
+status_model:
+  deploy_action:
+    - COMPLETED
+    - SKIPPED
+    - FAILED
+  governance_enforcement:
+    - VERIFIED
+    - VERIFIED_RULESET
+    - UNVERIFIED_PERMS
+    - NOT_CONFIGURED
+    - UNKNOWN
+  deployment_verdict:
+    - STABLE
+    - NOT_DEPLOYED
+    - GOVERNANCE_UNVERIFIABLE
+    - BLOCKED_BY_GATE

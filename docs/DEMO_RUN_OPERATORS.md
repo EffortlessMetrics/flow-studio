@@ -77,7 +77,7 @@ Have a terminal window ready alongside the browser. Size it so both are visible.
 http://localhost:5000/?run=demo-health-check&mode=operator
 ```
 
-You should see the SDLC progress bar across all 6 flows (all green for the demo).
+You should see the SDLC progress bar across all 7 flows (all green for the demo).
 
 ---
 
@@ -140,7 +140,7 @@ make flow-studio
 ```
 
 **Walkthrough:**
-1. Show the 6 flows in the left sidebar
+1. Show the 7 flows in the left sidebar
 2. Click Build (Flow 3) - the heaviest flow
 3. Click a step node to show agents assigned
 4. Click an agent node to show its role and model

@@ -1,0 +1,113 @@
+# Station: design-optioneer
+# Source: swarm/prompts/agentic_steps/design-optioneer.md
+# Role: Propose 2-3 distinct architecture options with structured trade-offs
+
+id: design-optioneer
+version: 2
+title: Design Optioneer
+category: design
+
+sdk:
+  model: sonnet
+  permission_mode: bypassPermissions
+  allowed_tools:
+    - Read
+    - Write
+    - Edit
+    - Grep
+    - Glob
+  sandbox:
+    enabled: true
+    auto_allow_bash: false
+  max_turns: 12
+  context_budget:
+    total_chars: 200000
+    recent_chars: 60000
+    older_chars: 10000
+
+identity:
+  system_append: |
+    You are the Design Optioneer.
+
+    Your job is to produce decision-ready options that adr-author can choose among
+    and design-critic can validate - without mind-reading.
+
+    Key rules:
+    - Propose 2-3 DISTINCT options (not variations on a theme)
+    - Use stable IDs: OPT-001, OPT-002, OPT-003
+    - Bind options to REQ-### and NFR-### identifiers
+    - Include minimal/do-nothing option when plausible
+    - Do NOT make the final decision - only suggest default
+    - Check wisdom trail before proposing options
+  longform_ref: prompts/agentic_steps/design-optioneer.md
+  tone: analytical
+
+policy:
+  invariants_ref:
+    - fragments/common/invariants.md
+  handoff_ref:
+    - fragments/common/handoff.md
+
+io:
+  required_inputs:
+    - signal/requirements.md
+    - signal/problem_statement.md
+  optional_inputs:
+    - plan/impact_map.json
+    - signal/early_risks.md
+    - signal/risk_assessment.md
+    - _wisdom/latest.md
+  required_outputs:
+    - plan/design_options.md
+  optional_outputs: []
+
+handoff:
+  draft_path_template: "{{run.base}}/handoff/design-optioneer.draft.json"
+  schema_ref: schemas/handoff.schema.json
+  required_fields:
+    - status
+    - summary
+    - artifacts
+
+verify:
+  required_artifacts:
+    - plan/design_options.md
+  gate_status_on_fail: UNVERIFIED
+
+runtime_prompt:
+  fragments:
+    - common/invariants.md
+    - common/handoff.md
+  template: |
+    ## Design Options Approach
+
+    1. Enumerate REQ/NFR IDs from requirements.md before writing options
+    2. Check wisdom trail for negative constraints and known pitfalls
+    3. Propose 2-3 distinct architectural options
+    4. For each option, map to every enumerated ID
+    5. Include comparison matrix and non-binding recommendation
+    6. Use fit enum: SATISFIED | PARTIAL | TRADE_OFF
+
+    ## Option Structure
+
+    For each OPT-### include:
+    - Description (components, data flow, boundaries)
+    - Requirements Fit table with Fit enum
+    - Trade-offs (structure, velocity, governance, operability, cost)
+    - Reversibility rating and switch effort
+    - Risks with likelihood and mitigation
+    - Assumptions with impact if wrong
+    - When to choose this option
+
+invariants:
+  - "Use stable option IDs (OPT-001, OPT-002, OPT-003)"
+  - "Every option must map to every enumerated REQ/NFR ID"
+  - "Keep fit values machine-parseable (SATISFIED/PARTIAL/TRADE_OFF)"
+  - "Never make final decision - suggest default only"
+  - "Check wisdom trail for negative constraints"
+
+routing_hints:
+  on_verified: advance
+  on_unverified: loop
+  on_partial: advance_with_concerns
+  on_blocked: escalate

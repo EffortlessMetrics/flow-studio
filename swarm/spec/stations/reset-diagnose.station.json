@@ -1,0 +1,85 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "reset-diagnose",
+  "version": 1,
+  "title": "Reset: Diagnose State",
+  "category": "infra",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_only",
+    "allowed_tools": ["Read", "Bash", "Grep", "Glob"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": true,
+      "excluded_commands": ["rm -rf", "git push", "git reset --hard", "git clean -fd"]
+    },
+    "max_turns": 10,
+    "context_budget": {
+      "total_chars": 100000,
+      "recent_chars": 40000,
+      "older_chars": 10000
+    }
+  },
+  "identity": {
+    "system_append": "You are executing the Diagnose step in Flow 8 (Reset). Your job is to assess the repository's git state before any modifications. You produce a diagnostic report that determines which subsequent steps are needed. You do NOT modify anything - this is a read-only diagnostic step.",
+    "longform_ref": "prompts/steps/reset/diagnose.md",
+    "tone": "analytical"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [],
+    "optional_inputs": [
+      "run_meta.json"
+    ],
+    "required_outputs": [
+      "reset/diagnose_report.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/reset/diagnose_report.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "routing_signal"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "reset/diagnose_report.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nDiagnose the current git state to determine:\n1. Does the working tree have uncommitted changes that need stashing?\n2. Is the local branch behind or diverged from upstream?\n3. Are there stale remote-tracking branches to prune?\n4. What is the overall health of the git state?\n\n## Constraints\n\n- Read-only diagnostic step - do NOT modify anything\n- Gather complete information before routing\n- Safe Bash only (no destructive commands)\n\n## Output\n\nWrite {{run.base}}/reset/diagnose_report.md with routing signals for downstream steps."
+  },
+  "invariants": [
+    "Read-only step - do not modify git state",
+    "Gather complete diagnostic data before routing",
+    "Use safe Bash commands only (no --force, --hard)",
+    "Repo-root-relative paths - do not rely on cd",
+    "Measure twice, cut once - every subsequent step depends on accurate diagnosis"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

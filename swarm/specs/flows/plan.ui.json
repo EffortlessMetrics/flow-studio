@@ -1,0 +1,90 @@
+{
+  "$schema": "../schemas/flow_ui_overlay.schema.json",
+  "flow_id": "plan",
+  "version": "1.0.0",
+  "nodes": {
+    "impact": {
+      "position": { "x": 100, "y": 200 },
+      "collapsed": false,
+      "pinned": true
+    },
+    "options": {
+      "position": { "x": 300, "y": 200 },
+      "collapsed": false,
+      "pinned": true
+    },
+    "adr": {
+      "position": { "x": 500, "y": 200 },
+      "color": "node_highlight",
+      "collapsed": false,
+      "pinned": true
+    },
+    "interface": {
+      "position": { "x": 700, "y": 200 },
+      "color": "node_highlight",
+      "collapsed": false,
+      "pinned": true
+    },
+    "observability": {
+      "position": { "x": 900, "y": 200 },
+      "collapsed": false,
+      "pinned": true
+    },
+    "test_strategy": {
+      "position": { "x": 1100, "y": 200 },
+      "collapsed": false,
+      "pinned": true
+    },
+    "work": {
+      "position": { "x": 1300, "y": 200 },
+      "collapsed": false,
+      "pinned": true
+    },
+    "design_critique": {
+      "position": { "x": 1500, "y": 200 },
+      "color": "node_highlight",
+      "collapsed": false,
+      "pinned": true
+    }
+  },
+  "edges": {},
+  "palette": {
+    "node_default": "#4a5568",
+    "node_highlight": "#3182ce",
+    "node_active": "#38a169",
+    "node_completed": "#2d3748",
+    "node_error": "#e53e3e",
+    "edge_default": "#718096",
+    "edge_loop": "#ed8936",
+    "edge_branch": "#4299e1",
+    "background": "#1a202c",
+    "grid": "#2d3748"
+  },
+  "canvas": {
+    "zoom": 1,
+    "pan": { "x": 0, "y": 0 },
+    "grid_size": 20,
+    "grid_visible": true,
+    "snap_to_grid": true
+  },
+  "groups": [
+    {
+      "id": "design_core",
+      "label": "Design Core",
+      "node_ids": ["adr", "interface"],
+      "color": "#3182ce80",
+      "collapsed": false
+    }
+  ],
+  "annotations": [
+    {
+      "id": "adr_note",
+      "text": "ADR is source of truth for Flow 3",
+      "position": { "x": 500, "y": 100 },
+      "style": {
+        "font_size": 12,
+        "color": "#a0aec0"
+      }
+    }
+  ]
+}

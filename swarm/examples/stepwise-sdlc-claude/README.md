@@ -1,15 +1,16 @@
 # Stepwise Full SDLC Example (Claude)
 
-Golden example of complete stepwise SDLC execution through all 6 flows.
+Golden example of complete stepwise SDLC execution through all 7 flows.
 
 ## Flows Included
 
 - **Signal** (Flow 1): Requirements microloop
 - **Plan** (Flow 2): Architecture design
 - **Build** (Flow 3): Implementation with test/code microloops
-- **Gate** (Flow 4): Pre-merge verification
-- **Deploy** (Flow 5): Artifact deployment and verification
-- **Wisdom** (Flow 6): Learning synthesis and feedback loop
+- **Review** (Flow 4): Draft PR and feedback harvesting
+- **Gate** (Flow 5): Pre-merge verification
+- **Deploy** (Flow 6): Artifact deployment and verification
+- **Wisdom** (Flow 7): Learning synthesis and feedback loop
 
 ## Backend Configuration
 
@@ -22,7 +23,7 @@ Golden example of complete stepwise SDLC execution through all 6 flows.
 
 ```
 stepwise-sdlc-claude/
-├── spec.json           # RunSpec with all 6 flow_keys
+├── spec.json           # RunSpec with all 7 flow_keys
 ├── meta.json           # RunSummary with final status
 ├── events.jsonl        # Complete event stream (~350 events)
 ├── signal/             # Flow 1 artifacts
@@ -37,7 +38,7 @@ stepwise-sdlc-claude/
 
 ## Key Observations
 
-1. **Complete SDLC**: All 6 flows executed in sequence
+1. **Complete SDLC**: All 7 flows executed in sequence
 2. **Wisdom Flow**: Closes the feedback loop by analyzing all previous flow artifacts
 3. **Teaching Notes**: All steps in Deploy and Wisdom now have structured teaching_notes
 4. **Linear Routing**: Deploy and Wisdom use linear routing (no microloops)

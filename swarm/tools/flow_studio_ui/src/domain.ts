@@ -1,6 +1,10 @@
 /**
  * Flow Studio Domain Types
  *
+ * CANONICAL SOURCE: src/domain.ts
+ * The js/domain.d.ts file is GENERATED from this file — do not edit it directly.
+ * Run `make ts-build` to regenerate declaration files after editing this source.
+ *
  * These types define the core data structures used throughout Flow Studio.
  * They serve as the contract between:
  * - Python backend (FastAPI endpoints)
@@ -87,6 +91,11 @@ export interface FlowGraphEdge {
 export interface FlowGraph {
   nodes: FlowGraphNode[];
   edges: FlowGraphEdge[];
+  /** Optional UI overlay fields for flow editing */
+  palette?: Record<string, unknown>;
+  canvas?: Record<string, unknown>;
+  groups?: Record<string, unknown>;
+  annotations?: Record<string, unknown>;
 }
 
 /** Serialized graph state from getCurrentGraphState() */
@@ -387,6 +396,45 @@ export interface StepReceipt {
       LOW: number;
     };
   };
+  // V3 Routing Protocol: Full routing decision with candidates (optional)
+  routing_decision?: {
+    chosen_candidate_id: string;
+    candidates: Array<{
+      candidate_id: string;
+      action: string;
+      target_node: string | null;
+      reason: string;
+      priority: number;
+      source: string;
+      evidence_pointers: string[];
+      is_default: boolean;
+    }>;
+    routing_source: string;
+    forensic_verdict?: {
+      claim_verified: boolean;
+      confidence: number;
+      recommendation: "TRUST" | "VERIFY" | "REJECT";
+      reward_hacking_flags: string[];
+      discrepancy_count?: number;
+      critical_issue?: string;
+    };
+    timestamp?: string;
+    iteration?: number;
+    flow_key?: string;
+    step_id?: string;
+  };
+  // V3 Forensic Verdict: Standalone forensic verification (optional)
+  forensic_verdict?: {
+    verdict: "PASS" | "REJECT" | "INCONCLUSIVE";
+    discrepancy_count: number;
+    critical_issues: string[];
+    reward_hacking_flags: string[];
+    claim_vs_evidence: Array<{
+      claim: string;
+      evidence: string;
+      match: boolean;
+    }>;
+  };
 }
 
 /** Response from /api/runs/{run_id}/flows/{flow_key}/steps/{step_id}/receipt */
@@ -562,6 +610,54 @@ export interface SearchResponse {
 // ============================================================================
 // Governance & Validation
 // ============================================================================
+
+/**
+ * Validation error severity levels.
+ * - CRITICAL: Blocking issues that prevent save (missing required fields, invalid IDs, broken edges)
+ * - WARNING: Non-blocking issues that should be reviewed (missing teaching notes, potential issues)
+ * - INFO: Suggestions for improvement (optional enhancements)
+ */
+export type ValidationSeverity = "CRITICAL" | "WARNING" | "INFO";
+
+/**
+ * A single validation issue with severity and actionable information.
+ */
+export interface ValidationIssue {
+  /** Unique identifier for this issue type */
+  code: string;
+  /** Severity level determining how the issue is handled */
+  severity: ValidationSeverity;
+  /** Human-readable description of the issue */
+  message: string;
+  /** Path to the problematic element (e.g., "nodes[0].data.id") */
+  path?: string;
+  /** Suggested fix action */
+  fix?: string;
+  /** Related node or edge ID */
+  elementId?: string;
+}
+
+/**
+ * Result of flow validation for save operations.
+ * Categorizes issues by severity for decision-making.
+ */
+export interface FlowValidationResult {
+  /** Whether the flow is valid for saving (no critical errors) */
+  valid: boolean;
+  /** All validation issues found */
+  issues: ValidationIssue[];
+  /** Count by severity for quick checks */
+  summary: {
+    critical: number;
+    warning: number;
+    info: number;
+  };
+}
+
+/**
+ * User's decision when validation issues are found.
+ */
+export type ValidationDecision = "save" | "fix" | "cancel";
 
 /** FR check result */
 export interface FRCheck {
@@ -918,6 +1014,139 @@ export interface ResolutionHint {
 }
 
 // ============================================================================
+// Boundary Review API
+// ============================================================================
+
+/** Summary of an assumption made during execution */
+export interface AssumptionSummary {
+  assumption_id: string;
+  statement: string;
+  rationale: string;
+  impact_if_wrong: string;
+  confidence: "high" | "medium" | "low";
+  status: "active" | "resolved" | "invalidated";
+  tags: string[];
+  flow_introduced?: string;
+  step_introduced?: string;
+  agent?: string;
+  timestamp?: string;
+}
+
+/** Summary of a decision made during execution */
+export interface DecisionSummary {
+  decision_id: string;
+  decision_type: string;
+  subject: string;
+  decision: string;
+  rationale: string;
+  supporting_evidence: string[];
+  conditions: string[];
+  assumptions_applied: string[];
+  flow?: string;
+  step?: string;
+  agent?: string;
+  timestamp?: string;
+}
+
+/** Summary of a detour taken during execution */
+export interface DetourSummary {
+  detour_id: string;
+  from_step: string;
+  to_step: string;
+  reason: string;
+  detour_type: string;
+  evidence_path?: string;
+  timestamp?: string;
+}
+
+/** Routing decision from V3 routing protocol */
+export interface RoutingDecisionRecord {
+  /** One of: CONTINUE, DETOUR, INJECT_FLOW, INJECT_NODES, EXTEND_GRAPH */
+  decision: string;
+  /** Target flow/node(s) for non-CONTINUE decisions */
+  target: string;
+  /** Human-readable explanation */
+  justification: string;
+  /** Links to artifacts supporting the decision */
+  evidence: string[];
+  /** Whether this deviates from the golden path */
+  offroad: boolean;
+  /** Alternative routes that were evaluated */
+  suggestions_considered?: string[];
+  /** When the decision was made */
+  timestamp: string;
+  /** Node where decision was made (e.g., "build.step-3") */
+  source_node: string;
+  /** Current depth in graph stack (0 = root flow) */
+  stack_depth: number;
+  /** Structured justification for off-road decisions */
+  why_now?: {
+    trigger: string;
+    analysis?: string;
+    relevance_to_charter?: string;
+    alternatives_considered?: string[];
+    expected_outcome?: string;
+  };
+}
+
+/** Verification result for a step */
+export interface VerificationSummary {
+  step_id: string;
+  station_id?: string;
+  status: string;
+  verified: boolean;
+  can_further_iteration_help?: boolean;
+  issues: string[];
+  timestamp?: string;
+}
+
+/** Inventory marker delta */
+export interface InventoryDelta {
+  marker_type: string;
+  label: string;
+  count: number;
+  delta: number;
+}
+
+/** Response from /api/runs/:id/boundary-review */
+export interface BoundaryReviewResponse {
+  run_id: string;
+  scope: "flow" | "run";
+  current_flow?: FlowKey;
+
+  assumptions_count: number;
+  assumptions_high_risk: number;
+  assumptions: AssumptionSummary[];
+
+  decisions_count: number;
+  decisions: DecisionSummary[];
+
+  detours_count: number;
+  detours: DetourSummary[];
+
+  /** V3 routing decisions from the routing protocol */
+  routing_decisions?: RoutingDecisionRecord[];
+  /** Current stack depth during execution */
+  stack_depth?: number;
+  /** Maximum stack depth reached */
+  max_stack_depth?: number;
+
+  verification_passed: number;
+  verification_failed: number;
+  verifications: VerificationSummary[];
+
+  inventory_deltas: InventoryDelta[];
+
+  has_evolution_patches: boolean;
+  evolution_patch_count: number;
+
+  confidence_score: number;
+  uncertainty_notes: string[];
+
+  timestamp: string;
+}
+
+// ============================================================================
 // Cytoscape Types (minimal interface for our usage)
 // ============================================================================
 
@@ -1028,8 +1257,25 @@ export type FlowStudioUIID =
   | "flow_studio.sidebar.compare_selector"
   | "flow_studio.sidebar.flow_list"
   | "flow_studio.sidebar.view_toggle"
+  | "flow_studio.sidebar.view_toggle.agents"
+  | "flow_studio.sidebar.view_toggle.artifacts"
   | "flow_studio.sidebar.backend_selector"
   | "flow_studio.sidebar.backend_selector.select"
+  // Sidebar: Inventory Counts
+  | "flow_studio.sidebar.inventory_counts"
+  | "flow_studio.sidebar.run_control"
+  | "flow_studio.sidebar.run_control.buttons"
+  | "flow_studio.sidebar.run_control.play"
+  | "flow_studio.sidebar.run_control.pause"
+  | "flow_studio.sidebar.run_control.resume"
+  | "flow_studio.sidebar.run_control.cancel"
+  | "flow_studio.sidebar.run_control.status"
+  // Sidebar: Run History
+  | "flow_studio.sidebar.run_history"
+  | "flow_studio.sidebar.run_history.filter"
+  | "flow_studio.sidebar.run_history.list"
+  // Inventory Component
+  | "flow_studio.inventory.counts"
   // Canvas
   | "flow_studio.canvas"
   | "flow_studio.canvas.graph"
@@ -1040,6 +1286,7 @@ export type FlowStudioUIID =
   | "flow_studio.inspector"
   | "flow_studio.inspector.details"
   | "flow_studio.inspector.teaching_note"
+  | "flow_studio.inspector.interruption_stack"
   // Modals
   | "flow_studio.modal.shortcuts"
   | "flow_studio.modal.selftest"
@@ -1066,7 +1313,13 @@ export type FlowStudioUIID =
   | "flow_studio.modal.context_budget.save"
   // Context Budget Header Control
   | "flow_studio.header.context_budget"
-  | "flow_studio.header.context_budget.trigger";
+  | "flow_studio.header.context_budget.trigger"
+  // Boundary Review
+  | "flow_studio.boundary_review.panel"
+  | "flow_studio.boundary_review.content"
+  | "flow_studio.boundary_review.container"
+  | "flow_studio.boundary_review.approve"
+  | "flow_studio.boundary_review.pause";
 
 /**
  * Query an element by its data-uiid attribute with type safety.
@@ -1077,7 +1330,10 @@ export type FlowStudioUIID =
  * if (searchInput) searchInput.focus();
  */
 export function qsByUiid<T extends HTMLElement = HTMLElement>(
-  id: FlowStudioUIID | `flow_studio.canvas.outline.${"flow" | "step" | "agent" | "artifact"}:${string}`
+  id: FlowStudioUIID
+    | `flow_studio.canvas.outline.${"flow" | "step" | "agent" | "artifact"}:${string}`
+    | `flow_studio.inventory.type.${string}`
+    | `flow_studio.inventory.flow.${string}`
 ): T | null {
   return document.querySelector<T>(`[data-uiid="${id}"]`);
 }

@@ -1,6 +1,8 @@
 # Agent Operations Guide
 
 > For: Anyone managing agents in the swarm.
+>
+> **Terminology note:** This guide covers `.claude/agents/` subagent definitions—helpers invoked via the Task tool inside steps. For the canonical vocabulary distinguishing agents from stations, steps, and navigators, see [LEXICON.md](./LEXICON.md).
 
 This guide covers the day-to-day operations of managing agents: adding, modifying, and inspecting them.
 
@@ -196,13 +198,13 @@ Colors map to **semantic role families**—not aesthetic choice, part of the spe
 - **Flow 5 - Deploy** (3): deploy-monitor, smoke-verifier, deploy-decider
 - **Flow 6 - Wisdom** (5): artifact-auditor, regression-analyst, flow-historian, learning-synthesizer, feedback-applier
 
-**Total: 48 agents** (3 built-in + 45 domain)
+**Total: 56 agents** (3 built-in + 53 domain)
 
 ---
 
 ## Config-Driven Agents
 
-**All 45 domain agents are config-backed:**
+**All 53 domain agents are config-backed:**
 
 - Signal (Flow 1): 6 agents
 - Plan (Flow 2): 8 agents

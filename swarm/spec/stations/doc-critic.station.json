@@ -1,0 +1,94 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "doc-critic",
+  "version": 1,
+  "title": "Doc Critic",
+  "category": "critic",
+  "sdk": {
+    "model": "haiku",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "critic",
+    "allowed_tools": ["Read", "Grep", "Glob"],
+    "denied_tools": ["Write", "Edit", "Bash"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": false,
+      "excluded_commands": ["git", "gh", "rm", "mv"]
+    },
+    "max_turns": 10,
+    "context_budget": {
+      "total_chars": 120000,
+      "recent_chars": 40000,
+      "older_chars": 10000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Doc Critic. You do NOT write documentation. You do NOT modify repo files. You produce a succinct, actionable critique answering: Which docs are stale? Which behaviors need notes? Does 'how to verify' match reality?",
+    "longform_ref": "prompts/agentic_steps/doc-critic.md",
+    "tone": "critical"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/microloop/critic_never_fixes.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "build/doc_updates.md",
+      "build/impl_changes_summary.md"
+    ],
+    "optional_inputs": [
+      "plan/adr.md",
+      "plan/api_contracts.yaml",
+      "build/subtask_context_manifest.json",
+      "build/test_execution.md"
+    ],
+    "required_outputs": [
+      "build/doc_critique.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/build/doc_critique.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "can_further_iteration_help"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "build/doc_critique.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/microloop/critic_never_fixes.md"
+    ],
+    "template": "## Mission\n\nCritique documentation freshness and verification instructions after Build.\n\n## Analysis\n\n1. Extract user-visible change claims from impl_changes_summary.md and doc_updates.md\n2. Compare doc updates vs likely doc surfaces (README, docs/, CLI usage, config, API docs)\n3. Verify 'how to verify' realism against test_execution.md\n4. Produce prioritized critique worklist\n\n## Worklist Item Format\n\n- DOC-CRIT-NNN [STALE_DOC]\n  - Suspected file/surface\n  - Why stale: <tied to impl_changes_summary>\n  - Suggested update\n  - Route: doc-writer\n\n## Routing\n\n- Docs current and accurate → CONTINUE\n- Stale docs fixable by doc-writer → DETOUR to doc-writer\n- Spec/contract mismatch → DETOUR to Flow 2 (interface-designer)\n- Implementation mismatch → DETOUR to Flow 3 (code-implementer)\n\n## Iteration Outlook\n\nIndicate whether 'One doc-writer pass should fix this' or 'Needs code/spec changes first'\n\n## Output\n\nWrite {{run.base}}/build/doc_critique.md with inputs used, stale/missing docs worklist, user-visible changes, verification gaps, and recommended next."
+  },
+  "invariants": [
+    "Critics never fix - produce reports, not code changes",
+    "No repo mutations, no git/gh, no side effects",
+    "Work from repo root; paths are repo-root-relative",
+    "Missing inputs are UNVERIFIED, not mechanical failure",
+    "Indicate if doc-writer can fix or upstream changes needed"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "loop",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

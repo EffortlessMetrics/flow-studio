@@ -1,0 +1,115 @@
+# Station: context-loader
+# Source: swarm/prompts/agentic_steps/context-loader.md
+# Role: Accelerator for large context loading - produces pointer manifest for downstream workers
+
+id: context-loader
+version: 2
+title: Context Loader
+category: implementation
+
+sdk:
+  model: sonnet
+  permission_mode: bypassPermissions
+  allowed_tools:
+    - Read
+    - Write
+    - Grep
+    - Glob
+  sandbox:
+    enabled: true
+    auto_allow_bash: false
+  max_turns: 12
+  context_budget:
+    total_chars: 200000
+    recent_chars: 60000
+    older_chars: 10000
+
+identity:
+  system_append: |
+    You are the Context Loader.
+
+    Your role is acceleration, not gatekeeping. You help workers start faster by
+    identifying the most relevant files for a subtask. Workers are NOT restricted
+    to what you identify - they can explore and read additional files as needed.
+
+    Your job is to produce a pointer manifest: the smallest set of repo-root-relative
+    paths (plus rationale) that gives downstream agents a head start.
+
+    You do not implement, critique, or run git operations.
+
+    Write exactly one file: .runs/<run-id>/build/subtask_context_manifest.json
+    No temp files. No git operations.
+  longform_ref: prompts/agentic_steps/context-loader.md
+  tone: neutral
+
+policy:
+  invariants_ref:
+    - fragments/common/invariants.md
+  handoff_ref:
+    - fragments/common/handoff.md
+
+io:
+  required_inputs: []
+  optional_inputs:
+    - plan/subtasks.yaml
+    - plan/work_plan.md
+    - plan/adr.md
+    - signal/requirements.md
+    - plan/test_plan.md
+    - plan/ac_matrix.md
+    - plan/api_contracts.yaml
+    - plan/schema.md
+    - plan/observability_spec.md
+    - signal/features/*.feature
+    - signal/verification_notes.md
+    - build/impl_changes_summary.md
+  required_outputs:
+    - build/subtask_context_manifest.json
+  optional_outputs: []
+
+handoff:
+  draft_path_template: "{{run.base}}/handoff/context-loader.draft.json"
+  schema_ref: schemas/handoff.schema.json
+  required_fields:
+    - status
+    - summary
+
+verify:
+  required_artifacts:
+    - build/subtask_context_manifest.json
+  gate_status_on_fail: UNVERIFIED
+
+runtime_prompt:
+  fragments:
+    - common/invariants.md
+    - common/handoff.md
+  template: |
+    ## Context Loading Approach
+
+    1. Subtask resolution: Find subtask from subtasks.yaml (primary) or work_plan.md (fallback)
+    2. Selection algorithm: Match by explicit ID, or auto-select first TODO subtask
+    3. Collect spec anchors: adr.md, work_plan.md, requirements.md, test_plan.md
+    4. Collect candidate repo files from touches[] patterns
+    5. Collect tests from tests[] guidance in subtask index
+    6. Build paths object with specs, code, tests, docs, allow_new_files_under
+    7. Add rationale for each path explaining why it matters
+    8. Write subtask_context_manifest.json
+
+    ## Status Decision
+
+    - VERIFIED: Subtask resolved, anchor specs present, relevant code/tests located
+    - UNVERIFIED: Manifest produced but with gaps (missing inputs, unresolved patterns)
+    - CANNOT_PROCEED: IO/permissions prevented reading/writing
+
+invariants:
+  - "All paths are repo-root-relative"
+  - "Write exactly one file: subtask_context_manifest.json"
+  - "No temp files, no git operations"
+  - "You are an accelerator, not a gatekeeper"
+  - "Every path must have a rationale entry"
+
+routing_hints:
+  on_verified: advance
+  on_unverified: advance_with_concerns
+  on_partial: advance_with_concerns
+  on_blocked: escalate

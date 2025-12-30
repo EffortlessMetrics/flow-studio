@@ -2,6 +2,10 @@
 /swarm/runs/
 /RUN_BASE/
 
+# Repo pack directory (belongs to consuming repos, not the runtime repo)
+# See swarm/packs/examples/repo-pack-template.yaml for template
+/.swarm/
+
 # Smoke test artifacts (receipt-backed verification)
 # Narrow to flowstudio_smoke/ to leave room for other artifacts (schemas, UX manifests)
 /artifacts/flowstudio_smoke/
@@ -15,6 +19,27 @@ selftest_metrics.jsonl
 selftest_degradations.log
 # Belt-and-suspenders: catch selftest reports in wrong locations
 swarm/tools/**/selftest_report.json
+
+# Agent-generated summary files (except in curated examples)
+# These should live in RUN_BASE, not scattered across the repo
+**/impl_changes_summary.md
+**/test_changes_summary.md
+**/test_summary.md
+**/doc_updates_summary.md
+**/fuzz_changes_summary.md
+**/gate_fix_summary.md
+# Allow curated examples to keep their summaries
+!swarm/examples/**/impl_changes_summary.md
+!swarm/examples/**/test_changes_summary.md
+!swarm/examples/**/test_summary.md
+!swarm/examples/**/doc_updates_summary.md
+!swarm/examples/**/fuzz_changes_summary.md
+!swarm/examples/**/gate_fix_summary.md
+
+# Run artifacts that may slip in
+/.runs/
+*.log
+!swarm/examples/**/*.log
 
 # Build artifacts
 /target/
@@ -53,3 +78,5 @@ Thumbs.db
 
 # Playwright MCP artifacts
 .playwright-mcp/
+
+nul

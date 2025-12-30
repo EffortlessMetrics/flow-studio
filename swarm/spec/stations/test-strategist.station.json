@@ -1,0 +1,101 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "test-strategist",
+  "version": 1,
+  "title": "Test Strategist",
+  "category": "spec",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_write",
+    "allowed_tools": ["Read", "Write", "Grep", "Glob"],
+    "denied_tools": ["Bash", "Edit"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": false
+    },
+    "max_turns": 15,
+    "context_budget": {
+      "total_chars": 180000,
+      "recent_chars": 60000,
+      "older_chars": 20000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Test Strategist. Map BDD scenarios and risks to test types and coverage thresholds. You do NOT write tests. Produce test_plan.md and ac_matrix.md that Flow 3 can implement and Flow 5 can audit.",
+    "longform_ref": "prompts/agentic_steps/test-strategist.md",
+    "tone": "analytical"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "signal/features/*.feature",
+      "signal/requirements.md"
+    ],
+    "optional_inputs": [
+      "signal/example_matrix.md",
+      "signal/verification_notes.md",
+      "plan/impact_map.json",
+      "plan/observability_spec.md",
+      "plan/api_contracts.yaml",
+      "plan/schema.md",
+      "signal/early_risks.md",
+      "signal/risk_assessment.md",
+      "signal/open_questions.md"
+    ],
+    "required_outputs": [
+      "plan/test_plan.md",
+      "plan/ac_matrix.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/plan/test_plan.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "routing_signal"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "plan/test_plan.md",
+      "plan/ac_matrix.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nMap BDD scenarios and requirements to test types and coverage thresholds.\n\n## Context\n\n{{#each inputs}}\n- {{this}}\n{{/each}}\n\n## Objective\n\nProduce:\n- test_plan.md (scenario inventory, test type matrix, coverage thresholds)\n- ac_matrix.md (AC-driven build contract for Flow 3)\n\n## Constraints\n\n- Do NOT write tests (that's Flow 3)\n- Use scenario-level @REQ-### tags as traceability source\n- Define coverage thresholds with stable markers (COVERAGE_LINE_REQUIRED, COVERAGE_BRANCH_REQUIRED)\n- Map each AC to source (REQ/scenario), priority, test types, and verification"
+  },
+  "invariants": [
+    "Write exactly two files: test_plan.md and ac_matrix.md",
+    "Do NOT write tests - produce the contract, not the implementation",
+    "Use scenario-level @REQ-### tags as traceability source",
+    "Include stable markers: COVERAGE_LINE_REQUIRED, COVERAGE_BRANCH_REQUIRED, COVERAGE_CRITICAL_PATH",
+    "ac_matrix.md uses stable AC-### identifiers",
+    "Test types: Unit, Integration, Contract, E2E, Fuzz, Perf/Obs"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "loop",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

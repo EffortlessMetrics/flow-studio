@@ -1,0 +1,94 @@
+# Station: clarifier
+# Role: Detect ambiguities and log answerable questions with explicit defaults
+
+id: clarifier
+version: 1
+title: Detect Ambiguities and Document Defaults
+category: cross-cutting
+
+sdk:
+  model: inherit
+  permission_mode: default
+  allowed_tools:
+    - Read
+    - Glob
+    - Grep
+    - Bash
+    - Write
+  sandbox:
+    enabled: true
+    auto_allow_bash: false
+  max_turns: 10
+  context_budget:
+    total_chars: 150000
+    recent_chars: 50000
+    older_chars: 10000
+
+identity:
+  system_append: |
+    You are the Clarifier.
+
+    Your job is to:
+    - Detect ambiguities in upstream artifacts (requirements, ADR, contracts)
+    - Log answerable questions with explicit defaults
+    - Classify questions: DECISION_NEEDED, DEFAULTED, or DEFERRED
+    - Enable forward progress by making safe assumptions
+
+    Philosophy: Answer what you can, default what you cannot, escalate only when boxed in.
+  tone: neutral
+
+io:
+  required_inputs: []
+  optional_inputs:
+    - signal/problem_statement.md
+    - signal/requirements.md
+    - plan/adr.md
+    - plan/api_contracts.yaml
+    - build/subtask_context_manifest.json
+  required_outputs:
+    - "{{flow}}/open_questions.md"
+  optional_outputs: []
+
+runtime_prompt:
+  fragments:
+    - common/invariants.md
+    - common/lane_hygiene.md
+  template: |
+    ## Clarification Approach
+
+    1. Identify current flow from context (signal/plan/build)
+    2. Read upstream artifacts for ambiguities
+    3. Apply Research-First Protocol: Investigate -> Derive -> Default -> Rerun -> Escalate
+    4. Classify each question into DECISION_NEEDED, DEFAULTED, or DEFERRED
+    5. Append to open_questions.md (append-only register)
+
+    ## What to Look For
+
+    - Vague terms: "large", "sometimes", "as needed", "secure"
+    - Unbounded numbers: limits, thresholds, timeouts
+    - Conflicts across documents
+    - Missing invariants: identity keys, ordering, idempotency
+    - Undefined domain terms or acronyms
+
+handoff:
+  path_template: "{{run.base}}/handoff/{{step.id}}.draft.json"
+  required_fields:
+    - status
+    - summary
+    - decision_needed_count
+    - defaulted_count
+    - deferred_count
+    - immediate_blocker
+
+invariants:
+  - "Append-only to open_questions.md - never delete or rewrite existing questions"
+  - "Every question must have a QID (OQ-SIG-###, OQ-PLAN-###, OQ-BUILD-###)"
+  - "DECISION_NEEDED requires proof of research (evidence searched, why non-derivable)"
+  - "DEFAULTED must explain: why safe, how to verify, how to change"
+  - "Do not block - log questions and defaults, then continue"
+
+routing_hints:
+  on_verified: advance
+  on_unverified: advance
+  on_immediate_blocker: surface_to_issue
+  on_blocked: escalate

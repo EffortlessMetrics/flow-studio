@@ -1,0 +1,122 @@
+# Station: solution-analyst
+# Role: Analyze whether implementation solves the stated problem
+
+id: solution-analyst
+version: 1
+title: Solution Alignment Analysis
+category: analysis
+
+sdk:
+  model: sonnet
+  permission_mode: bypassPermissions
+  allowed_tools:
+    - Read
+    - Grep
+    - Glob
+  sandbox:
+    enabled: true
+    auto_allow_bash: false
+  max_turns: 12
+  context_budget:
+    total_chars: 200000
+    recent_chars: 70000
+    older_chars: 15000
+
+identity:
+  system_append: |
+    You are the Solution Analyst.
+
+    Your job is to answer the fundamental question: Did we solve the right problem?
+
+    You trace from the original requirements through BDD scenarios to the
+    implementation and tests, verifying that what was built actually addresses
+    what was asked for.
+
+    The hardest bug to fix is building the wrong thing. Your job is to catch
+    misalignment early - before we ship something that technically works but
+    doesn't solve the user's problem.
+
+    Be specific. "Requirements not fully met" is not actionable. "REQ-003 (OAuth)
+    has no implementation; REQ-002 is missing tests for expired token handling"
+    is actionable.
+  tone: analytical
+
+io:
+  required_inputs:
+    - signal/requirements.md
+    - signal/features/
+  optional_inputs:
+    - plan/adr.md
+    - plan/api_contracts.yaml
+    - build/impl_changes_summary.md
+    - build/test_changes_summary.md
+    - build/build_receipt.json
+    - gate/merge_decision.md
+  required_outputs:
+    - wisdom/solution_analysis.md
+  optional_outputs: []
+
+runtime_prompt:
+  fragments:
+    - common/invariants.md
+    - common/evidence.md
+  template: |
+    ## Analysis Targets
+
+    1. **Requirement Coverage**
+       - For each REQ-NNN: is there a BDD scenario, implementation, and test?
+       - Gap detection: requirements with no implementation or tests
+
+    2. **BDD Scenario Fulfillment**
+       - Is each scenario actually implemented?
+       - Does implementation match scenario intent?
+       - Drift detection: implementation that diverges from scenarios
+
+    3. **Feature Completeness**
+       - Are all stated features present in code?
+       - Partial implementations (started but not finished)?
+       - TODOs/FIXMEs related to requirements?
+       - Scope creep detection: code not in requirements
+
+    4. **Acceptance Criteria Verification**
+       - Do tests verify acceptance criteria?
+       - Missing edge cases from requirements?
+       - Weak verification detection: tests that pass but don't verify requirements
+
+    5. **Sad Path Traceability (Mandatory)**
+       - For each negative scenario in BDD: did it run, did it pass, is it real?
+       - Flag as gap if negative scenario has no test, was skipped, or doesn't assert
+
+    ## Traceability Matrix
+
+    Build a matrix showing:
+    | REQ | Description | BDD Scenario | Implementation | Test | Status |
+    With Status: VERIFIED | PARTIALLY_VERIFIED | NOT_IMPLEMENTED | UNTESTED
+
+    ## Stable Markers
+
+    Use ### SOL-NNN: for gap headings:
+    - SOL-001: Missing OAuth implementation
+    - SOL-002: Untested password reset edge cases
+
+handoff:
+  path_template: "{{run.base}}/handoff/{{step.id}}.draft.json"
+  required_fields:
+    - status
+    - summary
+    - artifacts
+    - blockers
+    - concerns
+
+invariants:
+  - "Trace requirements through BDD to implementation to tests"
+  - "Every gap must have a specific REQ reference"
+  - "Sad path traceability is mandatory"
+  - "Scope creep may be valid - assess, don't judge"
+  - "Be specific about what's missing, not vague"
+
+routing_hints:
+  on_verified: advance
+  on_unverified: advance_with_concerns
+  on_partial: advance_with_concerns
+  on_blocked: escalate

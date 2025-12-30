@@ -1,0 +1,384 @@
+{
+  "$schema": "../schemas/flow_graph.schema.json",
+  "id": "review-flow",
+  "version": 1,
+  "title": "Flow 4 - Review",
+  "flow_number": 4,
+  "description": "Harvest PR feedback, cluster into actionable items, apply fixes, flip Draft to Ready when complete.",
+  "charter": {
+    "goal": "Resolve all blocking PR feedback and transition Draft PR to Ready for merge",
+    "question": "Is this PR ready for the gate?",
+    "exit_criteria": [
+      "All CRITICAL and MAJOR work items resolved",
+      "PR feedback processed and clustered into review_worklist.json",
+      "pending_blocking count is 0",
+      "Draft PR flipped to Ready (or documented reason why not)",
+      "review_receipt.json produced with resolution summary"
+    ],
+    "non_goals": [
+      "Adding features not requested in feedback",
+      "Fundamental design changes (bounce to Flow 2 if needed)",
+      "Refactoring beyond what feedback explicitly requests",
+      "Addressing INFO-level items if CRITICAL/MAJOR remain"
+    ],
+    "prime_directive": "Clear the punch list. Fix what reviewers asked for. Keep scope tight."
+  },
+  "nodes": [
+    {
+      "node_id": "run_prep",
+      "template_id": "run-prep",
+      "params": {
+        "objective": "Establish run directory and review infrastructure"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Run Prep",
+        "position": {"x": 100, "y": 50},
+        "color": "#94a3b8"
+      }
+    },
+    {
+      "node_id": "branch",
+      "template_id": "repo-operator",
+      "params": {
+        "objective": "Ensure run branch exists and is current"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Git Setup",
+        "position": {"x": 100, "y": 120}
+      }
+    },
+    {
+      "node_id": "pr_create",
+      "template_id": "pr-creator",
+      "params": {
+        "objective": "Ensure Draft PR exists; create if missing"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Create PR",
+        "position": {"x": 100, "y": 190}
+      }
+    },
+    {
+      "node_id": "harvest",
+      "template_id": "pr-feedback-harvester",
+      "params": {
+        "objective": "Pull all bot/human feedback from PR"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Harvest Feedback",
+        "position": {"x": 100, "y": 260},
+        "color": "#3b82f6",
+        "teaching": {
+          "highlight": true,
+          "note": "Non-blocking: grab what's available now, including partial CI failures"
+        }
+      }
+    },
+    {
+      "node_id": "cluster",
+      "template_id": "review-worklist-writer",
+      "params": {
+        "objective": "Cluster feedback into actionable Work Items"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Cluster Items",
+        "position": {"x": 100, "y": 330},
+        "color": "#3b82f6",
+        "teaching": {
+          "highlight": true,
+          "note": "50 comments -> 5-10 Work Items. Stable RW-NNN IDs."
+        }
+      }
+    },
+    {
+      "node_id": "worklist_loop",
+      "template_id": "review-worklist-writer",
+      "params": {
+        "objective": "Process work items until pending_blocking == 0"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Work Loop",
+        "position": {"x": 100, "y": 400},
+        "color": "#22c55e",
+        "teaching": {
+          "highlight": true,
+          "note": "Core of Flow 4: iteratively resolve Work Items"
+        }
+      }
+    },
+    {
+      "node_id": "close_pr",
+      "template_id": "pr-status-manager",
+      "params": {
+        "objective": "Post resolution checklist, flip Draft to Ready"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Close PR",
+        "position": {"x": 100, "y": 490}
+      }
+    },
+    {
+      "node_id": "cleanup",
+      "template_id": "review-cleanup",
+      "params": {
+        "objective": "Write review_receipt.json, update index"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Cleanup",
+        "position": {"x": 100, "y": 560}
+      }
+    },
+    {
+      "node_id": "sanitize",
+      "template_id": "secrets-sanitizer",
+      "params": {
+        "objective": "Scan for secrets before commit"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Sanitize",
+        "position": {"x": 100, "y": 630}
+      }
+    },
+    {
+      "node_id": "commit",
+      "template_id": "repo-operator",
+      "params": {
+        "objective": "Commit and push changes"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Commit",
+        "position": {"x": 100, "y": 700}
+      }
+    },
+    {
+      "node_id": "gh_update",
+      "template_id": "gh-reporter",
+      "params": {
+        "objective": "Update issue board, post summary to GitHub"
+      },
+      "ui": {
+        "type": "step",
+        "label": "GitHub Update",
+        "position": {"x": 100, "y": 770},
+        "color": "#94a3b8"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "edge_id": "e01-prep-to-branch",
+      "from": "run_prep",
+      "to": "branch",
+      "type": "sequence"
+    },
+    {
+      "edge_id": "e02-branch-to-pr",
+      "from": "branch",
+      "to": "pr_create",
+      "type": "sequence"
+    },
+    {
+      "edge_id": "e03-pr-to-harvest",
+      "from": "pr_create",
+      "to": "harvest",
+      "type": "sequence"
+    },
+    {
+      "edge_id": "e04-harvest-to-cluster",
+      "from": "harvest",
+      "to": "cluster",
+      "type": "sequence"
+    },
+    {
+      "edge_id": "e05-cluster-to-loop",
+      "from": "cluster",
+      "to": "worklist_loop",
+      "type": "sequence"
+    },
+    {
+      "edge_id": "e06-worklist-loop",
+      "from": "worklist_loop",
+      "to": "worklist_loop",
+      "type": "loop",
+      "priority": 60,
+      "condition": {
+        "field": "pending_blocking",
+        "operator": "gt",
+        "value": 0
+      },
+      "ui": {
+        "style": "dashed",
+        "label": "pending > 0",
+        "color": "#f59e0b"
+      }
+    },
+    {
+      "edge_id": "e07-loop-to-close",
+      "from": "worklist_loop",
+      "to": "close_pr",
+      "type": "sequence",
+      "priority": 40,
+      "condition": {
+        "field": "pending_blocking",
+        "operator": "equals",
+        "value": 0
+      }
+    },
+    {
+      "edge_id": "e08-close-to-cleanup",
+      "from": "close_pr",
+      "to": "cleanup",
+      "type": "sequence"
+    },
+    {
+      "edge_id": "e09-cleanup-to-sanitize",
+      "from": "cleanup",
+      "to": "sanitize",
+      "type": "sequence"
+    },
+    {
+      "edge_id": "e10-sanitize-to-commit",
+      "from": "sanitize",
+      "to": "commit",
+      "type": "sequence",
+      "condition": {
+        "field": "safe_to_commit",
+        "operator": "equals",
+        "value": true
+      }
+    },
+    {
+      "edge_id": "e11-commit-to-update",
+      "from": "commit",
+      "to": "gh_update",
+      "type": "sequence"
+    }
+  ],
+  "subflows": [
+    {
+      "subflow_id": "feedback-processing",
+      "title": "Feedback Processing",
+      "description": "Harvest and cluster PR feedback",
+      "entry_node": "harvest",
+      "exit_nodes": ["cluster"],
+      "contained_nodes": ["harvest", "cluster"],
+      "ui": {
+        "color": "#dbeafe",
+        "collapsed_by_default": false
+      }
+    },
+    {
+      "subflow_id": "worklist-resolution",
+      "title": "Worklist Resolution",
+      "description": "Iterative work item resolution",
+      "entry_node": "worklist_loop",
+      "exit_nodes": ["worklist_loop"],
+      "contained_nodes": ["worklist_loop"],
+      "ui": {
+        "color": "#fef3c7",
+        "collapsed_by_default": false
+      }
+    }
+  ],
+  "policy": {
+    "max_loop_iterations": 50,
+    "max_depth": 3,
+    "escalation": {
+      "on_blocked": "continue_with_concerns",
+      "max_unverified_streak": 5,
+      "escalate_on_unverified_streak": "continue"
+    },
+    "suggested_detours": [
+      {
+        "from_nodes": ["worklist_loop"],
+        "to_station": "test-executor",
+        "condition": {
+          "field": "work_item_type",
+          "operator": "equals",
+          "value": "test_coverage"
+        },
+        "return_to": "source",
+        "priority": 70
+      },
+      {
+        "from_nodes": ["worklist_loop"],
+        "to_station": "design-optioneer",
+        "condition": {
+          "field": "work_item_type",
+          "operator": "equals",
+          "value": "design_issue"
+        },
+        "return_to": "source",
+        "priority": 80
+      }
+    ],
+    "suggested_injections": [
+      {
+        "station_id": "policy-analyst",
+        "inject_after": ["cluster"],
+        "condition": {
+          "field": "policy_concerns",
+          "operator": "gt",
+          "value": 0
+        },
+        "one_shot": true,
+        "priority": 60
+      }
+    ],
+    "routing_decisions": {
+      "default_decision": "CONTINUE",
+      "signal_interpretation": {
+        "on_verified": "CONTINUE",
+        "on_unverified_can_iterate": "CONTINUE",
+        "on_unverified_cannot_iterate": "CONTINUE",
+        "on_blocked": "DETOUR",
+        "on_concerns": "CONTINUE"
+      }
+    },
+    "invariants": [
+      "Exit when pending_blocking == 0",
+      "Checkpoint before context exhaustion",
+      "Exit on stuck_signal: true"
+    ]
+  },
+  "defaults": {
+    "context_pack": {
+      "include_upstream_artifacts": true,
+      "include_previous_envelopes": true,
+      "max_envelopes": 15,
+      "include_scent_trail": true
+    },
+    "sdk": {
+      "model": "inherit",
+      "max_turns": 25
+    }
+  },
+  "on_complete": {
+    "next_flow": "5-gate",
+    "reason": "PR ready; proceed to pre-merge gate",
+    "pass_artifacts": [
+      "review/review_receipt.json",
+      "review/review_worklist.json",
+      "review/pr_status.md"
+    ]
+  },
+  "on_failure": {
+    "next_flow": "3-build",
+    "reason": "Fundamental issues require rebuild"
+  },
+  "metadata": {
+    "author": "flow-studio-swarm",
+    "tags": ["review", "pr", "feedback", "worklist"],
+    "cross_cutting_stations": ["policy-analyst", "risk-analyst", "clarifier"]
+  }
+}

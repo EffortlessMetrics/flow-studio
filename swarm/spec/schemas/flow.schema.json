@@ -1,0 +1,333 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://flowstudio.dev/schemas/flow.schema.json",
+  "title": "FlowSpec",
+  "description": "A flow specification defines the orchestrator spine: step sequence, routing, and per-step overrides.",
+  "type": "object",
+  "required": ["id", "version", "title", "steps"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[0-9]+-[a-z]+$",
+      "description": "Flow identifier (e.g., '3-build')"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Flow spec version for traceability"
+    },
+    "title": {
+      "type": "string",
+      "maxLength": 80,
+      "description": "Human-readable flow title"
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 500,
+      "description": "Flow purpose and scope"
+    },
+    "defaults": {
+      "$ref": "#/definitions/FlowDefaults",
+      "description": "Default settings for all steps in this flow"
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/FlowStep"
+      },
+      "description": "Ordered list of steps in this flow"
+    },
+    "cross_cutting_stations": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Stations available to all steps in this flow"
+    },
+    "on_complete": {
+      "$ref": "#/definitions/FlowTransition",
+      "description": "What happens when flow completes successfully"
+    },
+    "on_failure": {
+      "$ref": "#/definitions/FlowTransition",
+      "description": "What happens when flow fails or is bounced"
+    }
+  },
+  "definitions": {
+    "FlowDefaults": {
+      "type": "object",
+      "properties": {
+        "context_pack": {
+          "type": "object",
+          "properties": {
+            "include_upstream_artifacts": {
+              "type": "boolean",
+              "default": true,
+              "description": "Include artifacts from upstream flows"
+            },
+            "include_previous_envelopes": {
+              "type": "boolean",
+              "default": true,
+              "description": "Include handoff envelopes from previous steps"
+            },
+            "max_envelopes": {
+              "type": "integer",
+              "default": 12,
+              "description": "Maximum number of envelopes to include"
+            },
+            "include_scent_trail": {
+              "type": "boolean",
+              "default": true,
+              "description": "Include scent trail for context"
+            }
+          },
+          "additionalProperties": false
+        },
+        "sdk_overrides": {
+          "type": "object",
+          "description": "SDK settings to apply to all steps"
+        }
+      },
+      "additionalProperties": false
+    },
+    "FlowStep": {
+      "type": "object",
+      "required": ["id", "station", "objective"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "description": "Step identifier (unique within flow)"
+        },
+        "station": {
+          "type": "string",
+          "description": "Station spec to use for this step"
+        },
+        "objective": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "What this step must accomplish"
+        },
+        "scope": {
+          "type": "string",
+          "description": "Scope constraint (e.g., 'AC-001..AC-003')"
+        },
+        "inputs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Additional inputs beyond station defaults"
+        },
+        "outputs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Outputs specific to this step"
+        },
+        "routing": {
+          "$ref": "#/definitions/RoutingConfig",
+          "description": "Routing configuration for this step"
+        },
+        "sdk_overrides": {
+          "type": "object",
+          "description": "Per-step SDK setting overrides"
+        },
+        "teaching": {
+          "type": "object",
+          "properties": {
+            "highlight": {
+              "type": "boolean",
+              "default": false,
+              "description": "Highlight this step in UI"
+            },
+            "note": {
+              "type": "string",
+              "description": "Teaching note for this step"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "RoutingConfig": {
+      "type": "object",
+      "required": ["kind"],
+      "oneOf": [
+        { "$ref": "#/definitions/LinearRouting" },
+        { "$ref": "#/definitions/MicroloopRouting" },
+        { "$ref": "#/definitions/BranchRouting" },
+        { "$ref": "#/definitions/TerminalRouting" }
+      ]
+    },
+    "LinearRouting": {
+      "type": "object",
+      "required": ["kind", "next"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "linear",
+          "description": "Linear routing: proceed to next step"
+        },
+        "next": {
+          "type": "string",
+          "description": "Next step ID to proceed to"
+        }
+      },
+      "additionalProperties": false
+    },
+    "MicroloopRouting": {
+      "type": "object",
+      "required": ["kind", "loop_target", "next"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "microloop",
+          "description": "Microloop routing: loop until condition met"
+        },
+        "loop_target": {
+          "type": "string",
+          "description": "Step to loop back to"
+        },
+        "next": {
+          "type": "string",
+          "description": "Step to proceed to when loop exits"
+        },
+        "exit_on": {
+          "$ref": "#/definitions/ExitCondition",
+          "description": "Conditions that trigger loop exit"
+        },
+        "loop_condition_field": {
+          "type": "string",
+          "default": "status",
+          "description": "Handoff field to check for loop exit (legacy)"
+        },
+        "loop_success_values": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["VERIFIED", "verified"],
+          "description": "Values that trigger loop exit (legacy)"
+        },
+        "max_iterations": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "default": 3,
+          "description": "Maximum loop iterations before forcing exit"
+        }
+      },
+      "additionalProperties": false
+    },
+    "BranchRouting": {
+      "type": "object",
+      "required": ["kind", "when"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "branch",
+          "description": "Branch routing: conditional next step"
+        },
+        "when": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/BranchCondition"
+          },
+          "minItems": 1,
+          "description": "Ordered list of branch conditions"
+        },
+        "default": {
+          "type": "string",
+          "description": "Default step if no condition matches"
+        }
+      },
+      "additionalProperties": false
+    },
+    "TerminalRouting": {
+      "type": "object",
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "terminal",
+          "description": "Terminal routing: end of flow"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ExitCondition": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["VERIFIED", "verified", "BLOCKED", "blocked"]
+          },
+          "description": "Exit when status matches one of these values"
+        },
+        "can_further_iteration_help": {
+          "type": "boolean",
+          "description": "Exit when can_further_iteration_help equals this value"
+        },
+        "confidence": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["high", "medium", "low"]
+          },
+          "description": "Exit when confidence matches one of these values"
+        }
+      },
+      "additionalProperties": false
+    },
+    "BranchCondition": {
+      "type": "object",
+      "required": ["condition", "next"],
+      "properties": {
+        "condition": {
+          "type": "object",
+          "properties": {
+            "field": {
+              "type": "string",
+              "description": "Handoff field to evaluate"
+            },
+            "operator": {
+              "type": "string",
+              "enum": ["equals", "not_equals", "in", "not_in", "contains"],
+              "default": "equals",
+              "description": "Comparison operator"
+            },
+            "value": {
+              "oneOf": [
+                { "type": "string" },
+                { "type": "boolean" },
+                { "type": "array", "items": { "type": "string" } }
+              ],
+              "description": "Value to compare against"
+            }
+          },
+          "required": ["field", "value"],
+          "additionalProperties": false
+        },
+        "next": {
+          "type": "string",
+          "description": "Step to proceed to if condition matches"
+        }
+      },
+      "additionalProperties": false
+    },
+    "FlowTransition": {
+      "type": "object",
+      "properties": {
+        "next_flow": {
+          "type": "string",
+          "pattern": "^[0-9]+-[a-z]+$",
+          "description": "Flow to transition to"
+        },
+        "reason": {
+          "type": "string",
+          "description": "Reason for transition"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

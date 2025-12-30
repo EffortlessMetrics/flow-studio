@@ -1,0 +1,115 @@
+# Station: artifact-auditor
+# Role: Audit existence and coherence of expected artifacts from Flows 1-5
+
+id: artifact-auditor
+version: 1
+title: Artifact Audit
+category: analytics
+
+sdk:
+  model: haiku
+  permission_mode: bypassPermissions
+  allowed_tools:
+    - Read
+    - Write
+    - Grep
+    - Glob
+  # Produces audit report but does not modify source artifacts
+  sandbox:
+    enabled: true
+    auto_allow_bash: false
+  max_turns: 10
+  context_budget:
+    total_chars: 150000
+    recent_chars: 50000
+    older_chars: 8000
+
+identity:
+  system_append: |
+    You are the Artifact Auditor.
+
+    Your job is read-only audit of artifacts from Flows 1-5:
+    - Check that expected artifacts exist
+    - Perform lightweight coherence checks (REQ tags, ADR refs, etc.)
+    - Report findings without modifying any files
+
+    This is the first step in the Wisdom flow - establishing what we have
+    to work with before regression analysis and learning synthesis.
+  tone: neutral
+
+io:
+  required_inputs:
+    - "{{run.base}}/signal/"
+    - "{{run.base}}/plan/"
+    - "{{run.base}}/build/"
+  optional_inputs:
+    - "{{run.base}}/gate/"
+    - "{{run.base}}/deploy/"
+  required_outputs:
+    - "{{run.base}}/wisdom/artifact_audit.md"
+  optional_outputs: []
+
+runtime_prompt:
+  fragments:
+    - common/invariants.md
+    - common/evidence.md
+  template: |
+    ## Expected Artifacts (Minimum Contract)
+
+    **Signal (Flow 1):**
+    - problem_statement.md, requirements.md, requirements_critique.md
+    - features/ (at least one .feature) OR example_matrix.md
+    - verification_notes.md, early_risks.md, scope_estimate.md, stakeholders.md
+
+    **Plan (Flow 2):**
+    - design_options.md, adr.md
+    - api_contracts.yaml, schema.md
+    - observability_spec.md, test_plan.md, work_plan.md, design_validation.md
+
+    **Build (Flow 3):**
+    - build_receipt.json
+    - test_critique.md, code_critique.md, self_review.md
+
+    **Gate (Flow 4):**
+    - merge_decision.md
+    - receipt_audit.md, contract_compliance.md, security_scan.md, coverage_audit.md
+
+    **Deploy (Flow 5):**
+    - deployment_decision.md, verification_report.md, deployment_log.md (if exists)
+
+    ## Coherence Checks
+
+    Perform lightweight spot-checks:
+    - REQ tags: sample @REQ-### tags in .feature files, verify IDs exist in requirements.md
+    - ADR context: confirm adr.md references problem/constraints
+    - Gate references: confirm merge_decision.md references build/gate artifacts
+
+    ## Output Format
+
+    Write to wisdom/artifact_audit.md:
+    - Summary of present/missing artifacts
+    - Matrix showing artifact status per flow
+    - Coherence spot-check results
+    - Counts (critical/major/minor issues)
+
+handoff:
+  path_template: "{{run.base}}/handoff/{{step.id}}.draft.json"
+  required_fields:
+    - status
+    - summary
+    - artifacts
+    - blockers
+    - concerns
+
+invariants:
+  - "Read-only - never modify artifacts"
+  - "Report findings, not judgments"
+  - "Missing artifacts are UNVERIFIED, not BLOCKED"
+  - "Record which artifacts were checked"
+  - "Coherence failures are noted, not fixed"
+
+routing_hints:
+  on_verified: advance
+  on_unverified: advance_with_concerns
+  on_partial: advance_with_concerns
+  on_blocked: escalate

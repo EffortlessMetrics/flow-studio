@@ -1,3 +1,0 @@
-echo "Running full selftest suite (all 16 steps)..."
-uv run swarm/tools/selftest.py
-echo "Note: \`make test\` is an alias for \`make selftest\` in this repo."

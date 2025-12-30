@@ -1,0 +1,130 @@
+# Station: plan-cleanup
+# Source: swarm/prompts/agentic_steps/plan-cleanup.md
+# Role: Seal the envelope at end of Flow 2 - derive counts, write receipt, update index
+
+id: plan-cleanup
+version: 2
+title: Plan Cleanup
+category: infra
+
+sdk:
+  model: haiku
+  permission_mode: bypassPermissions
+  allowed_tools:
+    - Read
+    - Write
+    - Edit
+    - Bash
+    - Grep
+    - Glob
+  sandbox:
+    enabled: true
+    auto_allow_bash: true
+  max_turns: 10
+  context_budget:
+    total_chars: 100000
+    recent_chars: 40000
+    older_chars: 6000
+
+identity:
+  system_append: |
+    You are the Plan Cleanup Agent. You seal the envelope at the end of Flow 2.
+
+    You produce the structured summary (receipt) of the plan outcome. The receipt
+    captures what happened - it is a log, not a gatekeeper. Downstream agents use
+    the receipt as evidence, not permission.
+
+    You own:
+    - .runs/<run-id>/plan/plan_receipt.json
+    - .runs/<run-id>/plan/cleanup_report.md
+    - Updating .runs/index.json fields you own: status, last_flow, updated_at
+
+    VERIFIED requires executed evidence - critic stations must have run and passed.
+    Missing verification = UNVERIFIED - a skipped critic means the plan was not verified.
+    Mechanical counts over estimates - if you cannot derive safely, output null.
+    Use stable markers like OPT-NNN, QID for counting.
+  longform_ref: prompts/agentic_steps/plan-cleanup.md
+  tone: neutral
+
+policy:
+  invariants_ref:
+    - fragments/common/invariants.md
+  handoff_ref:
+    - fragments/common/handoff.md
+
+io:
+  required_inputs: []
+  optional_inputs:
+    - plan/adr.md
+    - plan/work_plan.md
+    - plan/design_options.md
+    - plan/design_validation.md
+    - plan/option_critique.md
+    - plan/test_plan.md
+    - plan/ac_matrix.md
+    - plan/policy_analysis.md
+    - plan/impact_map.json
+    - plan/api_contracts.yaml
+    - plan/contract_critique.md
+    - plan/observability_spec.md
+    - plan/observability_critique.md
+    - plan/open_questions.md
+  required_outputs:
+    - plan/plan_receipt.json
+    - plan/cleanup_report.md
+  optional_outputs:
+    - plan/github_report.md
+
+handoff:
+  draft_path_template: "{{run.base}}/handoff/plan-cleanup.draft.json"
+  schema_ref: schemas/handoff.schema.json
+  required_fields:
+    - status
+    - summary
+    - artifacts
+    - routing_signal
+
+verify:
+  required_artifacts:
+    - plan/plan_receipt.json
+    - plan/cleanup_report.md
+  gate_status_on_fail: UNVERIFIED
+
+runtime_prompt:
+  fragments:
+    - common/invariants.md
+    - common/handoff.md
+  template: |
+    ## Plan Cleanup Approach
+
+    1. Preflight: verify you can read/write required paths
+    2. Artifact existence: check required (adr.md OR work_plan.md), recommended, optional
+    3. Mechanical counts: derive design options, subtasks, open questions, endpoints
+    4. Quality gate status: extract from critic Machine Summary blocks
+    5. Decision spine extraction: verify design_options.md and adr.md have parseable Machine Summary
+    6. Derive receipt status + routing based on evidence
+    7. Write plan_receipt.json with all counts and statuses
+    8. Update .runs/index.json (status, last_flow, updated_at only)
+    9. Write cleanup_report.md with artifact verification table
+    10. Write github_report.md (pre-composed comment body)
+
+    ## Status Decision
+
+    - VERIFIED: Required artifacts exist, critic gates passed, decision spine parseable
+    - UNVERIFIED: Missing required or critic gates incomplete
+    - CANNOT_PROCEED: IO/permissions prevented reading/writing
+
+invariants:
+  - "All paths are repo-root-relative"
+  - "Write only to .runs/<run-id>/plan/"
+  - "Counts are mechanical - null over guess"
+  - "Use demoswarm shim for all mechanical operations"
+  - "No git operations"
+  - "VERIFIED requires executed evidence"
+  - "Template-leak guard: values with | or < are unfilled"
+
+routing_hints:
+  on_verified: complete
+  on_unverified: advance_with_concerns
+  on_partial: advance_with_concerns
+  on_blocked: escalate

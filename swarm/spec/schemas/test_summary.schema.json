@@ -1,0 +1,280 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://flowstudio.dev/schemas/test_summary.schema.json",
+  "title": "TestSummary",
+  "description": "Standardized test summary format for Navigator forensic verification. Provides a unified view of test results regardless of source format (pytest, JUnit, Playwright). The error_signatures field enables the Elephant Protocol to detect stalled loops that produce the same failures repeatedly.",
+  "type": "object",
+  "required": ["total", "passed", "failed", "skipped", "error_signatures", "duration_ms", "source_format"],
+  "properties": {
+    "total": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Total number of tests discovered/executed"
+    },
+    "passed": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of tests that passed"
+    },
+    "failed": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of tests that failed"
+    },
+    "skipped": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of tests that were skipped"
+    },
+    "error_signatures": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{16}$",
+        "description": "SHA-256 hash prefix (16 chars) of normalized test_name::error_message"
+      },
+      "uniqueItems": true,
+      "description": "Unique error patterns for stall detection. Each signature is a hash of normalized test name + error message, enabling the Elephant Protocol to detect repeated failures across iterations."
+    },
+    "duration_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Total test execution duration in milliseconds"
+    },
+    "source_format": {
+      "type": "string",
+      "enum": ["pytest", "junit", "playwright", "jest", "cargo_test", "go_test", "rspec", "unknown"],
+      "description": "Test framework/format that produced this output"
+    },
+    "raw_output_path": {
+      "type": "string",
+      "description": "Path to the raw test output file (for audit trail and re-parsing)"
+    },
+    "errors": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0,
+      "description": "Number of tests that errored (distinct from assertion failures)"
+    },
+    "failures": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/TestFailure"
+      },
+      "description": "Detailed information about each test failure"
+    },
+    "coverage_percent": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Code coverage percentage if available from test run"
+    },
+    "success_rate": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Computed: (passed / total) * 100. Convenience field for quick assessment."
+    },
+    "all_passed": {
+      "type": "boolean",
+      "description": "Computed: true if failed == 0 and errors == 0"
+    },
+    "comparison": {
+      "$ref": "#/definitions/SummaryComparison",
+      "description": "Comparison with previous test run for stall detection"
+    }
+  },
+  "definitions": {
+    "TestFailure": {
+      "type": "object",
+      "required": ["test_name", "error_message"],
+      "description": "Detailed information about a single test failure",
+      "properties": {
+        "test_name": {
+          "type": "string",
+          "description": "Fully qualified test name (e.g., 'test_module::test_function' or 'TestClass.test_method')"
+        },
+        "error_message": {
+          "type": "string",
+          "maxLength": 2000,
+          "description": "Error message from the test failure (truncated for sanity)"
+        },
+        "test_file": {
+          "type": "string",
+          "description": "Path to the test file"
+        },
+        "test_line": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Line number where the test is defined"
+        },
+        "stack_trace": {
+          "type": "string",
+          "maxLength": 5000,
+          "description": "Full stack trace if available (truncated)"
+        },
+        "failure_type": {
+          "type": "string",
+          "enum": ["assertion", "exception", "timeout", "setup", "teardown", "unknown"],
+          "default": "unknown",
+          "description": "Category of failure, auto-detected from error message"
+        },
+        "expected": {
+          "type": "string",
+          "description": "Expected value in assertion failures (extracted from error message)"
+        },
+        "actual": {
+          "type": "string",
+          "description": "Actual value in assertion failures (extracted from error message)"
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Time spent on this test before failure"
+        }
+      },
+      "additionalProperties": false
+    },
+    "SummaryComparison": {
+      "type": "object",
+      "required": ["is_stalled"],
+      "description": "Comparison between two test summaries for stall detection",
+      "properties": {
+        "is_stalled": {
+          "type": "boolean",
+          "description": "True if same failures are occurring with no progress. Triggers Elephant Protocol attention."
+        },
+        "new_failures": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{16}$"
+          },
+          "description": "Error signatures that appeared in this run but not the previous"
+        },
+        "resolved_failures": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{16}$"
+          },
+          "description": "Error signatures that were in the previous run but are now resolved"
+        },
+        "persistent_failures": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{16}$"
+          },
+          "description": "Error signatures that appear in both runs (the stuck failures)"
+        },
+        "progress_delta": {
+          "type": "integer",
+          "description": "Change in number of passing tests (after.passed - before.passed)"
+        },
+        "before_total": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total tests in previous run"
+        },
+        "after_total": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total tests in current run"
+        },
+        "before_passed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Passed tests in previous run"
+        },
+        "after_passed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Passed tests in current run"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "total": 15,
+      "passed": 13,
+      "failed": 2,
+      "skipped": 0,
+      "error_signatures": ["a1b2c3d4e5f67890", "b2c3d4e5f6789012"],
+      "duration_ms": 3450,
+      "source_format": "pytest",
+      "raw_output_path": "swarm/runs/run-123/build/test_output.log",
+      "errors": 0,
+      "failures": [
+        {
+          "test_name": "test_auth::test_login_invalid_password",
+          "error_message": "AssertionError: Expected 401, got 500",
+          "test_file": "tests/test_auth.py",
+          "test_line": 45,
+          "failure_type": "assertion",
+          "expected": "401",
+          "actual": "500",
+          "duration_ms": 120
+        },
+        {
+          "test_name": "test_auth::test_session_timeout",
+          "error_message": "TimeoutError: Session did not expire within expected window",
+          "test_file": "tests/test_auth.py",
+          "test_line": 78,
+          "failure_type": "timeout",
+          "duration_ms": 5000
+        }
+      ],
+      "coverage_percent": 78.5,
+      "success_rate": 86.67,
+      "all_passed": false
+    },
+    {
+      "total": 24,
+      "passed": 24,
+      "failed": 0,
+      "skipped": 0,
+      "error_signatures": [],
+      "duration_ms": 1200,
+      "source_format": "junit",
+      "raw_output_path": "target/test-results.xml",
+      "errors": 0,
+      "failures": [],
+      "success_rate": 100.0,
+      "all_passed": true
+    },
+    {
+      "total": 8,
+      "passed": 5,
+      "failed": 3,
+      "skipped": 0,
+      "error_signatures": ["c3d4e5f678901234", "d4e5f67890123456", "e5f6789012345678"],
+      "duration_ms": 45000,
+      "source_format": "playwright",
+      "raw_output_path": "playwright-report/test-results.json",
+      "errors": 0,
+      "failures": [
+        {
+          "test_name": "Login Page::should display error for invalid credentials",
+          "error_message": "Expected element to be visible",
+          "failure_type": "assertion",
+          "duration_ms": 5000
+        }
+      ],
+      "comparison": {
+        "is_stalled": true,
+        "new_failures": [],
+        "resolved_failures": [],
+        "persistent_failures": ["c3d4e5f678901234", "d4e5f67890123456", "e5f6789012345678"],
+        "progress_delta": 0,
+        "before_total": 8,
+        "after_total": 8,
+        "before_passed": 5,
+        "after_passed": 5
+      }
+    }
+  ]
+}

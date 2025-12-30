@@ -1,3 +1,0 @@
-README.md:441:| **Report a bug** | Open an issue with the [Bug Report template](../../issues/new?template=bug_report.md) |
-README.md:442:| **Ask a question** | Open an issue with the [Adoption Question template](../../issues/new?template=adoption_question.md) |
-docs/EVALUATION_CHECKLIST.md:171:3. **Ask**: Open an [Adoption Question issue](../../../issues/new?template=adoption_question.md)

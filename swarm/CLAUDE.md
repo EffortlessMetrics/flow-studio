@@ -4,20 +4,27 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Overview
 
-This repo implements an agentic SDLC with **six flows** covering the full lifecycle of a change:
+This repo implements an agentic SDLC with **seven flows** covering the full lifecycle of a change:
 
 1. **Signal → Specs** (Flow 1): Raw input → problem statement, requirements, BDD, early risk
 2. **Specs → Plan** (Flow 2): Requirements → ADR, contracts, observability, test/work plans
 3. **Plan → Draft** (Flow 3): Implement via adversarial microloops → code, tests, receipts
-4. **Draft → Verify** (Flow 4): Pre-merge gate → audit receipts, check contracts/policy, recommend merge/bounce
-5. **Artifact → Prod** (Flow 5): Move approved artifact to deployed → verify health, create audit trail
-6. **Prod → Wisdom** (Flow 6): Analyze artifacts, detect regressions, extract learnings, close feedback loops
+4. **Draft → Review** (Flow 4): Create Draft PR, harvest bot/human feedback, iterate on feedback
+5. **Review → Gate** (Flow 5): Pre-merge gate → audit receipts, check contracts/policy, recommend merge/bounce
+6. **Gate → Prod** (Flow 6): Move approved artifact to deployed → verify health, create audit trail
+7. **Prod → Wisdom** (Flow 7): Analyze artifacts, detect regressions, extract learnings, close feedback loops
 
 **Core trade**: Spend compute to save senior engineer attention. Optimize for receipts and auditability, not speed.
 
 When an agent makes a decision, you can trace it back to the spec it was following. That's how you debug agentic flows without guessing.
 
-**Out-of-the-Box**: Flows 1-4 use only local files and git. Flows 5-6 use git/GitHub + artifacts. No external services required. Works immediately on clone. See `swarm/infrastructure/` for production extension patterns.
+**Out-of-the-Box**: GitHub integration is woven throughout:
+- Flows 1-2: GitHub for issue research and context
+- Flow 3: Creates Draft PRs to wake bots
+- Flow 4: Harvests PR feedback
+- Flows 5-7: Gating, deployment, learning
+
+Works immediately on clone. See `swarm/infrastructure/` for production extension patterns.
 
 See `swarm/positioning.md` for the full approach and `REPO_MAP.md` for a comprehensive structural overview.
 
@@ -27,7 +34,7 @@ See `swarm/positioning.md` for the full approach and `REPO_MAP.md` for a compreh
 
 - **Python**: UV for validation tooling, selftest, Flow Studio, and runtime backends
 - **TypeScript**: Flow Studio UI components
-- **Git**: Managed by `repo-operator` agent in Flows 3-5
+- **Git**: Managed by `repo-operator` agent in Flows 3-6
 
 ---
 
@@ -92,9 +99,9 @@ The swarm uses a **two-layer architecture**:
 - **Spec layer** (`swarm/flows/*.md`): Defines abstract roles and artifacts—*what* should happen
 - **Adapter layer** (`.claude/`): GitHub-native implementation—*how* it happens with `gh` CLI
 
-**Flows 1-4**: Spec role = adapter agent (1:1 mapping). The spec says "use `requirements-critic`" and there's a concrete `requirements-critic` agent in `.claude/agents/`.
+**Flows 1-5**: Spec role = adapter agent (1:1 mapping). The spec says "use `requirements-critic`" and there's a concrete `requirements-critic` agent in `.claude/agents/`.
 
-**Flows 5-6**: Spec roles are abstract; adapter fans them out to multiple GitHub-specific agents:
+**Flows 6-7**: Spec roles are abstract; adapter fans them out to multiple GitHub-specific agents:
 - Spec role `deploy-trigger` → adapters `merge-executor` + `release-tagger`
 - Spec role `regression-analyzer` → adapters `test-analyzer` + `coverage-tracker` + `issue-correlator` + `regression-detector`
 
@@ -138,15 +145,16 @@ The swarm has **two execution levels**:
 - `ux-critic` — Inspect Flow Studio screens and produce structured JSON critiques
 - `ux-implementer` — Apply UX critique fixes to Flow Studio code and run tests
 
-**Flow-specific Agents (37)**:
+**Flow-specific Agents (40+)**:
 - **Flow 1 - Signal** (6): signal-normalizer, problem-framer, requirements-author, requirements-critic, bdd-author, scope-assessor
 - **Flow 2 - Plan** (8): impact-analyzer, design-optioneer, adr-author, interface-designer, observability-designer, test-strategist, work-planner, design-critic
 - **Flow 3 - Build** (9): context-loader, test-author, test-critic, code-implementer, code-critic, mutator, fixer, doc-writer, self-reviewer
-- **Flow 4 - Gate** (6): receipt-checker, contract-enforcer, security-scanner, coverage-enforcer, gate-fixer, merge-decider
-- **Flow 5 - Deploy** (3): deploy-monitor, smoke-verifier, deploy-decider
-- **Flow 6 - Wisdom** (5): artifact-auditor, regression-analyst, flow-historian, learning-synthesizer, feedback-applier
+- **Flow 4 - Review** (3+): pr-creator, feedback-harvester, feedback-responder
+- **Flow 5 - Gate** (6): receipt-checker, contract-enforcer, security-scanner, coverage-enforcer, gate-fixer, merge-decider
+- **Flow 6 - Deploy** (3): deploy-monitor, smoke-verifier, deploy-decider
+- **Flow 7 - Wisdom** (5): artifact-auditor, regression-analyst, flow-historian, learning-synthesizer, feedback-applier
 
-**Total: 48 agents** (3 built-in + 45 domain)
+**Total: 51+ agents** (3 built-in + 48+ domain)
 
 ### Skills vs. Agents
 
@@ -172,6 +180,7 @@ Each flow writes artifacts under `RUN_BASE/<flow>/`:
 - `RUN_BASE/signal/` — problem statement, requirements, BDD, risk assessment
 - `RUN_BASE/plan/` — ADR, contracts, observability spec, test/work plans
 - `RUN_BASE/build/` — test summaries, critiques, receipts, git status
+- `RUN_BASE/review/` — PR feedback, bot comments, review iterations
 - `RUN_BASE/gate/` — audit reports, policy verdict, merge recommendation
 - `RUN_BASE/deploy/` — merge status, release info, CI status, smoke test results
 - `RUN_BASE/wisdom/` — artifact audit, test analysis, regressions, learnings, playbook updates
@@ -179,7 +188,7 @@ Each flow writes artifacts under `RUN_BASE/<flow>/`:
 **Code/tests** remain in standard locations: `src/`, `tests/`, `features/`, `migrations/`, `fuzz/`.
 
 **Curated examples** live in `swarm/examples/<scenario>/` (e.g., `swarm/examples/health-check/`). Each example includes:
-- Flow artifacts from all 6 flows (`signal/`, `plan/`, `build/`, `gate/`, `deploy/`, `wisdom/`)
+- Flow artifacts from all 7 flows (`signal/`, `plan/`, `build/`, `review/`, `gate/`, `deploy/`, `wisdom/`)
 - A `code-snapshot/` directory with copies of code at the time of the snapshot (for teaching only)
 - A `reports/` directory with dry-run diagnostics
 - See `swarm/examples/health-check/README.md` for the example structure
@@ -225,18 +234,19 @@ The **orchestrator** may use `explore` liberally to locate files, docs, incident
 
 - **Flow 3 Step 0**: `repo-operator` ensures clean tree, creates feature branch
 - **Flow 3 Final Step**: `repo-operator` stages changes, composes message, commits
-- **Flow 4 (optional)**: `repo-operator` for mechanical gate fixes only
+- **Flow 4**: `pr-creator` opens Draft PR to trigger bots
+- **Flow 5 (optional)**: `repo-operator` for mechanical gate fixes only
 
 `repo-operator` uses **safe Bash commands only** (no `--force`, no `--hard`).
 
 ### 4. Bounce-Backs
 
-Gate (Flow 4) may **bounce** work back to Build (Flow 3) or Plan (Flow 2) if issues are non-trivial:
+Gate (Flow 5) may **bounce** work back to Build (Flow 3) or Plan (Flow 2) if issues are non-trivial:
 - Gate fixes are **mechanical only** (lint, format, docstrings, typos, changelogs)
 - Logic/test/API/schema issues → bounce to Build
 - Design flaws → bounce to Plan
 
-See Flow 4 spec for full mechanical-only definition.
+See Flow 5 spec for full mechanical-only definition.
 
 ### 5. Always Complete the Flow
 
@@ -248,9 +258,9 @@ Agents **never block or escalate mid-flow**:
 - **Always reach the flow boundary**
 - Humans review receipts at flow gate and decide whether to rerun
 
-### 6. Closed Feedback Loops (Flow 6)
+### 6. Closed Feedback Loops (Flow 7)
 
-Flow 6 (Wisdom) closes the SDLC loop by feeding learnings back:
+Flow 7 (Wisdom) closes the SDLC loop by feeding learnings back:
 - **→ Flow 3**: `feedback-applier` creates GitHub issues for missing test scenarios
 - **→ Flow 2**: `feedback-applier` suggests updates to architecture docs and templates
 - **→ Flow 1**: `learning-synthesizer` extracts problem patterns for requirement templates
@@ -263,14 +273,14 @@ These are **recommendations in artifacts**, not direct flow invocations. Humans 
 
 ```
 .claude/
-  agents/          # 45 domain agent definitions (YAML frontmatter + prompt)
-  commands/flows/  # 6 slash commands for flow orchestration
+  agents/          # 48+ domain agent definitions (YAML frontmatter + prompt)
+  commands/flows/  # 7 slash commands for flow orchestration
   skills/          # 4 global skills
   settings.json
 
 swarm/
   flows/           # Flow specs with mermaid diagrams, RUN_BASE pathing, microloops
-  infrastructure/  # Production extension guides (flow-5-extensions.md, flow-6-extensions.md)
+  infrastructure/  # Production extension guides (flow-6-extensions.md, flow-7-extensions.md)
   tools/           # Python validation scripts
   runs/            # Active run artifacts (gitignored)
   examples/        # Curated demo snapshots (committed)
@@ -279,9 +289,10 @@ swarm/
       signal/      # Flow 1 artifacts
       plan/        # Flow 2 artifacts
       build/       # Flow 3 artifacts
-      gate/        # Flow 4 artifacts
-      deploy/      # Flow 5 artifacts
-      wisdom/      # Flow 6 artifacts
+      review/      # Flow 4 artifacts
+      gate/        # Flow 5 artifacts
+      deploy/      # Flow 6 artifacts
+      wisdom/      # Flow 7 artifacts
       reports/     # Flow dry-run diagnostics
   AGENTS.md        # Agent registry (source of truth)
   positioning.md   # Philosophy and axioms
@@ -315,19 +326,25 @@ fuzz/              # Fuzz harnesses - AUTHORITATIVE
    - Outputs to: `swarm/runs/<run-id>/build/`
    - Git: `repo-operator` (branch at start, commit at end)
 
-4. **Gate** (`/flow-4-gate`):
+4. **Review** (`/flow-4-review`):
+   - Creates Draft PR to wake bots, harvests feedback, iterates
+   - Produces: PR feedback, bot comments, review iterations
+   - Outputs to: `swarm/runs/<run-id>/review/`
+   - Git: `pr-creator` opens Draft PR
+
+5. **Gate** (`/flow-5-gate`):
    - Audits receipts, checks contracts/security/perf/policy
    - Applies mechanical fixes or bounces to Build/Plan
    - Produces: `merge_decision.md`
    - Outputs to: `swarm/runs/<run-id>/gate/`
 
-5. **Deploy** (`/flow-5-deploy`):
+6. **Deploy** (`/flow-6-deploy`):
    - Always callable; reads Gate's decision and behaves accordingly
    - If MERGE: merge, verify, report. If BOUNCE/ESCALATE: don't merge, explain why.
    - Produces: `deployment_log.md`, `verification_report.md`, `deployment_decision.md`
    - Outputs to: `swarm/runs/<run-id>/deploy/`
 
-6. **Wisdom** (`/flow-6-wisdom`):
+7. **Wisdom** (`/flow-7-wisdom`):
    - Analyze artifacts, detect regressions, extract learnings, close feedback loops
    - Spec roles: `artifact-auditor` → `regression-analyst` → `flow-historian` → `learning-synthesizer` → `feedback-applier` → `gh-reporter`
    - Produces: `artifact_audit.md`, `regression_report.md`, `flow_history.json`, `learnings.md`, `feedback_actions.md`
@@ -426,9 +443,9 @@ To extend the swarm:
    - Update `swarm/skills.md` documentation
    - Reference in agent `skills:` frontmatter as needed
 
-4. **Extend Flows 5-6 with production infrastructure**:
-   - See `swarm/infrastructure/flow-5-extensions.md` for k8s, canary, metrics
-   - See `swarm/infrastructure/flow-6-extensions.md` for observability platforms
+4. **Extend Flows 6-7 with production infrastructure**:
+   - See `swarm/infrastructure/flow-6-extensions.md` for k8s, canary, metrics
+   - See `swarm/infrastructure/flow-7-extensions.md` for observability platforms
    - Add environment variable detection to agent prompts
    - Graceful fallback: baseline always works, extensions add capability
 

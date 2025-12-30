@@ -1,0 +1,271 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "routing_explanation.schema.json",
+  "title": "RoutingExplanation",
+  "description": "Structured explanation of routing decisions, including LLM-assisted reasoning. Context-efficient format designed for auditability and downstream analysis.",
+  "type": "object",
+  "required": ["decision_type", "selected_target", "timestamp"],
+  "properties": {
+    "decision_type": {
+      "type": "string",
+      "enum": ["explicit", "exit_condition", "deterministic", "cel", "llm_tiebreaker", "llm_analysis", "error"],
+      "description": "How the routing decision was made"
+    },
+    "selected_target": {
+      "type": "string",
+      "description": "The node/step ID that was selected"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Confidence score (0-1)"
+    },
+    "reasoning_summary": {
+      "type": "string",
+      "maxLength": 200,
+      "description": "One-line summary of why this target was chosen"
+    },
+    "available_edges": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/EdgeOption"
+      },
+      "description": "All edges that were considered"
+    },
+    "elimination_log": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Elimination"
+      },
+      "description": "Why edges were eliminated"
+    },
+    "llm_reasoning": {
+      "$ref": "#/$defs/LLMReasoning",
+      "description": "Present when decision_type is llm_tiebreaker or llm_analysis"
+    },
+    "cel_evaluation": {
+      "$ref": "#/$defs/CELEvaluation",
+      "description": "Present when CEL expressions were evaluated"
+    },
+    "microloop_context": {
+      "$ref": "#/$defs/MicroloopContext",
+      "description": "Present when routing involves a microloop"
+    },
+    "metrics": {
+      "$ref": "#/$defs/DecisionMetrics"
+    }
+  },
+  "$defs": {
+    "EdgeOption": {
+      "type": "object",
+      "required": ["edge_id", "target_node"],
+      "properties": {
+        "edge_id": { "type": "string" },
+        "target_node": { "type": "string" },
+        "edge_type": {
+          "type": "string",
+          "enum": ["sequence", "loop", "branch", "detour", "injection", "subflow"]
+        },
+        "condition": {
+          "type": "object",
+          "properties": {
+            "field": { "type": "string" },
+            "operator": { "type": "string" },
+            "value": {},
+            "expression": { "type": "string" }
+          }
+        },
+        "priority": {
+          "type": "integer",
+          "default": 50
+        },
+        "evaluated_result": {
+          "type": "boolean",
+          "description": "Result of condition evaluation (if applicable)"
+        },
+        "score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "LLM-assigned feasibility score"
+        }
+      }
+    },
+    "Elimination": {
+      "type": "object",
+      "required": ["edge_id", "reason_code"],
+      "properties": {
+        "edge_id": { "type": "string" },
+        "reason_code": {
+          "type": "string",
+          "enum": [
+            "condition_false",
+            "priority_lower",
+            "exit_condition_met",
+            "max_iterations",
+            "status_mismatch",
+            "llm_scored_lower",
+            "blocked_by_policy"
+          ]
+        },
+        "detail": {
+          "type": "string",
+          "maxLength": 150,
+          "description": "Human-readable detail"
+        }
+      }
+    },
+    "LLMReasoning": {
+      "type": "object",
+      "description": "Structured output from LLM routing analysis",
+      "properties": {
+        "model_used": { "type": "string" },
+        "prompt_hash": {
+          "type": "string",
+          "maxLength": 16,
+          "description": "Truncated SHA256 of the prompt for traceability"
+        },
+        "response_time_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "factors_considered": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Factor"
+          }
+        },
+        "option_scores": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "description": "Map of edge_id -> score"
+        },
+        "primary_justification": {
+          "type": "string",
+          "maxLength": 300,
+          "description": "Main reason for the selected option"
+        },
+        "risks_identified": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "risk": { "type": "string", "maxLength": 100 },
+              "severity": { "type": "string", "enum": ["low", "medium", "high"] },
+              "mitigation": { "type": "string", "maxLength": 100 }
+            }
+          }
+        },
+        "assumptions_made": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 100
+          }
+        }
+      }
+    },
+    "Factor": {
+      "type": "object",
+      "required": ["name", "impact"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 50
+        },
+        "impact": {
+          "type": "string",
+          "enum": ["strongly_favors", "favors", "neutral", "against", "strongly_against"]
+        },
+        "evidence": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Pointer to supporting data (field path, artifact, etc.)"
+        },
+        "weight": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "How much this factor influenced the decision"
+        }
+      }
+    },
+    "CELEvaluation": {
+      "type": "object",
+      "properties": {
+        "expressions_evaluated": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "edge_id": { "type": "string" },
+              "expression": { "type": "string" },
+              "result": { "type": "boolean" },
+              "error": { "type": "string" }
+            }
+          }
+        },
+        "context_variables": {
+          "type": "object",
+          "description": "Variables that were available for evaluation"
+        }
+      }
+    },
+    "MicroloopContext": {
+      "type": "object",
+      "properties": {
+        "iteration": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_iterations": {
+          "type": "integer"
+        },
+        "loop_target": {
+          "type": "string"
+        },
+        "exit_status": {
+          "type": "string"
+        },
+        "can_further_iteration_help": {
+          "type": "boolean"
+        },
+        "status_history": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Status progression through loop iterations"
+        }
+      }
+    },
+    "DecisionMetrics": {
+      "type": "object",
+      "properties": {
+        "total_time_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "edges_total": {
+          "type": "integer"
+        },
+        "edges_eliminated": {
+          "type": "integer"
+        },
+        "llm_calls": {
+          "type": "integer"
+        },
+        "cel_evaluations": {
+          "type": "integer"
+        }
+      }
+    }
+  }
+}

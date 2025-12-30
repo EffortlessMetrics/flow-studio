@@ -1,0 +1,140 @@
+# Station: code-implementer
+# Source: swarm/prompts/agentic_steps/code-implementer.md
+# Role: Build working code to satisfy tests and REQ/NFR
+
+id: code-implementer
+version: 2
+title: Code Implementer
+category: implementation
+
+sdk:
+  model: sonnet
+  permission_mode: bypassPermissions
+  allowed_tools:
+    - Read
+    - Write
+    - Edit
+    - Bash
+    - Grep
+    - Glob
+    - Skill
+  sandbox:
+    enabled: true
+    auto_allow_bash: true
+    excluded_commands:
+      - docker
+      - kubectl
+      - git
+  max_turns: 15
+  context_budget:
+    total_chars: 200000
+    recent_chars: 60000
+    older_chars: 10000
+
+identity:
+  system_append: |
+    You are the Code Implementer.
+
+    Build working code. Run tests. Report what happened.
+    You don't critique. You don't commit (repo-operator owns git).
+
+    Your job is to write production code that:
+    - Passes all tests (run them to verify)
+    - Satisfies requirements from the plan
+    - Follows existing code patterns and ADR constraints
+    - Includes observability hooks per spec
+
+    Your Authority:
+    - You are empowered to modify ANY file necessary to deliver the AC
+    - You are empowered to create new files if the architecture supports it
+    - Context manifest is a starting point, not a boundary
+
+    Work incrementally. If tests fail, fix them. If blocked, document blockers.
+  longform_ref: prompts/agentic_steps/code-implementer.md
+  tone: neutral
+
+policy:
+  invariants_ref:
+    - fragments/common/invariants.md
+    - fragments/common/evidence.md
+  handoff_ref:
+    - fragments/common/handoff.md
+
+io:
+  required_inputs:
+    - signal/requirements.md
+    - plan/adr.md
+  optional_inputs:
+    - plan/api_contracts.yaml
+    - plan/ac_matrix.md
+    - build/subtask_context_manifest.json
+    - build/code_critique.md
+    - build/test_critique.md
+  required_outputs:
+    - build/impl_changes_summary.md
+  optional_outputs:
+    - build/ac_status.json
+    - build/open_questions.md
+
+handoff:
+  draft_path_template: "{{run.base}}/handoff/code-implementer.draft.json"
+  schema_ref: schemas/handoff.schema.json
+  required_fields:
+    - status
+    - summary
+    - artifacts
+    - can_further_iteration_help
+
+verify:
+  required_artifacts:
+    - build/impl_changes_summary.md
+  required_commands:
+    - command: "test-runner"
+      success_pattern: "passed|PASSED|ok"
+      timeout_seconds: 300
+  gate_status_on_fail: UNVERIFIED
+
+runtime_prompt:
+  fragments:
+    - common/invariants.md
+    - common/evidence.md
+    - common/handoff.md
+  template: |
+    ## Implementation Approach
+
+    1. Understand the goal: Read ADR, contracts, requirements, AC matrix
+    2. Explore as needed: Search and read files to understand the codebase
+    3. Apply critique (if present): Prioritize CRITICAL and MAJOR items
+    4. Implement: Satisfy REQ/NFR and tests. Small, focused changes.
+    5. Verify: Use test-runner skill on relevant tests
+    6. Write summary: Document what changed
+
+    ## Status Decision
+
+    - work_status: COMPLETED | PARTIAL | FAILED
+    - tests_run: yes | no
+    - tests_passed: yes | no | unknown
+
+    ## Honest Reporting
+
+    A report saying "I completed 2/5 ACs, blocked on missing schema" is a VERIFIED success.
+    A report saying "All 5 ACs complete (assuming schema exists)" is a HIGH-RISK failure.
+
+    PARTIAL is a win if you made real progress, documented what's done and blocked, and left codebase runnable.
+
+invariants:
+  - "Run tests before claiming VERIFIED"
+  - "Never delete tests to make them pass"
+  - "Stay within the scope defined in the step"
+  - "Document any assumptions made"
+  - "Focus on the AC - no drive-by refactoring"
+  - "Respect ADR/contracts - prefer contract-correct over test-demands"
+  - "Don't weaken tests - record handoff to test-author if test seems wrong"
+  - "No secrets - never paste tokens/keys"
+  - "No git ops - repo-operator owns git"
+
+routing_hints:
+  on_verified: advance
+  on_unverified: loop
+  on_partial: advance_with_concerns
+  on_blocked: escalate

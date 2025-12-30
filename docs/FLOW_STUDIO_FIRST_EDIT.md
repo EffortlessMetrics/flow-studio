@@ -186,13 +186,13 @@ Now that you understand the edit loop, try:
 ### Explore the Swarm
 
 - **Read the flow specs**: `swarm/flows/flow-*.md` (Mermaid diagrams + step tables)
-- **Browse artifacts**: `swarm/examples/health-check/` (complete 6-flow example)
+- **Browse artifacts**: `swarm/examples/health-check/` (complete 7-flow example)
 - **Understand validation**: `docs/VALIDATION_RULES.md` (FR-001 through FR-005)
 
 ### Run Real Flows
 
 - **Signal flow**: `/flow-1-signal` to process a new issue
-- **Full pipeline**: Work through all 6 flows on a real change
+- **Full pipeline**: Work through all 7 flows on a real change
 
 ---
 

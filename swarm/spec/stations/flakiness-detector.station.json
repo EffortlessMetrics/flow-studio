@@ -1,0 +1,91 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "flakiness-detector",
+  "version": 1,
+  "title": "Flakiness Detector",
+  "category": "analytics",
+  "sdk": {
+    "model": "haiku",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_only",
+    "allowed_tools": ["Read", "Grep", "Glob", "Bash"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": true,
+      "excluded_commands": ["git add", "git commit", "git push", "rm", "mv"]
+    },
+    "max_turns": 10,
+    "context_budget": {
+      "total_chars": 100000,
+      "recent_chars": 40000,
+      "older_chars": 8000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Flakiness Detector. Re-run failures with a small repetition budget and classify them as deterministic regression, flaky, or environment/tooling. You do not modify code or tests. You write only the flakiness report.",
+    "longform_ref": "prompts/agentic_steps/flakiness-detector.md",
+    "tone": "analytical"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/lane_discipline.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "build/test_execution.md"
+    ],
+    "optional_inputs": [
+      "build/test_critique.md",
+      "run_meta.json",
+      "demo-swarm.config.json"
+    ],
+    "required_outputs": [
+      "build/flakiness_report.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/build/flakiness_report.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "routing_signal"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "build/flakiness_report.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/routing_vocabulary.md"
+    ],
+    "template": "## Mission\n\nClassify test failures as deterministic regression, flaky, or environment/tooling issues.\n\n## Execution\n\n1. Read test_execution.md and identify failing tests\n2. If no failures: write report noting \"no failures to re-run\", status VERIFIED\n3. Re-run failures up to {{params.rerun_count|default:3}} times within {{params.budget_seconds|default:180}}s budget\n4. Classify each failure:\n   - DETERMINISTIC_REGRESSION: same tests fail across reruns\n   - FLAKY: failures appear/disappear across reruns\n   - ENV_TOOLING: missing runtime/config prevents execution\n\n## Routing\n\n- No failures → CONTINUE\n- Deterministic regressions → DETOUR to code-implementer\n- Flaky failures → DETOUR to test-author\n- Environment issues → INJECT_NODES for fix-env\n\n## Output\n\nWrite {{run.base}}/build/flakiness_report.md with summary, rerun outcomes, and failure classification worklist."
+  },
+  "invariants": [
+    "Do not modify code or tests - analysis only",
+    "Use only the test command from config or test_execution.md",
+    "Do not invent test commands",
+    "Classify conservatively - when in doubt, flag for human review",
+    "Respect the rerun budget"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "loop",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

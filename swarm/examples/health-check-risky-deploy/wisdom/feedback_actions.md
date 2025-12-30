@@ -127,14 +127,14 @@ The health-check-risky-deploy run demonstrated successful use of MERGE_WITH_COND
 
 **Labels**: documentation, templates, flow-4-gate
 
-## Feedback to Flow 6 (Wisdom)
+## Feedback to Flow 7 (Wisdom)
 
 ### Documentation Update: Add this run to reference examples
 
 **File**: `swarm/examples/README.md`
 
 **Content**: Add health-check-risky-deploy as a reference example for:
-- Complete 6-flow execution
+- Complete 7-flow execution
 - Risk management workflow
 - Conditional approval pattern
 - Observability-first design

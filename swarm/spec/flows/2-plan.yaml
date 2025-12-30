@@ -1,0 +1,302 @@
+# Flow: 2-plan
+# Purpose: Spec -> Design: Transform requirements into architecture decisions
+
+id: 2-plan
+version: 1
+title: "Flow 2 - Plan"
+description: |
+  Transform requirements into concrete design decisions.
+  Produces ADR, API contracts, observability spec, test plan, and work plan.
+  Design critic validates coherence before proceeding to Build.
+
+defaults:
+  context_pack:
+    include_upstream_artifacts: true
+    include_previous_envelopes: true
+    max_envelopes: 10
+    include_scent_trail: true
+  sdk_overrides: {}
+
+# Macro-level flow routing
+on_complete:
+  next_flow: 3-build
+  reason: "Design artifacts complete; proceed to implementation"
+
+on_failure:
+  next_flow: 1-signal
+  reason: "Design issues may require requirement refinement; bounce to Signal"
+
+steps:
+  # Step 1: Analyze impact
+  - id: analyze_impact
+    station: impact-analyzer
+    objective: |
+      Map the blast radius of proposed changes.
+      Identify affected modules, dependencies, and ripple effects.
+      Heavy context loading (20-50k tokens) to surface hidden coupling.
+    inputs:
+      - signal/requirements.md
+      - signal/bdd_scenarios.md
+      - signal/scope_assessment.md
+    outputs:
+      - plan/impact_map.json
+    routing:
+      kind: linear
+      next: design_options
+    teaching:
+      highlight: true
+      note: "Heavy context loading: surface all affected components"
+
+  # Step 2: Propose design options
+  - id: design_options
+    station: design-optioneer
+    objective: |
+      Propose 2-3 architecture options with explicit trade-offs.
+      No recommendation - present options objectively for ADR author.
+    inputs:
+      - plan/impact_map.json
+      - signal/requirements.md
+      - signal/problem_statement.md
+    outputs:
+      - plan/design_options.md
+    routing:
+      kind: linear
+      next: critique_options
+    teaching:
+      note: "Multiple options enable informed decision-making"
+
+  # Step 3: Critique design options
+  - id: critique_options
+    station: option-critic
+    objective: |
+      Review design options for feasibility and completeness.
+      Verify trade-offs are explicit and honest.
+      Check alignment with requirements and constraints.
+    inputs:
+      - plan/design_options.md
+      - signal/requirements.md
+    outputs:
+      - plan/option_critique.md
+    routing:
+      kind: microloop
+      loop_target: design_options
+      next: author_adr
+      exit_on:
+        status:
+          - VERIFIED
+          - verified
+        can_further_iteration_help: false
+      max_iterations: 2
+    teaching:
+      note: "Options microloop: refine until ready for decision"
+
+  # Step 4: Write ADR
+  - id: author_adr
+    station: adr-author
+    objective: |
+      Write Architecture Decision Record for chosen design.
+      Document context, decision, and consequences.
+      Reference rejected alternatives from design_options.md.
+    inputs:
+      - plan/design_options.md
+      - plan/option_critique.md
+      - plan/impact_map.json
+      - signal/requirements.md
+    outputs:
+      - plan/adr.md
+    routing:
+      kind: linear
+      next: design_interfaces
+    teaching:
+      highlight: true
+      note: "ADR is the single source of truth for design decisions"
+
+  # Step 5: Define interfaces
+  - id: design_interfaces
+    station: interface-designer
+    objective: |
+      Define API contracts, data models, and schema.
+      Plan migration strategy if database changes needed.
+      Contracts must be verifiable by Gate flow.
+    inputs:
+      - plan/adr.md
+      - signal/requirements.md
+    outputs:
+      - plan/api_contracts.yaml
+      - plan/interface_spec.md
+      - plan/schema.md
+    routing:
+      kind: linear
+      next: critique_contracts
+    teaching:
+      highlight: true
+      note: "Contracts define boundaries that Gate will enforce"
+
+  # Step 6: Critique contracts
+  - id: critique_contracts
+    station: contract-critic
+    objective: |
+      Validate API contracts for completeness and consistency.
+      Check backward compatibility constraints.
+      Verify schema correctness.
+    inputs:
+      - plan/api_contracts.yaml
+      - plan/interface_spec.md
+      - plan/schema.md
+    outputs:
+      - plan/contract_critique.md
+    routing:
+      kind: microloop
+      loop_target: design_interfaces
+      next: design_observability
+      exit_on:
+        status:
+          - VERIFIED
+          - verified
+        can_further_iteration_help: false
+      max_iterations: 2
+    teaching:
+      note: "Contract microloop: ensure interfaces are complete"
+
+  # Step 7: Design observability
+  - id: design_observability
+    station: observability-designer
+    objective: |
+      Define metrics, logs, traces, SLOs, and alerting.
+      Cover both happy paths and error scenarios.
+      Respect privacy requirements.
+    inputs:
+      - plan/adr.md
+      - plan/api_contracts.yaml
+      - signal/requirements.md
+    outputs:
+      - plan/observability_spec.md
+    routing:
+      kind: linear
+      next: critique_observability
+    teaching:
+      note: "Observability is designed, not bolted on after"
+
+  # Step 8: Critique observability
+  - id: critique_observability
+    station: observability-critic
+    objective: |
+      Validate observability spec for completeness.
+      Check SLO coverage and alerting thresholds.
+      Verify error paths are instrumented.
+    inputs:
+      - plan/observability_spec.md
+      - signal/requirements.md
+    outputs:
+      - plan/observability_critique.md
+    routing:
+      kind: microloop
+      loop_target: design_observability
+      next: plan_tests
+      exit_on:
+        status:
+          - VERIFIED
+          - verified
+        can_further_iteration_help: false
+      max_iterations: 2
+    teaching:
+      note: "Observability microloop: ensure all paths are covered"
+
+  # Step 9: Plan tests
+  - id: plan_tests
+    station: test-strategist
+    objective: |
+      Map BDD scenarios to test types and coverage targets.
+      Plan integration test strategy.
+      Identify property-based test opportunities.
+      Produce AC matrix for Flow 3 iteration.
+    inputs:
+      - signal/bdd_scenarios.md
+      - plan/adr.md
+      - plan/api_contracts.yaml
+      - plan/schema.md
+    outputs:
+      - plan/test_plan.md
+      - plan/ac_matrix.md
+    routing:
+      kind: linear
+      next: plan_work
+    teaching:
+      note: "Test plan drives test-first development in Flow 3"
+
+  # Step 10: Plan work
+  - id: plan_work
+    station: work-planner
+    objective: |
+      Break design into atomic subtasks with clear dependencies.
+      Define rollout sequence and parallelization opportunities.
+      Subtasks should be independently testable.
+    inputs:
+      - plan/adr.md
+      - plan/test_plan.md
+      - plan/api_contracts.yaml
+      - signal/scope_assessment.md
+    outputs:
+      - plan/work_plan.md
+    routing:
+      kind: linear
+      next: critique_design
+    teaching:
+      note: "Work plan becomes subtask index for Flow 3"
+
+  # Step 11: Critique design (integrative)
+  - id: critique_design
+    station: design-critic
+    objective: |
+      Validate design coherence across all plan artifacts.
+      Check ADR addresses requirements.
+      Verify contracts are complete.
+      Identify design risks before implementation.
+    inputs:
+      - plan/adr.md
+      - plan/api_contracts.yaml
+      - plan/interface_spec.md
+      - plan/observability_spec.md
+      - plan/test_plan.md
+      - plan/work_plan.md
+      - signal/requirements.md
+    outputs:
+      - plan/design_critique.md
+    routing:
+      kind: microloop
+      loop_target: author_adr
+      next: finalize
+      exit_on:
+        status:
+          - VERIFIED
+          - verified
+        can_further_iteration_help: false
+      max_iterations: 2
+    teaching:
+      highlight: true
+      note: "MICROLOOP: adr-author <-> design-critic until VERIFIED"
+
+  # Step 12: Finalize and write receipt
+  - id: finalize
+    station: plan-cleanup
+    objective: |
+      Verify all required artifacts exist.
+      Write plan_receipt.json with counts and quality gate status.
+      Update flow_plan.md and index.json.
+    inputs:
+      - plan/adr.md
+      - plan/api_contracts.yaml
+      - plan/test_plan.md
+      - plan/work_plan.md
+    outputs:
+      - plan/plan_receipt.json
+      - plan/cleanup_report.md
+    routing:
+      kind: terminal
+    teaching:
+      note: "Cleanup: seal the plan receipt"
+
+cross_cutting_stations:
+  - clarifier
+  - risk-analyst
+  - policy-analyst

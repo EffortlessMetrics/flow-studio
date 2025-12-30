@@ -1,0 +1,317 @@
+# Flow: 7-wisdom
+# Purpose: Prod -> Wisdom: Analyze artifacts, extract learnings, close feedback loops
+
+id: 7-wisdom
+version: 1
+title: "Flow 7 - Wisdom"
+description: |
+  Retrospective factory: analyze all flow artifacts, detect regressions,
+  compile history, synthesize learnings, and apply feedback to future runs.
+  Writes scent trail to `.runs/_wisdom/latest.md` for future run context.
+  Terminal flow: no next flow on completion.
+
+defaults:
+  context_pack:
+    include_upstream_artifacts: true
+    include_previous_envelopes: true
+    max_envelopes: 10
+    include_scent_trail: true
+  sdk_overrides: {}
+
+# Macro-level flow routing
+on_complete:
+  next_flow: null
+  reason: "Wisdom is the terminal flow; run complete"
+
+on_failure:
+  next_flow: null
+  reason: "Wisdom does not bounce; document issues and complete"
+
+steps:
+  # Step 1: Audit all flow artifacts
+  - id: audit_artifacts
+    station: artifact-auditor
+    objective: |
+      Verify all expected flow artifacts exist from prior flows.
+      Check structural sanity of receipts, contracts, and outputs.
+      Document missing or malformed artifacts.
+    inputs:
+      - signal/signal_receipt.json
+      - plan/plan_receipt.json
+      - build/build_receipt.json
+      - review/review_receipt.json
+      - gate/gate_receipt.json
+      - deploy/deploy_receipt.json
+    outputs:
+      - wisdom/artifact_audit.md
+    routing:
+      kind: linear
+      next: analyze_solution
+    teaching:
+      highlight: true
+      note: "Artifact audit: verify all upstream flows produced expected outputs"
+
+  # Step 2: Analyze solution fit
+  - id: analyze_solution
+    station: solution-analyst
+    objective: |
+      Trace requirements -> BDD -> implementation -> tests.
+      Verify we built the right thing.
+      Check sad path coverage.
+    inputs:
+      - wisdom/artifact_audit.md
+      - signal/requirements.md
+      - signal/features/*.feature
+      - build/build_receipt.json
+    outputs:
+      - wisdom/solution_analysis.md
+    routing:
+      kind: linear
+      next: analyze_quality
+    teaching:
+      highlight: true
+      note: "Solution analysis: did we solve the right problem?"
+
+  # Step 3: Analyze code quality
+  - id: analyze_quality
+    station: quality-analyst
+    objective: |
+      Analyze code health and complexity of changed files.
+      Assess maintainability, naming, modularity.
+    inputs:
+      - wisdom/artifact_audit.md
+      - build/impl_changes_summary.md
+    outputs:
+      - wisdom/quality_report.md
+    routing:
+      kind: linear
+      next: analyze_maintainability
+    teaching:
+      note: "Quality analysis: code health assessment"
+
+  # Step 4: Analyze maintainability
+  - id: analyze_maintainability
+    station: maintainability-analyst
+    objective: |
+      Deep dive on naming, modularity, DRY, coupling.
+      Assess documentation and test quality.
+    inputs:
+      - wisdom/quality_report.md
+      - build/impl_changes_summary.md
+    outputs:
+      - wisdom/maintainability_analysis.md
+    routing:
+      kind: linear
+      next: analyze_process
+    teaching:
+      note: "Maintainability: deep code quality analysis"
+
+  # Step 5: Analyze process efficiency
+  - id: analyze_process
+    station: process-analyst
+    objective: |
+      Analyze flow efficiency: iterations, bounces, stalls.
+      Write friction log documenting where the swarm hit walls.
+      Identify areas for improvement.
+    inputs:
+      - wisdom/artifact_audit.md
+      - signal/signal_receipt.json
+      - plan/plan_receipt.json
+      - build/build_receipt.json
+      - gate/gate_receipt.json
+    outputs:
+      - wisdom/process_analysis.md
+      - wisdom/friction_log.md
+    routing:
+      kind: linear
+      next: analyze_regressions
+    teaching:
+      note: "Process analysis: flow efficiency and friction"
+
+  # Step 6: Analyze regressions
+  - id: analyze_regressions
+    station: regression-analyst
+    objective: |
+      Check for test regressions, coverage changes, stability issues.
+      Compare current state to prior runs if available.
+      Document any regressions with evidence.
+    inputs:
+      - wisdom/artifact_audit.md
+      - build/build_receipt.json
+      - gate/gate_receipt.json
+    outputs:
+      - wisdom/regression_report.md
+    routing:
+      kind: linear
+      next: analyze_patterns
+    teaching:
+      highlight: true
+      note: "Regression analysis: what got worse and why"
+
+  # Step 7: Analyze cross-run patterns
+  - id: analyze_patterns
+    station: pattern-analyst
+    objective: |
+      Look across historical runs for recurring issues.
+      Identify repeated failures and trends.
+    inputs:
+      - wisdom/regression_report.md
+      - wisdom/process_analysis.md
+    outputs:
+      - wisdom/pattern_report.md
+    routing:
+      kind: linear
+      next: analyze_signal_quality
+    teaching:
+      note: "Pattern analysis: cross-run recurring issues"
+
+  # Step 8: Analyze signal quality
+  - id: analyze_signal_quality
+    station: signal-quality-analyst
+    objective: |
+      Analyze accuracy of feedback sources (CI, bots, humans).
+      Track which signals were valid vs noise.
+    inputs:
+      - wisdom/pattern_report.md
+      - review/pr_feedback.md
+    outputs:
+      - wisdom/signal_quality_report.md
+    routing:
+      kind: linear
+      next: compile_history
+    teaching:
+      note: "Signal quality: which feedback sources were accurate"
+
+  # Step 9: Compile flow history
+  - id: compile_history
+    station: flow-historian
+    objective: |
+      Build timeline linking all flow events.
+      Calculate Developer Lead Time (DevLT): human attention required.
+      Document flow durations, stalls, and iteration counts.
+    inputs:
+      - wisdom/artifact_audit.md
+      - wisdom/regression_report.md
+      - signal/signal_receipt.json
+      - plan/plan_receipt.json
+      - build/build_receipt.json
+      - review/review_receipt.json
+      - gate/gate_receipt.json
+      - deploy/deploy_receipt.json
+    outputs:
+      - wisdom/flow_history.json
+    routing:
+      kind: linear
+      next: synthesize_learnings
+    teaching:
+      note: "Timeline compilation: how long, where did we stall"
+
+  # Step 10: Synthesize learnings
+  - id: synthesize_learnings
+    station: learning-synthesizer
+    objective: |
+      Extract patterns from the analysis: what worked, what failed.
+      Identify problem patterns for future requirement templates.
+      Produce narrative lessons learned.
+    inputs:
+      - wisdom/artifact_audit.md
+      - wisdom/solution_analysis.md
+      - wisdom/quality_report.md
+      - wisdom/maintainability_analysis.md
+      - wisdom/process_analysis.md
+      - wisdom/regression_report.md
+      - wisdom/pattern_report.md
+      - wisdom/signal_quality_report.md
+      - wisdom/flow_history.json
+    outputs:
+      - wisdom/learnings.md
+    routing:
+      kind: linear
+      next: apply_feedback
+    teaching:
+      highlight: true
+      note: "Synthesize: extract actionable patterns and lessons"
+
+  # Step 11: Apply feedback
+  - id: apply_feedback
+    station: feedback-applier
+    objective: |
+      Turn learnings into concrete actions: issue drafts, doc updates.
+      Write pack improvements as suggested diffs.
+      Write scent trail to `.runs/_wisdom/latest.md` for future runs.
+    inputs:
+      - wisdom/learnings.md
+      - wisdom/flow_history.json
+      - wisdom/regression_report.md
+      - wisdom/friction_log.md
+    outputs:
+      - wisdom/feedback_actions.md
+      - wisdom/pack_improvements.md
+      - wisdom/codebase_wisdom.md
+      - _wisdom/latest.md
+    routing:
+      kind: linear
+      next: traceability_audit
+    teaching:
+      highlight: true
+      note: "Feedback loop closure: scent trail informs future runs"
+
+  # Step 12: Traceability audit
+  - id: traceability_audit
+    station: traceability-auditor
+    objective: |
+      Verify run-level coherence: receipts, index, GitHub markers.
+      Final consistency check before receipt seal.
+    inputs:
+      - wisdom/feedback_actions.md
+      - wisdom/learnings.md
+    outputs:
+      - wisdom/traceability_audit.md
+    routing:
+      kind: linear
+      next: assess_risk
+    teaching:
+      note: "Traceability: final coherence check"
+
+  # Step 13: Risk comparison
+  - id: assess_risk
+    station: risk-analyst
+    objective: |
+      Compare predicted risks from Signal vs actual outcomes.
+      Assess risk prediction accuracy.
+    inputs:
+      - wisdom/learnings.md
+      - signal/early_risks.md
+      - deploy/deployment_decision.md
+    outputs:
+      - wisdom/risk_assessment.md
+    routing:
+      kind: linear
+      next: finalize
+    teaching:
+      note: "Risk comparison: predicted vs actual"
+
+  # Step 14: Finalize and write receipt
+  - id: finalize
+    station: wisdom-cleanup
+    objective: |
+      Write wisdom_receipt.json, update index.json.
+      Compute counts mechanically using stable markers.
+      This is the final receipt for the run.
+    inputs:
+      - wisdom/learnings.md
+      - wisdom/feedback_actions.md
+      - wisdom/pack_improvements.md
+    outputs:
+      - wisdom/wisdom_receipt.json
+      - wisdom/cleanup_report.md
+    routing:
+      kind: terminal
+    teaching:
+      note: "Cleanup: seal the wisdom receipt - run complete"
+
+cross_cutting_stations:
+  - clarifier
+  - risk-analyst
+  - repo-operator
+  - gh-reporter

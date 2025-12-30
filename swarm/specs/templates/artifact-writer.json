@@ -1,0 +1,70 @@
+{
+  "id": "artifact-writer",
+  "name": "Artifact Writer",
+  "description": "Artifact-producing step for documentation, reports, and structured outputs. Produces well-formatted artifacts with clear structure and metadata.",
+  "category": "artifact",
+  "station_id": "doc-writer",
+  "version": 1,
+  "default_objective": "Write {{artifact_name}} documenting {{content_focus}}. Ensure artifact follows {{format_standard}} conventions.",
+  "parameters": [
+    {
+      "name": "artifact_name",
+      "type": "string",
+      "required": true,
+      "default": "documentation",
+      "title": "Artifact Name",
+      "description": "Name/type of artifact to produce"
+    },
+    {
+      "name": "content_focus",
+      "type": "string",
+      "required": true,
+      "default": "the implemented changes and their rationale",
+      "title": "Content Focus",
+      "description": "What the artifact should document"
+    },
+    {
+      "name": "format_standard",
+      "type": "enum",
+      "required": false,
+      "default": "markdown",
+      "title": "Format Standard",
+      "description": "Output format for the artifact",
+      "enum": ["markdown", "json", "yaml", "plaintext"]
+    },
+    {
+      "name": "include_metadata",
+      "type": "boolean",
+      "required": false,
+      "default": true,
+      "title": "Include Metadata",
+      "description": "Whether to include timestamps, version info, and traceability"
+    },
+    {
+      "name": "output_path",
+      "type": "string",
+      "required": false,
+      "default": "{{run.base}}/{{flow.key}}/artifact.md",
+      "title": "Output Path",
+      "description": "Where to write the artifact"
+    }
+  ],
+  "routing_defaults": {
+    "kind": "linear",
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns"
+  },
+  "io_schema": {
+    "additional_inputs": [],
+    "additional_outputs": [
+      "{{run.base}}/{{flow.key}}/{{params.artifact_name}}"
+    ]
+  },
+  "ui": {
+    "icon": "document",
+    "color": "#FFB74D",
+    "palette_group": "Output",
+    "palette_order": 10
+  },
+  "tags": ["artifact", "documentation", "output", "reporting"]
+}

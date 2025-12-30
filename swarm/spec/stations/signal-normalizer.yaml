@@ -1,0 +1,104 @@
+# Station: signal-normalizer
+# Source: swarm/prompts/agentic_steps/signal-normalizer.md
+# Role: Normalize raw signal into machine-friendly facts and repo context
+
+id: signal-normalizer
+version: 2
+title: Normalize Signal
+category: shaping
+
+sdk:
+  model: haiku
+  permission_mode: bypassPermissions
+  allowed_tools:
+    - Read
+    - Write
+    - Edit
+    - Grep
+    - Glob
+  sandbox:
+    enabled: true
+    auto_allow_bash: false
+  max_turns: 10
+  context_budget:
+    total_chars: 150000
+    recent_chars: 50000
+    older_chars: 8000
+
+identity:
+  system_append: |
+    You are the Signal Normalizer.
+
+    Your job is to turn messy input into structured, testable, linkable facts,
+    plus a short "what the repo already says" brief. You do not decide the design.
+    You do not write requirements. You do not do git/GitHub operations.
+
+    All paths are repo-root-relative. Write only to .runs/<run-id>/signal/.
+    Keep quotes bounded; prefer references over dumps.
+  longform_ref: prompts/agentic_steps/signal-normalizer.md
+  tone: neutral
+
+policy:
+  invariants_ref:
+    - fragments/common/invariants.md
+    - fragments/common/evidence.md
+  handoff_ref:
+    - fragments/common/handoff.md
+
+io:
+  required_inputs: []
+  optional_inputs:
+    - .runs/index.json
+    - .runs/<run-id>/run_meta.json
+  required_outputs:
+    - signal/issue_normalized.md
+    - signal/context_brief.md
+  optional_outputs: []
+
+handoff:
+  draft_path_template: "{{run.base}}/handoff/signal-normalizer.draft.json"
+  schema_ref: schemas/handoff.schema.json
+  required_fields:
+    - status
+    - summary
+    - artifacts
+
+verify:
+  required_artifacts:
+    - signal/issue_normalized.md
+    - signal/context_brief.md
+  gate_status_on_fail: UNVERIFIED
+
+runtime_prompt:
+  fragments:
+    - common/invariants.md
+    - common/evidence.md
+    - common/handoff.md
+  template: |
+    ## Signal Normalization Approach
+
+    1. Read the raw user signal (issue description, ticket, error snippet)
+    2. Extract and structure:
+       - Request type: feature | bug | incident | refactor | question
+       - Who is impacted: user types, internal teams
+       - Observed vs expected behavior
+       - Where it happens: env, platform, endpoint, module
+       - Evidence: error strings, logs (max 30 lines, redacted if needed)
+       - Constraints: deadlines, compatibility, compliance hints
+       - Success criteria and links
+    3. Scan repo for prior art and likely touch-points
+    4. Apply quoting/redaction rules (max 30 lines, redact secrets)
+    5. Write issue_normalized.md and context_brief.md
+
+invariants:
+  - "All paths are repo-root-relative"
+  - "Write only to .runs/<run-id>/signal/"
+  - "Max 30 lines of quoted material total"
+  - "Redact obvious secrets inline"
+  - "Do not invent missing information; record as unknown"
+
+routing_hints:
+  on_verified: advance
+  on_unverified: advance_with_concerns
+  on_partial: advance_with_concerns
+  on_blocked: escalate

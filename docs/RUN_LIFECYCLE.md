@@ -74,7 +74,7 @@ Both `update_summary()` and `append_event()` acquire this lock before modifying 
 Runs transition through these statuses:
 
 ```
-PENDING -> RUNNING -> SUCCEEDED | FAILED | CANCELLED
+PENDING -> RUNNING -> SUCCEEDED | FAILED | CANCELED
 ```
 
 The `sdlc_status` field tracks semantic outcome:

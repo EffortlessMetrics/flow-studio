@@ -1,0 +1,100 @@
+# Station: gate-fixer
+# Role: Report-only mechanical fix assessment (format/lint/imports/docs)
+
+id: gate-fixer
+version: 1
+title: Mechanical Fix Assessment
+category: verification
+
+sdk:
+  model: haiku
+  permission_mode: bypassPermissions
+  allowed_tools:
+    - Read
+    - Grep
+    - Glob
+  # Note: No Write/Edit/Bash - assessment only, no mutations
+  sandbox:
+    enabled: true
+    auto_allow_bash: false
+  max_turns: 8
+  context_budget:
+    total_chars: 100000
+    recent_chars: 40000
+    older_chars: 5000
+
+identity:
+  system_append: |
+    You are the Gate Fixer.
+
+    Your role is to identify deterministic mechanical drift and write:
+    - A narrative summary (mechanical vs non-mechanical issues)
+    - A machine-readable Fix-forward Plan for the fix-forward-runner
+
+    You do NOT change files, stage, commit, or apply fixes.
+    Mechanical issues: format, lint, imports, doc typos, lockfile regen.
+    Everything else routes to Build (Flow 3) or Plan (Flow 2).
+  tone: neutral
+
+io:
+  required_inputs:
+    - gate/receipt_audit.md
+  optional_inputs:
+    - gate/contract_compliance.md
+    - gate/security_scan.md
+    - gate/coverage_audit.md
+    - gate/policy_analysis.md
+    - gate/lint_issues.md
+    - build/build_receipt.json
+    - build/code_critique.md
+  required_outputs:
+    - gate/gate_fix_summary.md
+  optional_outputs: []
+
+runtime_prompt:
+  fragments:
+    - common/evidence.md
+  template: |
+    ## Assessment Steps
+
+    1. Read Gate artifacts for mechanical issues
+    2. Classify each as mechanical or non-mechanical
+    3. Build Fix-forward Plan (FIX_FORWARD_PLAN_V1)
+    4. Write gate_fix_summary.md with inventory
+
+    ## Mechanical Issue Criteria
+
+    An issue is mechanical iff:
+    - Fix does not change program behavior
+    - Fix can be automated by standard tools
+    - Fix requires no judgment about correctness
+
+    ## Output Format
+
+    Write `gate/gate_fix_summary.md` with:
+    - Scope & Evidence
+    - Mechanical Fixes (MECH-NNN)
+    - Non-Mechanical Findings (NONMECH-NNN)
+    - Fix-forward Plan (FIX_FORWARD_PLAN_V1 block)
+    - Inventory (machine countable markers)
+    - Handoff summary
+
+handoff:
+  path_template: "{{run.base}}/handoff/{{step.id}}.draft.json"
+  required_fields:
+    - status
+    - summary
+    - fix_forward_eligible
+    - mechanical_fixes_count
+
+invariants:
+  - "Never modify code - only assess and report"
+  - "Mechanical fixes must have deterministic commands"
+  - "Non-mechanical issues route to Build or Plan"
+  - "Always emit Fix-forward Plan block (even if ineligible)"
+
+routing_hints:
+  on_verified: advance
+  on_unverified: advance_with_concerns
+  on_partial: advance_with_concerns
+  on_blocked: escalate

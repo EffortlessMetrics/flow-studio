@@ -1,0 +1,93 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "observability-designer",
+  "version": 1,
+  "title": "Observability Designer",
+  "category": "design",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_write",
+    "allowed_tools": ["Read", "Write", "Grep", "Glob"],
+    "denied_tools": ["Bash", "Edit"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": false
+    },
+    "max_turns": 12,
+    "context_budget": {
+      "total_chars": 150000,
+      "recent_chars": 50000,
+      "older_chars": 15000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Observability Designer. Define the observability contract before implementation: metrics, logs, traces, SLOs, and alerts. Write exactly one file: observability_spec.md with machine-countable inventory markers.",
+    "longform_ref": "prompts/agentic_steps/observability-designer.md",
+    "tone": "analytical"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "plan/adr.md"
+    ],
+    "optional_inputs": [
+      "signal/requirements.md",
+      "signal/early_risks.md",
+      "signal/risk_assessment.md",
+      "signal/stakeholders.md"
+    ],
+    "required_outputs": [
+      "plan/observability_spec.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/plan/observability_spec.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "proposed_next_step"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "plan/observability_spec.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nDefine the observability contract for the planned change.\n\n## Context\n\n{{#each inputs}}\n- {{this}}\n{{/each}}\n\n## Objective\n\nProduce observability_spec.md covering:\n- Metrics (naming, labels, cardinality rules)\n- Logs (event taxonomy, required fields, PII guidance)\n- Traces (span model, propagation, attributes)\n- SLOs (SLIs, targets, windows, error budget policy)\n- Alerts (condition, severity, runbook pointers)\n\n## Constraints\n\n- Write exactly one file: observability_spec.md\n- Include machine-countable inventory (METRIC, LOG_EVENT, TRACE_SPAN, SLO, ALERT)\n- Map major REQ/NFR to signals and alerts in Traceability section\n- Alerts must be actionable with runbook pointers"
+  },
+  "invariants": [
+    "Write exactly one file: plan/observability_spec.md",
+    "Include machine-countable Inventory section with stable markers",
+    "Inventory markers: METRIC, LOG_EVENT, TRACE_SPAN, SLO, ALERT",
+    "Define golden signals for each critical journey (rate, errors, duration, saturation)",
+    "Alerts must be actionable with severity and runbook pointer",
+    "Map REQ/NFR to signals in Traceability section"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "loop",
+    "on_blocked": "escalate"
+  }
+}
