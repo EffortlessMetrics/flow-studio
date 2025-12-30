@@ -25,11 +25,11 @@ This document is the canonical "system map" for the demo swarm. It shows how sur
                                  │
                                  ▼
 ┌──────────────────────────────────────────────────────────────────────────┐
-│                              6 FLOWS                                      │
-│  ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐                   │
-│  │Signal│→│ Plan │→│Build │→│ Gate │→│Deploy│→│Wisdom│                   │
-│  │ (1)  │ │ (2)  │ │ (3)  │ │ (4)  │ │ (5)  │ │ (6)  │                   │
-│  └──────┘ └──────┘ └──────┘ └──────┘ └──────┘ └──────┘                   │
+│                              7 FLOWS                                      │
+│  ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐          │
+│  │Signal│→│ Plan │→│Build │→│Review│→│ Gate │→│Deploy│→│Wisdom│          │
+│  │ (1)  │ │ (2)  │ │ (3)  │ │ (4)  │ │ (5)  │ │ (6)  │ │ (7)  │          │
+│  └──────┘ └──────┘ └──────┘ └──────┘ └──────┘ └──────┘ └──────┘          │
 └────────────────────────────────┬─────────────────────────────────────────┘
                                  │
                                  ▼
@@ -69,16 +69,17 @@ See: [AGENT_SDK_INTEGRATION.md](./AGENT_SDK_INTEGRATION.md)
 
 ---
 
-## The 6 Flows
+## The 7 Flows
 
 | Flow | Key | Purpose | Core Artifacts |
 |------|-----|---------|----------------|
 | 1. Signal → Spec | `signal` | Problem definition, requirements | problem_statement.md, requirements.md |
 | 2. Spec → Plan | `plan` | Architecture, contracts | adr.md, api_contracts.yaml |
 | 3. Plan → Draft | `build` | Implementation via microloops | code, tests, build_receipt.json |
-| 4. Draft → Verify | `gate` | Pre-merge audit | merge_recommendation.md |
-| 5. Artifact → Prod | `deploy` | Merge, verify, report | deployment_log.md |
-| 6. Prod → Wisdom | `wisdom` | Learn, close feedback loops | learnings.md, wisdom_summary.json |
+| 4. Draft → Review | `review` | Pre-gate review | review_receipt.json |
+| 5. Review → Verify | `gate` | Pre-merge audit | merge_recommendation.md |
+| 6. Artifact → Prod | `deploy` | Merge, verify, report | deployment_log.md |
+| 7. Prod → Wisdom | `wisdom` | Learn, close feedback loops | learnings.md, wisdom_summary.json |
 
 **Microloops**: Flows 1 and 3 use adversarial author ⇄ critic pairs.
 

@@ -133,7 +133,7 @@ Each one prevents a class of silent drifts.
 
 When you have:
 
-- **Multiple flows** (6 in the swarm)
+- **Multiple flows** (7 in the swarm)
 - **Multiple agents per flow** (45 total)
 - **Multiple engineers** contributing
 - **CI/CD gates** that decide merge/deploy
@@ -158,7 +158,7 @@ See [docs/ADOPTING_SWARM_VALIDATION.md](./ADOPTING_SWARM_VALIDATION.md) for thre
 
 1. **Minimal** (30 min): Just the validator in CI
 2. **Intermediate** (2–3 hours): Validator + Flow Studio for teaching
-3. **Advanced** (1–2 weeks): Full swarm with all 6 flows
+3. **Advanced** (1–2 weeks): Full swarm with all 7 flows
 
 Most teams start with Minimal and add Flow Studio once they see value.
 

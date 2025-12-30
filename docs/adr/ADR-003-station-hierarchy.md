@@ -6,7 +6,7 @@
 
 ## Context
 
-The Flow Studio swarm currently manages **53+ agents** across **7 flows** (6 SDLC flows + 1 review flow). The current architecture has several pain points:
+The Flow Studio swarm currently manages **53+ agents** across **7 flows** (Signal, Plan, Build, Review, Gate, Deploy, Wisdom). The current architecture has several pain points:
 
 ### Current State
 
@@ -166,7 +166,7 @@ Add templates when **duplication becomes painful**:
 - No indirection
 
 **Cons:**
-- Massive duplication across flows (clarifier in 6 flows, cleanup in all flows)
+- Massive duplication across flows (clarifier in 7 flows, cleanup in all flows)
 - Changes require touching every flow
 - No capability library
 

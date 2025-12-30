@@ -36,11 +36,17 @@ Optional:
 
 ## Routing Guidance
 
-Use natural language in your handoff to communicate next steps:
-- No failures to classify → recommend proceeding (flow can continue)
-- Deterministic regressions found → recommend code-implementer to fix the specific failing tests
-- Flaky failures found → recommend test-author to stabilize or quarantine the flaky tests
-- Environment/tooling issues → explain what's broken and needs fixing before tests can run
+Use the standard routing vocabulary in your handoff:
+- **CONTINUE**: No failures to classify; flow proceeds to the next node
+- **DETOUR**: Deterministic regressions or flaky failures found; route to code-implementer or test-author within the current flow
+- **INJECT_NODES**: Environment/tooling issues require inserting fix-env steps before retrying
+- **EXTEND_GRAPH**: Discovery of new failure categories may warrant adding diagnostic nodes
+
+Examples:
+- No failures → `routing: CONTINUE` (flow proceeds)
+- Deterministic regressions → `routing: DETOUR, target: code-implementer` (fix the failing tests)
+- Flaky failures → `routing: DETOUR, target: test-author` (stabilize or quarantine)
+- Environment/tooling issues → `routing: INJECT_NODES, reason: FIX_ENV` (explain what needs fixing)
 
 ## Execution (deterministic)
 
@@ -59,7 +65,7 @@ Prefer:
 If `test_execution.md` is missing or does not contain enough information to identify whether there are failures:
 - set `status: UNVERIFIED`
 - set `recommended_action: BOUNCE`
-- set `route_to_flow: 3`, `route_to_station: "test-executor"`, `route_to_agent: null`
+- set `routing: DETOUR`, `target: test-executor`
 - add blocker: "Missing test execution evidence; rerun test-executor station"
 
 ### Step 2: Skip when there are no failures
@@ -95,9 +101,9 @@ Classification rules (conservative):
 
 ### Step 5: Decide routing
 
-- If deterministic regressions exist: `UNVERIFIED`, `recommended_action: BOUNCE`, `route_to_flow: 3`, `route_to_agent: code-implementer` (default).
-- If flaky failures exist (even if some are deterministic): `UNVERIFIED`, `recommended_action: BOUNCE`, `route_to_flow: 3`, `route_to_agent: test-author` (stabilize/quarantine).
-- If ENV_TOOLING prevents execution: `CANNOT_PROCEED`, `recommended_action: FIX_ENV`.
+- If deterministic regressions exist: `UNVERIFIED`, `routing: DETOUR`, `target: code-implementer` (default).
+- If flaky failures exist (even if some are deterministic): `UNVERIFIED`, `routing: DETOUR`, `target: test-author` (stabilize/quarantine).
+- If ENV_TOOLING prevents execution: `CANNOT_PROCEED`, `routing: INJECT_NODES`, `reason: FIX_ENV`.
 
 ## flakiness_report.md format (required)
 
@@ -137,13 +143,14 @@ Write `.runs/<run-id>/build/flakiness_report.md` in exactly this structure:
   - Failing area: <test/module/path/?>
   - Evidence: <which runs showed it>
   - Next action: <concrete fix>
-  - Route: code-implementer
+  - Routing: DETOUR, target: code-implementer
 - FLK-002 [FLAKY]
   - Failing area: <...>
   - Evidence: <which runs showed variability>
   - Next action: <stabilize/quarantine guidance>
-  - Route: test-author
+  - Routing: DETOUR, target: test-author
 - FLK-003 [ENV_TOOLING]
+  - Routing: INJECT_NODES, reason: FIX_ENV
   ...
 
 ## Inventory (machine countable)

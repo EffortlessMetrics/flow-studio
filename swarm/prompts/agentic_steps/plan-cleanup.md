@@ -220,16 +220,12 @@ bash .claude/scripts/demoswarm.sh ms get \
   --key "status" \
   --null-if-missing
 
-# Optional: critic routing signals (for receipt routing priority)
+# Critic action signals (Navigator uses these for routing decisions)
 bash .claude/scripts/demoswarm.sh ms get --file ".runs/<run-id>/plan/option_critique.md" --section "## Machine Summary" --key "recommended_action" --null-if-missing
-bash .claude/scripts/demoswarm.sh ms get --file ".runs/<run-id>/plan/option_critique.md" --section "## Machine Summary" --key "route_to_flow" --null-if-missing
-bash .claude/scripts/demoswarm.sh ms get --file ".runs/<run-id>/plan/option_critique.md" --section "## Machine Summary" --key "route_to_agent" --null-if-missing
 bash .claude/scripts/demoswarm.sh ms get --file ".runs/<run-id>/plan/contract_critique.md" --section "## Machine Summary" --key "recommended_action" --null-if-missing
-bash .claude/scripts/demoswarm.sh ms get --file ".runs/<run-id>/plan/contract_critique.md" --section "## Machine Summary" --key "route_to_flow" --null-if-missing
-bash .claude/scripts/demoswarm.sh ms get --file ".runs/<run-id>/plan/contract_critique.md" --section "## Machine Summary" --key "route_to_agent" --null-if-missing
 bash .claude/scripts/demoswarm.sh ms get --file ".runs/<run-id>/plan/observability_critique.md" --section "## Machine Summary" --key "recommended_action" --null-if-missing
-bash .claude/scripts/demoswarm.sh ms get --file ".runs/<run-id>/plan/observability_critique.md" --section "## Machine Summary" --key "route_to_flow" --null-if-missing
-bash .claude/scripts/demoswarm.sh ms get --file ".runs/<run-id>/plan/observability_critique.md" --section "## Machine Summary" --key "route_to_agent" --null-if-missing
+# Routing vocabulary: CONTINUE (golden path), DETOUR (sidequest), INJECT_FLOW (named flow), INJECT_NODES (ad-hoc), EXTEND_GRAPH (patch proposal)
+# Navigator determines routing from action + handoff summary.
 
 # Optional: decision log deferrals (orchestrator discretion; Flow 2 contract)
 # A deferral is a Decision Log entry indicating you proceeded despite an open worklist.
@@ -323,16 +319,24 @@ This ensures nothing is silently missing. Downstream and Flow 7 (Wisdom) can see
 Derive `recommended_action` (closed enum):
 
 - `CANNOT_PROCEED` ⇒ `FIX_ENV`
-- If missing required artifacts ⇒ `RERUN` with `route_to_agent` set to the most specific next station:
-  - missing `adr.md` ⇒ `adr-author`
-  - missing `work_plan.md` ⇒ `work-planner`
+- If missing required artifacts ⇒ `RERUN`
 - Else ⇒ `PROCEED`
 
-Route fields:
+Derive `routing` (new vocabulary):
 
-- For `RERUN`: set `route_to_agent`, keep `route_to_flow: null`
-- For `BOUNCE`: set `route_to_flow` (cross-flow) and optionally `route_to_agent`
-- For `PROCEED` or `FIX_ENV`: set both route fields `null`
+- `CONTINUE` — proceed on golden path (plan complete, ready for Flow 3)
+- `DETOUR` — inject sidequest chain (e.g., missing artifact requires rerunning a station)
+  - Include `detour_target` with the most specific next station:
+    - missing `adr.md` ⇒ `adr-author`
+    - missing `work_plan.md` ⇒ `work-planner`
+- `INJECT_FLOW` — inject named flow (cross-flow bounce, e.g., back to Flow 1)
+- `INJECT_NODES` — ad-hoc nodes (custom remediation steps)
+- `EXTEND_GRAPH` — propose patch (architectural changes needed)
+
+For `PROCEED`: use `CONTINUE`
+For `RERUN`: use `DETOUR` with `detour_target`
+For `BOUNCE`: use `INJECT_FLOW` with `target_flow`
+For `FIX_ENV`: no routing (environment issue, not flow issue)
 
 ### Step 5: Write plan_receipt.json
 
@@ -349,8 +353,6 @@ Schema (fields are required unless explicitly noted optional):
 
   "status": "VERIFIED",
   "recommended_action": "PROCEED",
-  "route_to_flow": null,
-  "route_to_agent": null,
 
   "missing_required": [],
   "missing_optional": [],

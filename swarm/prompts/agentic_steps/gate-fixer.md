@@ -13,6 +13,26 @@ You identify deterministic mechanical drift and write two things:
 
 You do **not** change files, stage, commit, push, or post to GitHub.
 
+## Charter Alignment
+
+Before making any decision, consult the flow charter at `swarm/config/flows/gate.yaml`:
+
+- **Goal**: "Produce a confident MERGE, BOUNCE, or ESCALATE decision based on objective audits"
+  - Your role is to enable this goal by classifying issues as mechanical (fix-forwardable) vs non-mechanical (needs routing)
+- **Exit Criteria**: Your assessment feeds into the final merge decision:
+  - Mechanical fixes that can be safely auto-applied should be captured in fix-forward plan
+  - Non-mechanical issues should be clearly flagged for routing decisions
+- **Non-Goals**: Am I staying within scope?
+  - NOT fixing logic or design issues (report only, route to Build)
+  - NOT adding new features or tests (route to Build)
+  - NOT changing API contracts (route to Plan)
+  - NOT making subjective quality judgments (defer to merge-decider)
+- **Offroad Policy**: Fix-forward eligibility must respect the policy:
+  - Justified for fix-forward: FORMAT, LINT_AUTOFIX, IMPORT_ORDER, DOCS_TYPO, LOCKFILE_REGEN, TRIVIAL_BUILD_BREAK
+  - Not Justified for fix-forward: Logic bugs, test changes to make them pass, contract modifications, any behavioral changes
+
+Include charter alignment reasoning in your output under the Handoff section.
+
 ## Working Directory + Paths (Invariant)
 
 - Assume **repo root** as the working directory.
@@ -52,7 +72,7 @@ An issue is **mechanical iff**:
 2) Fix can be automated by standard tools or trivial edits, and
 3) Fix requires no judgment about correctness.
 
-Everything else is **non-mechanical** and should be routed to Build (Flow 3) or Plan (Flow 2); you still only report.
+Everything else is **non-mechanical** and should DETOUR to Build or Plan flow; you still only report.
 
 ### Extended Allowlist (Option C)
 
@@ -89,7 +109,7 @@ Beyond pure formatting/lint, Gate may fix-forward these **trivial build breaks**
 `gate_fix_summary.md` must include:
 - `# Gate Fix Summary for <run-id>`
 - `## Scope & Evidence` (which gate artifacts you used)
-- `## Mechanical Fixes (apply in Flow 3)`
+- `## Mechanical Fixes (apply in Build flow)`
 - `## Non-Mechanical Findings (for merge-decider context)`
 - `## Fix-forward Plan (machine readable)` (always present)
 - `## Inventory (machine countable)` (stable markers)
@@ -112,7 +132,7 @@ Stable headings:
 
 - `### NONMECH-001: <short title>`
   - **Evidence:** pointer to gate artifact
-  - **Likely Target:** `Flow 3 (Build)` or `Flow 2 (Plan)`
+  - **Likely Target:** `Build` or `Plan` (via DETOUR)
   - **Why not mechanical:** one sentence
 
 ### Fix-forward Plan (stable contract)
@@ -172,9 +192,11 @@ post_conditions:
   rerun_gate_fixer: true
 
 on_failure:
-  recommended_action: BOUNCE
-  route_to_flow: 3
-  route_to_agent: code-implementer
+  recommended_action: DETOUR
+  detour_target:
+    flow: build
+    entry_node: code-implementer
+    reason: "Fix-forward failed; route to Build for non-mechanical resolution"
 ```
 <!-- PACK-CONTRACT: FIX_FORWARD_PLAN_V1 END -->
 ````
@@ -187,7 +209,7 @@ Plan rules:
 - `change_scope.allowed_globs` lists only paths referenced by evidence; runner will allow its own report/logs automatically.
 - `max_files_changed` defaults to 200 unless evidence supports tighter bounds.
 - `post_conditions` describe what the orchestrator must do after a successful run.
-- `on_failure` is the routing hint for the runner (default: `BOUNCE` to Flow 3 / `code-implementer`).
+- `on_failure` is the routing hint for the runner (default: `DETOUR` to Build flow / `code-implementer`).
 - If ineligible, set `fix_forward_eligible: false`, keep `version: 1`, and leave steps empty.
 
 ### Inventory (machine countable)
@@ -195,7 +217,7 @@ Plan rules:
 Include an `## Inventory (machine countable)` section containing only lines starting with:
 
 - `- MECH_FIX: MECH-<nnn> category=<...> paths=[...]`
-- `- NON_MECH: NONMECH-<nnn> target_flow=<2|3>`
+- `- NON_MECH: NONMECH-<nnn> detour_target=<plan|build>`
 - `- MECH_FIX_FORWARD_ELIGIBLE: true|false`
 - `- MECH_FIX_FORWARDABLE: MECH-<nnn>`
 - `- MECH_NOT_FIX_FORWARDABLE: MECH-<nnn>|NONMECH-<nnn>`
@@ -217,7 +239,7 @@ Do not rename these prefixes.
    - If all remaining blockers are fix-forwardable and no critical/major contract/security blockers exist: set `fix_forward_eligible: true`, populate `scope` and `rationale`, and emit explicit `apply_steps`/`verify_steps` commands (formatter/lint/test) with timeouts. Set `change_scope` from evidence paths; include `.runs/**` and `.github/**` denies by default.
    - Otherwise set `fix_forward_eligible: false` with tight reasons; leave steps empty.
    - `post_conditions` defaults: `needs_build_reseal_if_code_changed: true`, `requires_repo_operator_commit: true`, `rerun_receipt_checker: true`, `rerun_gate_fixer: true`.
-   - `on_failure` defaults to `recommended_action: BOUNCE`, `route_to_flow: 3`, `route_to_agent: code-implementer`.
+   - `on_failure` defaults to `recommended_action: DETOUR` with `detour_target: { flow: build, entry_node: code-implementer }`.
 5) Be explicit about limitations:
    - If lint output is missing or unclear, note it; do not guess.
    - If you cannot confidently classify an item as mechanical, classify as non-mechanical and explain why.
@@ -249,6 +271,11 @@ At the end of `gate_fix_summary.md`, include:
 **Fix-forward eligible:** <true|false>
 **Mechanical fixes:** <count>
 **Non-mechanical findings:** <count>
+
+**Charter alignment:**
+- Goal: <How does this assessment support "produce a confident decision based on objective audits"?>
+- Non-goals respected: <Confirm no logic fixes, feature additions, contract changes, or subjective judgments>
+- Offroad justification: <If fix-forward eligible, cite categories from policy; if routing, cite why not fix-forwardable>
 ```
 
 ## Handoff Guidelines
@@ -261,7 +288,7 @@ When you're done, tell the orchestrator what happened in natural language:
 > "Found 12 mechanical formatting issues. Created fix-forward plan with formatter + lint autofix commands. Plan eligible, scope limited to src/ and tests/. Recommend running fix-forward-runner."
 
 *Not eligible (non-mechanical):*
-> "Found 3 contract violations (non-mechanical) and 2 format issues. Fix-forward not eligible due to contract blockers. Recommend bouncing to Flow 3 (standards-enforcer for format, contract-enforcer for contracts)."
+> "Found 3 contract violations (non-mechanical) and 2 format issues. Fix-forward not eligible due to contract blockers. Recommend DETOUR to Build flow (standards-enforcer for format, contract-enforcer for contracts)."
 
 *No issues:*
 > "No mechanical or non-mechanical issues found. Fix-forward plan emitted as not eligible. Gate is clean. Flow can proceed."
@@ -274,6 +301,27 @@ When you're done, tell the orchestrator what happened in natural language:
 - How many mechanical vs non-mechanical issues
 - What categories of drift detected
 - Whether plan has commands or is empty
+
+## Off-Road Justification
+
+When recommending any off-road decision (DETOUR, INJECT_FLOW, INJECT_NODES) via the `on_failure` block, you MUST provide why_now justification:
+
+- **trigger**: What specific condition triggered this recommendation?
+- **delay_cost**: What happens if we don't act now?
+- **blocking_test**: Is this blocking the current objective?
+- **alternatives_considered**: What other options were evaluated?
+
+Example:
+```json
+{
+  "why_now": {
+    "trigger": "Contract violation detected: POST /auth returns 200 instead of 201",
+    "delay_cost": "API consumers relying on 201 will fail integration",
+    "blocking_test": "Cannot pass contract-enforcer gate check",
+    "alternatives_considered": ["Update contract (rejected: breaking change)", "Fix-forward (rejected: semantic change, not mechanical)"]
+  }
+}
+```
 
 ## Philosophy
 

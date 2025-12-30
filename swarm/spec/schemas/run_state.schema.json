@@ -110,6 +110,42 @@
       "type": "object",
       "additionalProperties": true,
       "description": "User-defined annotations and tags for the run (not interpreted by orchestrator)"
+    },
+    "monotonic_sequence": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0,
+      "description": "Strictly increasing counter for each state transition. Starts at 0, increments with each step start. Enables verification that each step runs at most once per iteration."
+    },
+    "event_sequence": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0,
+      "description": "Monotonic counter for events written to events.jsonl. Used for exactly-once ingestion in the DuckDB tailer."
+    },
+    "forensic_markers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/ForensicMarker"
+      },
+      "default": [],
+      "description": "Bindings between agent claims and disk reality. Each marker links a step execution to verifiable proof on disk."
+    },
+    "progress_evidence_history": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/ProgressEvidenceRef"
+      },
+      "default": [],
+      "description": "References to progress evidence snapshots for stall detection. Used to verify that runs are making forward progress."
+    },
+    "resource_claims": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/ResourceClaim"
+      },
+      "default": [],
+      "description": "Budget/pledge/actual tracking for tokens, cost, and duration. Enables resource governance and cost attribution."
     }
   },
   "definitions": {
@@ -671,6 +707,240 @@
           "type": "number",
           "minimum": 0,
           "description": "Estimated cost in USD based on token usage"
+        },
+        "step_timings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/StepTiming"
+          },
+          "default": [],
+          "description": "Per-step performance tracking including duration and token usage"
+        }
+      },
+      "additionalProperties": false
+    },
+    "StepTiming": {
+      "type": "object",
+      "required": ["step_id", "duration_ms"],
+      "properties": {
+        "step_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "description": "Identifier of the step"
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Duration of step execution in milliseconds"
+        },
+        "token_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total tokens consumed during step execution"
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the step started execution"
+        },
+        "completed_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the step completed execution"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ForensicMarker": {
+      "type": "object",
+      "required": ["marker_id", "marker_type", "step_id", "sequence", "status"],
+      "properties": {
+        "marker_id": {
+          "type": "string",
+          "pattern": "^fm-[a-z0-9]{8}$",
+          "description": "Unique identifier for this forensic marker"
+        },
+        "marker_type": {
+          "type": "string",
+          "enum": ["file_written", "file_modified", "command_executed", "api_called", "artifact_created", "test_executed"],
+          "description": "Type of action being verified"
+        },
+        "step_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "description": "Step that created this marker"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The monotonic_sequence value when this marker was created"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["executed", "skipped", "verified", "failed"],
+          "description": "Current verification status of this marker"
+        },
+        "proof_ref": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Path to the proof artifact on disk"
+            },
+            "hash": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$",
+              "description": "SHA-256 hash of the proof artifact"
+            },
+            "verified_at": {
+              "type": "string",
+              "format": "date-time",
+              "description": "When the proof was verified"
+            },
+            "verifier": {
+              "type": "string",
+              "description": "Identifier of the verification agent or process"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Reference to forensic verification result"
+        },
+        "claim": {
+          "type": "object",
+          "properties": {
+            "description": {
+              "type": "string",
+              "description": "Human-readable description of what was claimed"
+            },
+            "expected_outcome": {
+              "type": "string",
+              "description": "What outcome was expected from the action"
+            },
+            "actual_outcome": {
+              "type": "string",
+              "description": "What actually happened (populated after verification)"
+            }
+          },
+          "additionalProperties": false,
+          "description": "The claim being verified by this marker"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When this marker was created"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ProgressEvidenceRef": {
+      "type": "object",
+      "required": ["evidence_id", "step_id", "sequence", "had_progress"],
+      "properties": {
+        "evidence_id": {
+          "type": "string",
+          "pattern": "^pe-[a-z0-9]{8}$",
+          "description": "Unique identifier for this progress evidence snapshot"
+        },
+        "step_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "description": "Step where progress was evaluated"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The monotonic_sequence value when this evidence was captured"
+        },
+        "had_progress": {
+          "type": "boolean",
+          "description": "Whether forward progress was detected since the last evidence snapshot"
+        },
+        "evidence_path": {
+          "type": "string",
+          "description": "Path to detailed progress evidence file on disk"
+        },
+        "metrics_delta": {
+          "type": "object",
+          "properties": {
+            "files_changed": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Number of files changed since last snapshot"
+            },
+            "tokens_consumed": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Tokens consumed since last snapshot"
+            },
+            "artifacts_created": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Artifacts created since last snapshot"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Quantitative progress metrics"
+        },
+        "captured_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When this evidence was captured"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ResourceClaim": {
+      "type": "object",
+      "required": ["claim_id", "claim_type", "scope", "budget_type", "amount", "timestamp"],
+      "properties": {
+        "claim_id": {
+          "type": "string",
+          "pattern": "^rc-[a-z0-9]{8}$",
+          "description": "Unique identifier for this resource claim"
+        },
+        "claim_type": {
+          "type": "string",
+          "enum": ["pledge", "actual", "refund"],
+          "description": "Type of claim: pledge (budget request), actual (consumption), refund (returned budget)"
+        },
+        "scope": {
+          "type": "string",
+          "enum": ["flow", "step", "detour"],
+          "description": "Scope of the resource claim"
+        },
+        "scope_id": {
+          "type": "string",
+          "description": "Identifier of the scope (flow_key, step_id, or interruption_id)"
+        },
+        "budget_type": {
+          "type": "string",
+          "enum": ["tokens", "cost_usd", "duration_ms"],
+          "description": "Type of resource being claimed"
+        },
+        "amount": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Amount of the resource being claimed"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When this claim was recorded"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The monotonic_sequence value when this claim was made"
+        },
+        "parent_claim_id": {
+          "type": "string",
+          "pattern": "^rc-[a-z0-9]{8}$",
+          "description": "For actual/refund claims, the pledge claim this relates to"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Additional context about the resource claim"
         }
       },
       "additionalProperties": false

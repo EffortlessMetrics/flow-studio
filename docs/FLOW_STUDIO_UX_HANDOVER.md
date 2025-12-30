@@ -460,6 +460,111 @@ flow_studio.Header.search  # Uppercase region
 
 ---
 
+## Off-Road Visualization Components
+
+Flow Studio visualizes off-road navigation (detours, flow injection, graph extensions). This section documents the UI components for off-road features.
+
+### Run Timeline Off-Road Badges
+
+The Run History panel shows badges for runs with off-road routing:
+
+| Badge | CSS Class | Meaning |
+|-------|-----------|---------|
+| "Off-road" | `.fs-badge.offroad` | Run included routing deviations |
+| "Injected Flow" | `.fs-badge.injected` | Run included a dynamically injected flow |
+| "Detour" | `.fs-badge.detour` | Run included detour routing |
+
+### Event Types to Display
+
+The Events Timeline should surface these off-road event types:
+
+| Event Kind | Display | Color |
+|------------|---------|-------|
+| `routing_offroad` | Orange marker | `--fs-color-warning` |
+| `flow_injected` | Purple marker | `var(--fs-color-offroad-inject)` |
+| `node_injected` | Blue marker | `var(--fs-color-offroad-node)` |
+| `graph_extended` | Gray marker | `--fs-color-text-muted` |
+| `stack_push` | Purple push icon | `var(--fs-color-offroad-inject)` |
+| `stack_pop` | Purple pop icon | `var(--fs-color-offroad-inject)` |
+
+### Step Node Visual Treatments
+
+Off-road steps receive distinct visual treatment:
+
+```css
+/* Normal step */
+.fs-step-node { border: 2px solid var(--fs-color-step); }
+
+/* Detour step */
+.fs-step-node.detour {
+  border: 2px dashed var(--fs-color-warning);
+  background: var(--fs-color-warning-bg);
+}
+
+/* Injected node */
+.fs-step-node.injected {
+  border: 2px dotted var(--fs-color-accent);
+  background: var(--fs-color-accent-bg);
+}
+
+/* Injected flow step */
+.fs-step-node.inject-flow {
+  border: 4px double var(--fs-color-offroad-inject);
+  background: var(--fs-color-offroad-inject-bg);
+}
+```
+
+### Flow Stack Visualization
+
+When flows are stacked (nested execution), the UI shows:
+
+**SDLC Bar**:
+- Active flow: Blue pulsing border
+- Paused flows: Gray background with stacked icon
+- Stack depth badge: `+N` indicator
+
+**Sidebar**:
+- Flow items show state suffix: "(running)", "(paused)", "(completed)"
+- Paused flows are dimmed but clickable
+
+**Inspector**:
+- Routing tab shows stack state
+- "Paused at step X" indicator
+- "Will resume when Y" condition
+
+### Adding Off-Road UIIDs
+
+If implementing off-road visualization, add these UIIDs to `domain.ts`:
+
+```typescript
+// Off-road visualization
+| "flow_studio.sidebar.run_history.item.badge.offroad"
+| "flow_studio.modal.run_detail.events.filter.routing"
+| "flow_studio.modal.run_detail.events.item.offroad"
+| "flow_studio.modal.run_detail.stack"
+| "flow_studio.modal.run_detail.stack.depth"
+| "flow_studio.sdlc_bar.flow.stacked"
+| "flow_studio.sdlc_bar.stack_depth"
+| "flow_studio.sidebar.flow_list.item.paused"
+| "flow_studio.canvas.outline.step.routing_marker"
+| "flow_studio.inspector.routing"
+| "flow_studio.inspector.routing.suggestions"
+| "flow_studio.inspector.routing.taken"
+```
+
+### API Endpoints for Off-Road Data
+
+The following API endpoints support off-road visualization:
+
+| Endpoint | Returns |
+|----------|---------|
+| `GET /api/runs/{id}/routing` | All routing decisions for a run |
+| `GET /api/runs/{id}/events?kind=routing_offroad` | Filtered off-road events |
+| `GET /api/runs/{id}/stack` | Current flow stack state |
+| `GET /api/runs/{id}/boundary-review` | Aggregated assumptions/decisions/detours |
+
+---
+
 # Flow Studio & Swarm UX Handover (Reference)
 
 The sections below provide deeper context for new owners of Flow Studio.
@@ -470,7 +575,7 @@ The sections below provide deeper context for new owners of Flow Studio.
 
 At a high level, this repo implements a **governed, agentic SDLC**:
 
-* 6 flows: **Signal -> Plan -> Build -> Gate -> Deploy -> Wisdom**
+* 7 flows: **Signal -> Plan -> Build -> Review -> Gate -> Deploy -> Wisdom**
 * ~45 agents, wired via:
 
   * Specs: `swarm/flows/`

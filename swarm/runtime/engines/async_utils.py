@@ -38,10 +38,7 @@ def run_async_safely(coro: Coroutine[Any, Any, T]) -> T:
         asyncio.get_running_loop()
         # We're in an async context - this shouldn't happen in normal usage
         # Log a warning and create a new loop in a thread
-        logger.warning(
-            "run_async_safely called from async context. "
-            "Consider using await directly."
-        )
+        logger.warning("run_async_safely called from async context. Consider using await directly.")
         import concurrent.futures
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:

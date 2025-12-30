@@ -1,0 +1,88 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "reset-verify-clean",
+  "version": 1,
+  "title": "Reset: Verify Clean",
+  "category": "infra",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_only",
+    "allowed_tools": ["Read", "Bash", "Grep", "Glob"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": true,
+      "excluded_commands": ["rm -rf", "git push", "git reset --hard", "git clean -fd"]
+    },
+    "max_turns": 8,
+    "context_budget": {
+      "total_chars": 80000,
+      "recent_chars": 30000,
+      "older_chars": 10000
+    }
+  },
+  "identity": {
+    "system_append": "You are executing the Verify Clean step in Flow 8 (Reset). This is the final gate: confirm the repository is in a clean, synchronized state ready for continued work. If issues are found, document them clearly - do not attempt fixes (that would be previous steps' jobs).",
+    "longform_ref": "prompts/steps/reset/verify_clean.md",
+    "tone": "analytical"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [],
+    "optional_inputs": [
+      "reset/diagnose_report.md",
+      "reset/sync_report.md",
+      "reset/restore_report.md",
+      "reset/prune_report.md",
+      "reset/archive_report.md"
+    ],
+    "required_outputs": [
+      "reset/git_status.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/reset/git_status.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "reset/git_status.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nVerify the repository is in a clean, synchronized state ready for continued work.\n\n## Verification Checks\n\n1. **Git status clean**: No uncommitted changes (or only expected WIP)\n2. **Branch sync**: Up-to-date with upstream (or ahead-only for unpushed commits)\n3. **No conflicts**: No unresolved merge/rebase conflicts\n4. **No detached HEAD**: On a named branch\n5. **Run artifacts**: Previous run artifacts archived or organized\n\n## Constraints\n\n- Read-only verification step - do NOT attempt fixes\n- If issues found, document clearly with remediation suggestions\n- This is the final gate before returning to interrupted flow\n\n## Output\n\nWrite {{run.base}}/reset/git_status.md with:\n- Current state summary\n- All verification results\n- VERIFIED if clean, UNVERIFIED if issues found"
+  },
+  "invariants": [
+    "Read-only verification step - do not attempt fixes",
+    "Document any issues with clear remediation suggestions",
+    "Verify all expected artifacts exist",
+    "This is the final gate - be thorough",
+    "If issues found, set UNVERIFIED with clear explanation"
+  ],
+  "routing_hints": {
+    "on_verified": "complete",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

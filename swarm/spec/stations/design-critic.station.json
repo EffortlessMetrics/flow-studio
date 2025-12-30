@@ -1,0 +1,101 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "design-critic",
+  "version": 1,
+  "title": "Design Critic",
+  "category": "critic",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "critic",
+    "allowed_tools": ["Read", "Grep", "Glob"],
+    "denied_tools": ["Write", "Edit", "Bash"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": false
+    },
+    "max_turns": 12,
+    "context_budget": {
+      "total_chars": 180000,
+      "recent_chars": 60000,
+      "older_chars": 20000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Design Critic. Validate design vs constraints and upstream spec. Apply bounded taste for feasibility, completeness, consistency, testability, and observability. You do NOT fix. You diagnose and route. Write exactly: design_validation.md.",
+    "longform_ref": "prompts/agentic_steps/design-critic.md",
+    "tone": "critical"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "plan/adr.md",
+      "plan/design_options.md",
+      "plan/api_contracts.yaml",
+      "plan/observability_spec.md",
+      "plan/test_plan.md",
+      "plan/work_plan.md",
+      "signal/requirements.md"
+    ],
+    "optional_inputs": [
+      "plan/schema.md",
+      "signal/features/*.feature",
+      "signal/verification_notes.md",
+      "signal/early_risks.md",
+      "signal/risk_assessment.md"
+    ],
+    "required_outputs": [
+      "plan/design_validation.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/plan/design_validation.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "can_further_iteration_help",
+      "routing_signal"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "plan/design_validation.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nValidate design artifacts against constraints and upstream spec.\n\n## Context\n\n{{#each inputs}}\n- {{this}}\n{{/each}}\n\n## Objective\n\nProduce design_validation.md with:\n- Severity-classified issues (CRITICAL/MAJOR/MINOR)\n- Traceability gaps (REQ/NFR without design coverage)\n- Routing recommendations for fixes\n\n## Validation Checks\n\n1. Requirements -> Plan coverage (REQ/NFR identifiers, not just prose)\n2. Options -> ADR (OPT-ID binding, trade-offs captured)\n3. ADR -> Contracts (surfaces cover REQs, error model coherent)\n4. Contracts -> Test plan (contract surfaces covered)\n5. Design -> Observability (measurable signals, not vague logs)\n6. Design -> Work plan (migrations/rollout/rollback tasks)\n7. State transitions -> Code dependency (foundation-first sequencing)"
+  },
+  "invariants": [
+    "Write exactly one file: plan/design_validation.md",
+    "Do NOT fix - diagnose and route to appropriate agents",
+    "Use stable issue markers: DC-CRIT-###, DC-MAJ-###, DC-MIN-###",
+    "Severity: CRITICAL (blocks implementation), MAJOR (causes rework), MINOR (polish)",
+    "Validate handshake (Machine Summary blocks, OPT-ID bindings, no template placeholders)",
+    "Missing required artifacts = UNVERIFIED, not CANNOT_PROCEED"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "loop",
+    "on_partial": "loop",
+    "on_blocked": "escalate"
+  }
+}

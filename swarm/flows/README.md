@@ -1,6 +1,6 @@
 # Flow Studio
 
-Flow Studio is a visual editor and documentation generator for the swarm's six flows.
+Flow Studio is a visual editor and documentation generator for the swarm's seven flows.
 
 ## Quick Start
 
@@ -13,7 +13,7 @@ make flow-studio
 Then open [http://localhost:5000](http://localhost:5000) in your browser.
 
 You'll see:
-- **Left sidebar**: List of flows (Signal, Plan, Build, Gate, Deploy, Wisdom)
+- **Left sidebar**: List of flows (Signal, Plan, Build, Review, Gate, Deploy, Wisdom)
 - **Center**: Interactive node graph showing flow structure and agents
 - **Right panel**: Details about selected flows or agents
 

@@ -11,10 +11,11 @@ import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 
 from swarm.runtime.claude_sdk import (
     create_high_trust_options,
+    create_options_from_plan,
     get_sdk_module,
 )
 from swarm.runtime.diff_scanner import (
@@ -24,11 +25,17 @@ from swarm.runtime.diff_scanner import (
 from swarm.runtime.path_helpers import (
     ensure_llm_dir,
     ensure_receipts_dir,
+)
+from swarm.runtime.path_helpers import (
     handoff_envelope_path as make_handoff_envelope_path,
+)
+from swarm.runtime.path_helpers import (
     transcript_path as make_transcript_path,
 )
 from swarm.runtime.resolvers import (
     build_finalization_prompt as build_finalization_prompt_from_template,
+)
+from swarm.runtime.resolvers import (
     load_envelope_writer_prompt,
 )
 from swarm.runtime.types import (
@@ -154,7 +161,9 @@ async def run_worker_async(
     ctx: StepContext,
     repo_root: Optional[Path],
     profile_id: Optional[str],
-    build_prompt_fn: Callable[[StepContext], Tuple[str, Optional[HistoryTruncationInfo], Optional[str]]],
+    build_prompt_fn: Callable[
+        [StepContext], Tuple[str, Optional[HistoryTruncationInfo], Optional[str]]
+    ],
     stats_db: Optional[Any] = None,
 ) -> Tuple[StepResult, List[RunEvent], str]:
     """Async implementation of run_worker.
@@ -181,18 +190,75 @@ async def run_worker_async(
 
     # Try spec-based prompt compilation first, fall back to legacy
     spec_result = try_compile_from_spec(ctx, repo_root)
+    plan = None  # Track plan for later use in envelope creation
 
     if spec_result:
-        # Use spec-based prompts
+        # Use spec-based prompts and SDK options from PromptPlan
         prompt, agent_persona, plan = spec_result
-        logger.debug(
-            "Using spec-based prompt for step %s (hash=%s, station=%s v%d)",
-            ctx.step_id,
+        logger.info(
+            "Spec-based execution for step %s: hash=%s, station=%s v%d, model=%s",
+            plan.step_id,
             plan.prompt_hash,
             plan.station_id,
             plan.station_version,
+            plan.model,
+        )
+        logger.debug(
+            "PromptPlan SDK options: permission_mode=%s, max_turns=%d, sandbox=%s, tools=%s",
+            plan.permission_mode,
+            plan.max_turns,
+            plan.sandbox_enabled,
+            plan.allowed_tools[:3] if plan.allowed_tools else [],  # Log first 3 tools
         )
         truncation_info = None  # Spec compilation handles context management
+
+        # Write PromptReceipt for audit trail
+        from swarm.spec.types import create_prompt_receipt
+
+        receipt = create_prompt_receipt(plan)
+        receipt_path = ctx.run_base / "receipts" / f"prompt_receipt_{ctx.step_id}.json"
+        receipt_path.parent.mkdir(parents=True, exist_ok=True)
+
+        receipt_dict = {
+            "prompt_hash": receipt.prompt_hash,
+            "fragment_manifest": list(receipt.fragment_manifest),
+            "context_pack_hash": receipt.context_pack_hash,
+            "model_tier": receipt.model_tier,
+            "tool_profile": list(receipt.tool_profile),
+            "compiled_at": receipt.compiled_at,
+            "compiler_version": receipt.compiler_version,
+            "station_id": receipt.station_id,
+            "flow_id": receipt.flow_id,
+            "step_id": receipt.step_id,
+        }
+
+        with open(receipt_path, "w", encoding="utf-8") as f:
+            json.dump(receipt_dict, f, indent=2)
+
+        logger.debug(
+            "PromptReceipt written to %s for step %s",
+            receipt_path,
+            ctx.step_id,
+        )
+
+        # Use create_options_from_plan to wire all PromptPlan SDK options
+        cwd = str(repo_root) if repo_root else str(Path.cwd())
+        options = create_options_from_plan(plan, cwd=cwd)
+
+        # Log verification and handoff contracts for traceability
+        if plan.verification.required_artifacts:
+            logger.debug(
+                "Step %s verification: required_artifacts=%s",
+                ctx.step_id,
+                plan.verification.required_artifacts,
+            )
+        if plan.handoff.path:
+            logger.debug(
+                "Step %s handoff: path=%s, required_fields=%s",
+                ctx.step_id,
+                plan.handoff.path,
+                plan.handoff.required_fields,
+            )
     else:
         # Fall back to legacy prompt builder
         logger.debug(
@@ -201,13 +267,12 @@ async def run_worker_async(
         )
         prompt, truncation_info, agent_persona = build_prompt_fn(ctx)
 
-    cwd = str(repo_root) if repo_root else str(Path.cwd())
-
-    options = create_high_trust_options(
-        cwd=cwd,
-        permission_mode="bypassPermissions",
-        system_prompt_append=agent_persona,
-    )
+        cwd = str(repo_root) if repo_root else str(Path.cwd())
+        options = create_high_trust_options(
+            cwd=cwd,
+            permission_mode="bypassPermissions",
+            system_prompt_append=agent_persona,
+        )
 
     # DEPRECATED: Direct stats recording is a no-op in projection-only mode.
     if stats_db:
@@ -418,17 +483,38 @@ async def run_worker_async(
         for event in raw_events:
             f.write(json.dumps(event) + "\n")
 
+    # Build artifacts dict with optional spec traceability
+    artifacts: Dict[str, Any] = {
+        "transcript_path": str(t_path),
+        "token_counts": token_counts,
+        "model": model_name,
+    }
+
+    # Add spec traceability if plan was used
+    if plan:
+        artifacts["spec_based"] = True
+        artifacts["spec_model"] = plan.model  # Preserve spec model for finalize/route phases
+        artifacts["prompt_hash"] = plan.prompt_hash
+        artifacts["station_id"] = plan.station_id
+        artifacts["station_version"] = plan.station_version
+        artifacts["flow_id"] = plan.flow_id
+        artifacts["flow_version"] = plan.flow_version
+        # Include handoff path from spec for envelope validation
+        if plan.handoff.path:
+            artifacts["spec_handoff_path"] = plan.handoff.path
+        # Include verification requirements for downstream validation
+        if plan.verification.required_artifacts:
+            artifacts["spec_required_artifacts"] = list(plan.verification.required_artifacts)
+    else:
+        artifacts["spec_based"] = False
+
     result = StepResult(
         step_id=ctx.step_id,
         status=status,
         output=output_text,
         error=error,
         duration_ms=duration_ms,
-        artifacts={
-            "transcript_path": str(t_path),
-            "token_counts": token_counts,
-            "model": model_name,
-        },
+        artifacts=artifacts,
     )
 
     return result, events, work_summary
@@ -464,9 +550,15 @@ async def finalize_step_async(
 
     cwd = str(repo_root) if repo_root else str(Path.cwd())
 
+    # Extract spec model from work phase artifacts for consistent model usage
+    spec_model = None
+    if step_result.artifacts:
+        spec_model = step_result.artifacts.get("spec_model")
+
     options = create_high_trust_options(
         cwd=cwd,
         permission_mode="bypassPermissions",
+        model=spec_model,  # Use spec model if available, otherwise SDK default
     )
 
     finalization_prompt = build_finalization_prompt(
@@ -494,8 +586,7 @@ async def finalize_step_async(
                 content = getattr(message, "content", "")
                 if isinstance(content, list):
                     text_parts = [
-                        getattr(b, "text", str(getattr(b, "content", "")))
-                        for b in content
+                        getattr(b, "text", str(getattr(b, "content", ""))) for b in content
                     ]
                     content = "\n".join(text_parts)
                 event_dict["type"] = "message"
@@ -582,9 +673,7 @@ async def finalize_step_async(
                     "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
                     "phase": "envelope",
                     "type": "handoff_envelope_written",
-                    "envelope_path": str(
-                        make_handoff_envelope_path(ctx.run_base, ctx.step_id)
-                    ),
+                    "envelope_path": str(make_handoff_envelope_path(ctx.run_base, ctx.step_id)),
                     "status": envelope.status,
                 }
             )
@@ -615,6 +704,7 @@ async def route_step_async(
     ctx: StepContext,
     handoff_data: Dict[str, Any],
     repo_root: Optional[Path] = None,
+    spec_model: Optional[str] = None,
 ) -> Optional[RoutingSignal]:
     """Async implementation of route_step.
 
@@ -622,6 +712,7 @@ async def route_step_async(
         ctx: Step execution context.
         handoff_data: Parsed handoff data.
         repo_root: Repository root path.
+        spec_model: Model from spec to use for routing session.
 
     Returns:
         RoutingSignal if determined, None if routing failed.
@@ -633,6 +724,7 @@ async def route_step_async(
             handoff_data=handoff_data,
             ctx=ctx,
             cwd=cwd,
+            model=spec_model,
         )
         if routing_signal:
             logger.debug(

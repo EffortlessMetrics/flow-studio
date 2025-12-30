@@ -228,35 +228,45 @@ Rules:
 - Marker absent / ambiguous ⇒ `null` + concern ("no stable markers").
 - Never coerce missing/unknown to `0`.
 
-### Step 4: Determine recommended_action + routing (control plane)
+### Step 4: Determine recommended_action + route_decision (control plane)
 
 **Ops-First Status Logic:** Be permissive. Missing recommended artifacts don't block. The receipt logs what happened; the merge verdict drives the decision.
+
+**Route Decision Vocabulary:**
+- `CONTINUE` — proceed on golden path (normal forward progress)
+- `DETOUR` — inject sidequest chain (temporary deviation, returns to main flow)
+- `INJECT_FLOW` — inject named flow (bounce to a specific flow)
+- `INJECT_NODES` — ad-hoc nodes (insert specific steps)
+- `EXTEND_GRAPH` — propose patch (modify the flow graph)
 
 Compute:
 
 - If overall `status: CANNOT_PROCEED` ⇒
   - `recommended_action: FIX_ENV`
-  - `route_to_flow: null`, `route_to_agent: null`
+  - `route_decision: null`
 
 Else if `missing_required` non-empty (`merge_decision.md` missing) ⇒
   - `recommended_action: RERUN`
-  - `route_to_flow: null`, `route_to_agent: null`
+  - `route_decision: null`
 
 Else if `merge_verdict: BOUNCE` ⇒
   - `recommended_action: BOUNCE`
-  - `route_to_flow: 3` (Build)
-  - `route_to_agent: null`
+  - `route_decision: INJECT_FLOW`
+  - `route_target: "build"` (bounce to Build flow)
 
 Else (`merge_verdict: MERGE`) ⇒
   - `recommended_action: PROCEED`
+  - `route_decision: CONTINUE`
 
 **State-first verification:** The merge-decider considered live evidence when it made its decision. Cleanup records that decision honestly:
 - If `merge_verdict: MERGE` and all required gate statuses are `VERIFIED` ⇒ `status: VERIFIED`
 - If `merge_verdict: MERGE` but some gate statuses are `null` or `UNVERIFIED` ⇒ `status: UNVERIFIED` (the merge-decider decided to proceed despite gaps — record that honestly)
 - Missing recommended artifacts are noted as concerns
 
-**Routing rule:** `route_to_*` fields must only be populated when `recommended_action: BOUNCE`.
-For `PROCEED`, `RERUN`, and `FIX_ENV`, set both to `null`.
+**Routing rule:** `route_decision` is set based on the recommended_action:
+- `PROCEED` → `route_decision: CONTINUE`
+- `BOUNCE` → `route_decision: INJECT_FLOW` with `route_target` specifying the flow
+- `RERUN` and `FIX_ENV` → `route_decision: null`
 
 ### Step 5: Write gate_receipt.json
 
@@ -270,8 +280,8 @@ Write `.runs/<run-id>/gate/gate_receipt.json`:
 
   "status": "VERIFIED | UNVERIFIED | CANNOT_PROCEED",
   "recommended_action": "PROCEED | RERUN | BOUNCE | FIX_ENV",
-  "route_to_flow": null,
-  "route_to_agent": null,
+  "route_decision": "CONTINUE | DETOUR | INJECT_FLOW | INJECT_NODES | EXTEND_GRAPH | null",
+  "route_target": "<flow-name or null>",
 
   "missing_required": [],
   "missing_optional": [],

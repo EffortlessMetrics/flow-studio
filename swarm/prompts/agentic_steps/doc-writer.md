@@ -199,13 +199,13 @@ Inventory rules:
 ## Completion state guidance
 
 - If docs were updated for the changed surface and align with ADR/contracts:
-  - `status: VERIFIED`, `recommended_action: PROCEED`
+  - `status: VERIFIED`, `recommended_action: CONTINUE` (proceed on golden path)
 - If inputs missing or you couldn't confirm key behavior:
-  - `status: UNVERIFIED`, usually `recommended_action: PROCEED` (if non-blocking) or `RERUN` (if rerun likely fixes it)
+  - `status: UNVERIFIED`, usually `recommended_action: CONTINUE` (if non-blocking, proceed on golden path) or `RERUN` (if rerun likely fixes it)
 - If you discover a real mismatch:
-  - Code mismatch → `status: UNVERIFIED`, `recommended_action: BOUNCE`, `route_to_flow: 3`, `route_to_agent: code-implementer`
-  - Contract/spec mismatch → `status: UNVERIFIED`, `recommended_action: BOUNCE`, `route_to_flow: 2`, `route_to_agent: interface-designer` (or `adr-author`)
-  - Ambiguous + user-impacting → `status: UNVERIFIED`, `recommended_action: PROCEED` (blockers captured)
+  - Code mismatch → `status: UNVERIFIED`, `recommended_action: DETOUR`, `detour_target: code-implementer` (inject sidequest to fix implementation)
+  - Contract/spec mismatch → `status: UNVERIFIED`, `recommended_action: INJECT_FLOW`, `inject_flow: plan` (re-enter plan flow to fix contracts via interface-designer or adr-author)
+  - Ambiguous + user-impacting → `status: UNVERIFIED`, `recommended_action: CONTINUE` (blockers captured, proceed on golden path)
 
 ## Handoff Guidelines
 
@@ -253,7 +253,7 @@ If you encounter ambiguity about what to document or how, follow this hierarchy:
      ```
    - **Then:** Mark that doc surface as `DOC_DEFERRED` and continue with other updates.
 
-4. **Peer Handoff:** If you discover a code/contract mismatch, use `BOUNCE` per the routing rules above.
+4. **Peer Handoff:** If you discover a code/contract mismatch, use `DETOUR` or `INJECT_FLOW` per the routing rules above.
 
 5. **Mechanical Failure:** Only use `CANNOT_PROCEED` for IO/permissions/tooling failures.
 

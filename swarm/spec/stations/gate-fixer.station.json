@@ -1,0 +1,96 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "gate-fixer",
+  "version": 1,
+  "title": "Gate Fixer",
+  "category": "implementation",
+  "sdk": {
+    "model": "haiku",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_only",
+    "allowed_tools": ["Read", "Grep", "Glob"],
+    "denied_tools": ["Write", "Edit", "Bash"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": false
+    },
+    "max_turns": 12,
+    "context_budget": {
+      "total_chars": 120000,
+      "recent_chars": 40000,
+      "older_chars": 10000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Gate Fixer. Identify deterministic mechanical drift and write a fix-forward plan. You do not change files. You classify issues as mechanical (fix-forwardable) vs non-mechanical (needs routing). You produce a fix-forward plan for fix-forward-runner.",
+    "longform_ref": "prompts/agentic_steps/gate-fixer.md",
+    "tone": "neutral"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md",
+      "fragments/output/severity_tiers.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [],
+    "optional_inputs": [
+      "gate/receipt_audit.md",
+      "gate/contract_compliance.md",
+      "gate/security_scan.md",
+      "gate/coverage_audit.md",
+      "gate/policy_analysis.md",
+      "gate/lint_issues.md",
+      "build/build_receipt.json",
+      "build/test_critique.md",
+      "build/code_critique.md"
+    ],
+    "required_outputs": [
+      "gate/gate_fix_summary.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/gate/gate_fix_summary.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "gate/gate_fix_summary.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md",
+      "fragments/output/severity_tiers.md"
+    ],
+    "template": "## Mission\n\nAssess mechanical fix eligibility and produce a fix-forward plan.\n\n## Mechanical Issue Criteria\n\nMechanical iff: 1) no behavior change, 2) automatable, 3) no judgment needed.\n\n## Extended Allowlist\n\n- FORMAT: whitespace, indentation\n- LINT_AUTOFIX: linter-fixable issues\n- IMPORT_ORDER: import sorting\n- DOCS_TYPO: spelling typos in docs\n- LOCKFILE_REGEN: stale lockfile\n- TRIVIAL_BUILD_BREAK: missing import, wrong path, clear version mismatch\n\n## Output\n\nWrite {{run.base}}/gate/gate_fix_summary.md with:\n- Scope & Evidence (which gate artifacts used)\n- Mechanical Fixes (with category, evidence, suggested command)\n- Non-Mechanical Findings (with target flow suggestion)\n- Fix-forward Plan (FIX_FORWARD_PLAN_V1 block)\n- Inventory (machine countable)\n- Machine Summary"
+  },
+  "invariants": [
+    "No in-place edits - report only, do not change files",
+    "No staging, no git/gh operations",
+    "Mechanical issues: no behavior change, automatable, no judgment",
+    "Non-mechanical issues: DETOUR to Build or Plan",
+    "Fix-forward plan always present (eligible or not)"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

@@ -54,6 +54,7 @@ The orchestrator passes an **intent**. You map it to the appropriate paths and b
 | `gate` | `.runs/<run-id>/gate/`, `run_meta.json`, `index.json` | Stage output locations only |
 | `deploy` | `.runs/<run-id>/deploy/`, `run_meta.json`, `index.json` | Stage output locations only |
 | `wisdom` | `.runs/<run-id>/wisdom/`, `run_meta.json`, `index.json` | Stage output locations only |
+| `reset` | `.runs/<run-id>/reset/`, `run_meta.json`, `index.json` | **Multi-step:** diagnose, stash, sync, resolve, restore, prune, archive, verify |
 
 **Build two-step commit pattern:**
 - Step 1: Commit `.runs/<run-id>/build/` + metadata (audit trail)
@@ -705,6 +706,389 @@ Always write `.runs/<run-id>/deploy/deployment_log.md` with:
 
 * decision, merge status, tag/release details, SHAs, timestamps
 * links when available (do not paste tokens)
+
+## Flow 8 (Reset): Branch Synchronization and Cleanup
+
+Flow 8 is a **utility flow** injected when the work branch diverges from upstream or when cleanup is needed. All 8 steps use repo-operator.
+
+### Reset Intent Mapping
+
+| Step | Operation | Description |
+|------|-----------|-------------|
+| `diagnose` | Check git state | Branch divergence, uncommitted changes, stale tracking |
+| `stash_wip` | Preserve WIP | Safely stash work-in-progress if present |
+| `sync_upstream` | Synchronize | Fetch and rebase/merge with upstream |
+| `resolve_conflicts` | Handle conflicts | Safe mechanical conflict resolution |
+| `restore_wip` | Restore WIP | Pop stashed changes, verify clean apply |
+| `prune_branches` | Clean branches | Remove stale remote-tracking and merged branches |
+| `archive_run` | Archive artifacts | Move old run artifacts to archive |
+| `verify_clean` | Final check | Verify clean git state ready for work |
+
+### Step 1: diagnose (Check Git State)
+
+Assess the repository state before any modifications:
+
+```bash
+ROOT=$(git rev-parse --show-toplevel) || exit 2
+gitc() { git -C "$ROOT" "$@"; }
+
+# Current branch info
+current_branch=$(gitc branch --show-current)
+current_sha=$(gitc rev-parse HEAD)
+
+# Check for uncommitted changes
+has_staged=$(gitc diff --cached --quiet && echo "no" || echo "yes")
+has_unstaged=$(gitc diff --quiet && echo "no" || echo "yes")
+has_untracked=$(gitc ls-files --others --exclude-standard | head -1)
+
+# Check branch divergence from upstream
+gitc fetch origin --quiet 2>/dev/null || echo "fetch failed"
+upstream="origin/main"  # or origin/master
+if gitc rev-parse --verify "$upstream" >/dev/null 2>&1; then
+  ahead=$(gitc rev-list --count "$upstream..HEAD" 2>/dev/null || echo "0")
+  behind=$(gitc rev-list --count "HEAD..$upstream" 2>/dev/null || echo "0")
+else
+  ahead="unknown"
+  behind="unknown"
+fi
+
+# Check for stale remote-tracking branches
+stale_remotes=$(gitc remote prune origin --dry-run 2>/dev/null | grep -c "would prune" || echo "0")
+```
+
+Write `.runs/<run-id>/reset/diagnose_report.md` with:
+- Current branch and SHA
+- Uncommitted changes status (staged/unstaged/untracked)
+- Divergence from upstream (ahead/behind counts)
+- Stale remote-tracking branches count
+
+Return:
+```yaml
+## Repo Operator Result
+operation: diagnose
+status: COMPLETED
+has_uncommitted_changes: true | false
+divergence:
+  ahead: <count>
+  behind: <count>
+needs_sync: true | false
+needs_stash: true | false
+```
+
+### Step 2: stash_wip (Preserve Work-in-Progress)
+
+**Only execute if diagnose indicates `has_uncommitted_changes: true`.**
+
+```bash
+# Create descriptive stash with timestamp
+stash_msg="WIP: Flow 8 reset - $(date +%Y%m%d_%H%M%S)"
+gitc stash push -m "$stash_msg" --include-untracked
+
+# Verify stash was created
+stash_sha=$(gitc stash list -1 --format="%H" 2>/dev/null || echo "none")
+```
+
+**Safety invariants:**
+- Always use `--include-untracked` to capture all work
+- Always provide descriptive message for later identification
+- Never use `git stash drop` without explicit instruction
+
+Write `.runs/<run-id>/reset/stash_report.md` with stash details.
+
+Return:
+```yaml
+## Repo Operator Result
+operation: stash_wip
+status: COMPLETED | SKIPPED
+stash_ref: <stash@{0}> | null
+stash_sha: <sha> | null
+files_stashed: <count>
+```
+
+### Step 3: sync_upstream (Fetch and Rebase/Merge)
+
+Synchronize with upstream using rebase for linear history:
+
+```bash
+# Fetch latest
+gitc fetch origin --quiet
+
+# Determine upstream branch
+upstream="origin/main"
+if ! gitc rev-parse --verify "$upstream" >/dev/null 2>&1; then
+  upstream="origin/master"
+fi
+
+# Prefer rebase for linear history
+gitc rebase "$upstream"
+```
+
+**If rebase fails with conflicts:**
+- Do NOT abort automatically
+- Set `has_conflicts: true` in result
+- Flow will route to `resolve_conflicts` step
+
+**Alternative: merge (if rebase is problematic):**
+```bash
+# Use merge if rebase history is complex
+gitc merge "$upstream" --no-edit
+```
+
+Return:
+```yaml
+## Repo Operator Result
+operation: sync_upstream
+status: COMPLETED | COMPLETED_WITH_CONFLICTS
+sync_method: rebase | merge
+has_conflicts: true | false
+conflict_files: [] | [<paths>]
+upstream_ref: <sha>
+```
+
+### Step 4: resolve_conflicts (Safe Conflict Resolution)
+
+**Only execute if sync_upstream indicates `has_conflicts: true`.**
+
+Apply the Escalation Ladder (see main Conflict Resolution section):
+
+**Level 1: Mechanical Resolution**
+```bash
+# Generated files (receipts, logs): keep ours (bot work)
+gitc checkout --ours ".runs/"
+gitc add ".runs/"
+
+# Lockfiles: regenerate
+if [ -f "package-lock.json" ] && gitc diff --name-only --diff-filter=U | grep -q "package-lock.json"; then
+  npm install --package-lock-only
+  gitc add package-lock.json
+fi
+```
+
+**Level 2: Semantic Resolution**
+- Read both sides of conflict
+- Identify intent of each change
+- Merge preserving both intents
+- Log resolution rationale
+
+**Level 3: Pause for Human**
+For genuinely ambiguous conflicts (conflicting business logic, security-sensitive code):
+- Do NOT force a bad merge
+- Set `conflict_complexity: high`
+- Flow will pause via policy detour to `clarifier`
+
+**CRITICAL: After resolution, verify:**
+```bash
+# Ensure no conflict markers remain
+if gitc diff --check 2>&1 | grep -q "conflict"; then
+  echo "Unresolved conflicts remain"
+  exit 1
+fi
+
+# Continue rebase/merge
+gitc rebase --continue || gitc commit --no-edit
+```
+
+Return:
+```yaml
+## Repo Operator Result
+operation: resolve_conflicts
+status: COMPLETED | PARTIAL | PAUSED
+conflict_complexity: low | medium | high
+resolved_files: [<paths>]
+unresolved_files: [] | [<paths>]
+resolution_rationale: <string>
+```
+
+### Step 5: restore_wip (Pop Stashed Changes)
+
+**Only execute if stash_wip created a stash.**
+
+```bash
+# Attempt to pop stash
+if gitc stash list | grep -q "WIP: Flow 8 reset"; then
+  gitc stash pop --quiet
+  pop_status=$?
+
+  if [ $pop_status -ne 0 ]; then
+    # Stash pop had conflicts
+    has_stash_conflicts=true
+  fi
+fi
+```
+
+**If stash pop conflicts:**
+- These are conflicts between stashed WIP and rebased code
+- Apply same resolution strategy as Step 4
+- Log which files conflicted
+
+Return:
+```yaml
+## Repo Operator Result
+operation: restore_wip
+status: COMPLETED | COMPLETED_WITH_CONFLICTS | SKIPPED
+stash_applied: true | false
+stash_conflicts: [] | [<paths>]
+```
+
+### Step 6: prune_branches (Clean Up Stale Branches)
+
+Clean up remote-tracking and merged local branches.
+
+**CRITICAL SAFETY: NEVER delete main, master, or the current branch.**
+
+```bash
+# Protected branches - NEVER delete
+protected_branches=("main" "master" "develop" "release")
+
+# Prune stale remote-tracking branches
+gitc remote prune origin
+
+# Find local branches merged into main/master
+merged_branches=$(gitc branch --merged origin/main | grep -v -E "^\*|main|master|develop|release")
+
+# Delete merged branches (with safety check)
+for branch in $merged_branches; do
+  branch=$(echo "$branch" | xargs)  # trim whitespace
+
+  # Skip protected branches
+  is_protected=false
+  for protected in "${protected_branches[@]}"; do
+    if [ "$branch" = "$protected" ]; then
+      is_protected=true
+      break
+    fi
+  done
+
+  if [ "$is_protected" = "false" ] && [ -n "$branch" ]; then
+    gitc branch -d "$branch" 2>/dev/null || echo "Cannot delete: $branch"
+  fi
+done
+```
+
+**Safety invariants:**
+- Use `-d` (safe delete), NEVER `-D` (force delete)
+- Always check against protected branch list
+- Never delete the current branch
+- Log all deletions
+
+Write `.runs/<run-id>/reset/prune_report.md` with pruned branches.
+
+Return:
+```yaml
+## Repo Operator Result
+operation: prune_branches
+status: COMPLETED
+remote_refs_pruned: <count>
+local_branches_deleted: [<names>]
+protected_branches_skipped: [<names>]
+```
+
+### Step 7: archive_run (Archive Old Run Artifacts)
+
+Move old run artifacts to prevent accumulation:
+
+```bash
+# Find runs older than 7 days (configurable)
+archive_threshold_days=7
+archive_dir=".runs/.archive"
+mkdir -p "$archive_dir"
+
+# Find and archive old runs
+for run_dir in .runs/*/; do
+  run_id=$(basename "$run_dir")
+
+  # Skip special directories
+  if [ "$run_id" = ".archive" ] || [ "$run_id" = "index.json" ]; then
+    continue
+  fi
+
+  # Check run_meta.json for age
+  if [ -f "$run_dir/run_meta.json" ]; then
+    # Archive if older than threshold
+    run_date=$(jq -r '.created_at // empty' "$run_dir/run_meta.json" 2>/dev/null)
+    if [ -n "$run_date" ]; then
+      # Compare dates and archive if old
+      mv "$run_dir" "$archive_dir/$run_id" 2>/dev/null || true
+    fi
+  fi
+done
+```
+
+**Safety invariants:**
+- Archive before delete (preserve audit trail)
+- Never delete the current run
+- Update `.runs/index.json` after archiving
+
+Return:
+```yaml
+## Repo Operator Result
+operation: archive_run
+status: COMPLETED
+runs_archived: <count>
+archived_run_ids: [<ids>]
+```
+
+### Step 8: verify_clean (Final State Verification)
+
+Verify the repository is in a clean state ready for continued work:
+
+```bash
+# Verify no uncommitted changes
+staged=$(gitc diff --cached --name-only)
+unstaged=$(gitc diff --name-only)
+untracked=$(gitc ls-files --others --exclude-standard)
+
+# Verify branch is up-to-date with upstream
+gitc fetch origin --quiet
+ahead=$(gitc rev-list --count "origin/main..HEAD" 2>/dev/null || echo "0")
+behind=$(gitc rev-list --count "HEAD..origin/main" 2>/dev/null || echo "0")
+
+# Final state
+is_clean=true
+if [ -n "$staged" ] || [ -n "$unstaged" ]; then
+  is_clean=false
+fi
+is_synced=true
+if [ "$behind" != "0" ]; then
+  is_synced=false
+fi
+```
+
+Write `.runs/<run-id>/reset/verify_report.md` with final state.
+
+Return:
+```yaml
+## Repo Operator Result
+operation: verify_clean
+status: VERIFIED | UNVERIFIED
+is_clean: true | false
+is_synced: true | false
+remaining_issues:
+  uncommitted_files: [] | [<paths>]
+  behind_upstream: <count>
+ready_for_work: true | false
+```
+
+### Flow 8 Control Plane Result
+
+At flow completion, aggregate results:
+
+```yaml
+## Flow 8 Reset Summary
+flow: reset
+status: COMPLETED | COMPLETED_WITH_CONCERNS | FAILED
+steps_completed: [diagnose, stash_wip, sync_upstream, ...]
+steps_skipped: [<conditional steps not needed>]
+final_state:
+  branch: <name>
+  sha: <sha>
+  is_clean: true | false
+  is_synced: true | false
+artifacts:
+  - reset/diagnose_report.md
+  - reset/sync_report.md
+  - reset/verify_report.md
+```
 
 ## git_status.md (audit format)
 

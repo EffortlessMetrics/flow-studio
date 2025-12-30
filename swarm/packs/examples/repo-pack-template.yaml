@@ -1,0 +1,49 @@
+# repo-pack-template.yaml
+#
+# EXAMPLE: Template for .swarm/pack.yaml in consuming repos.
+#
+# Copy this file to .swarm/pack.yaml in your repository to customize
+# swarm configuration. A pack is a versioned bundle of:
+# - Engine configuration (mode, execution pattern)
+# - Flow definitions (which flows are enabled)
+# - Agent assignments (which agents run which steps)
+# - Runtime settings (budgets, timeouts, features)
+#
+# Empty pack means "use baseline defaults."
+# Set fields to override baseline.
+
+# Schema version for forward compatibility
+version: "1.0"
+
+# Pack identity (optional for repo packs)
+# id: my-custom-pack
+
+# Extends a base pack (optional)
+# extends: baseline
+
+# Engine overrides
+# engines:
+#   claude:
+#     mode: sdk        # Override: stub, sdk, cli
+#     execution: session  # Override: legacy, session
+
+# Feature flags
+# features:
+#   stepwise_execution: true
+#   context_handoff: true
+#   write_transcripts: true
+#   write_receipts: true
+
+# Runtime settings
+# runtime:
+#   context_budget_chars: 200000
+#   history_max_recent_chars: 60000
+#   history_max_older_chars: 10000
+#   timeout_seconds: 30
+
+# Flow overrides (uncomment to customize)
+# flows:
+#   build:
+#     enabled: true
+#     context_budgets:
+#       context_budget_chars: 250000

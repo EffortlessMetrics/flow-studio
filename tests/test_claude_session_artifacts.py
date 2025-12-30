@@ -10,7 +10,7 @@ import pytest
 from pathlib import Path
 
 from swarm.runtime.types import RoutingDecision
-from swarm.runtime.engines.claude.session_runner import parse_routing_decision
+from swarm.runtime.routing_utils import parse_routing_decision
 
 
 class TestParseRoutingDecision:
@@ -187,3 +187,203 @@ class TestSessionEnvelopePaths:
             assert committed_path != draft_path
             assert "draft" not in committed_path.name
             assert "draft" in draft_path.name
+
+
+class TestA3EnvelopeFirstRouting:
+    """Tests for A3 envelope-first routing algorithm.
+
+    The A3 algorithm ensures:
+    1. Session mode routing is persisted in committed envelopes
+    2. Orchestrator reads routing from envelope first
+    3. If envelope routing is missing, falls back to route_step()
+    4. Fallback routing is persisted for consistency
+    """
+
+    def test_read_routing_from_envelope_returns_signal_when_present(self):
+        """read_routing_from_envelope returns routing_signal from committed envelope."""
+        from swarm.runtime.handoff_io import (
+            write_handoff_envelope,
+            read_routing_from_envelope,
+        )
+        import tempfile
+        import json
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            run_base = Path(tmpdir)
+            step_id = "1-test"
+
+            # Write envelope with routing_signal
+            envelope = {
+                "status": "VERIFIED",
+                "confidence": 0.9,
+                "routing_signal": {
+                    "decision": "advance",
+                    "next_step_id": "2-next",
+                    "reason": "test_routing",
+                    "confidence": 1.0,
+                },
+            }
+            write_handoff_envelope(run_base, step_id, envelope)
+
+            # Read routing
+            routing = read_routing_from_envelope(run_base, step_id)
+
+            assert routing is not None
+            assert routing["decision"] == "advance"
+            assert routing["next_step_id"] == "2-next"
+            assert routing["reason"] == "test_routing"
+
+    def test_read_routing_from_envelope_returns_none_when_no_signal(self):
+        """read_routing_from_envelope returns None when routing_signal is missing."""
+        from swarm.runtime.handoff_io import (
+            write_handoff_envelope,
+            read_routing_from_envelope,
+        )
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            run_base = Path(tmpdir)
+            step_id = "1-test"
+
+            # Write envelope WITHOUT routing_signal
+            envelope = {
+                "status": "VERIFIED",
+                "confidence": 0.9,
+            }
+            write_handoff_envelope(run_base, step_id, envelope)
+
+            # Read routing
+            routing = read_routing_from_envelope(run_base, step_id)
+
+            assert routing is None
+
+    def test_read_routing_from_envelope_returns_none_for_missing_envelope(self):
+        """read_routing_from_envelope returns None when envelope doesn't exist."""
+        from swarm.runtime.handoff_io import read_routing_from_envelope
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            run_base = Path(tmpdir)
+            step_id = "1-test"
+
+            # Don't write any envelope
+            routing = read_routing_from_envelope(run_base, step_id)
+
+            assert routing is None
+
+    def test_update_envelope_routing_persists_fallback_routing(self):
+        """update_envelope_routing persists fallback routing to envelope."""
+        from swarm.runtime.handoff_io import (
+            write_handoff_envelope,
+            update_envelope_routing,
+            read_routing_from_envelope,
+        )
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            run_base = Path(tmpdir)
+            step_id = "1-test"
+
+            # Write envelope WITHOUT routing_signal
+            envelope = {
+                "status": "VERIFIED",
+                "confidence": 0.9,
+            }
+            write_handoff_envelope(run_base, step_id, envelope)
+
+            # Update with routing signal
+            routing_dict = {
+                "decision": "advance",
+                "next_step_id": "2-next",
+                "reason": "fallback_routing",
+                "confidence": 1.0,
+            }
+            updated = update_envelope_routing(run_base, step_id, routing_dict)
+
+            assert updated is not None
+            assert updated["routing_signal"]["decision"] == "advance"
+
+            # Verify it's persisted
+            routing = read_routing_from_envelope(run_base, step_id)
+            assert routing is not None
+            assert routing["decision"] == "advance"
+            assert routing["reason"] == "fallback_routing"
+
+    def test_parse_routing_decision_used_for_envelope_routing(self):
+        """parse_routing_decision correctly handles envelope routing decisions."""
+        from swarm.runtime.routing_utils import parse_routing_decision
+        from swarm.runtime.types import RoutingDecision
+
+        # Canonical values from envelope
+        assert parse_routing_decision("advance") == RoutingDecision.ADVANCE
+        assert parse_routing_decision("loop") == RoutingDecision.LOOP
+        assert parse_routing_decision("terminate") == RoutingDecision.TERMINATE
+        assert parse_routing_decision("branch") == RoutingDecision.BRANCH
+
+    def test_envelope_routing_with_loop_decision(self):
+        """Envelope routing correctly handles LOOP decisions."""
+        from swarm.runtime.handoff_io import (
+            write_handoff_envelope,
+            read_routing_from_envelope,
+        )
+        from swarm.runtime.routing_utils import parse_routing_decision
+        from swarm.runtime.types import RoutingDecision
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            run_base = Path(tmpdir)
+            step_id = "1-critic"
+
+            # Write envelope with loop routing
+            envelope = {
+                "status": "UNVERIFIED",
+                "confidence": 0.5,
+                "routing_signal": {
+                    "decision": "loop",
+                    "next_step_id": None,  # Will use loop_target from step routing
+                    "reason": "iteration_needed",
+                    "confidence": 0.8,
+                },
+            }
+            write_handoff_envelope(run_base, step_id, envelope)
+
+            # Read and parse
+            routing = read_routing_from_envelope(run_base, step_id)
+            decision = parse_routing_decision(routing["decision"])
+
+            assert decision == RoutingDecision.LOOP
+            assert routing["reason"] == "iteration_needed"
+
+    def test_envelope_routing_with_terminate_decision(self):
+        """Envelope routing correctly handles TERMINATE decisions."""
+        from swarm.runtime.handoff_io import (
+            write_handoff_envelope,
+            read_routing_from_envelope,
+        )
+        from swarm.runtime.routing_utils import parse_routing_decision
+        from swarm.runtime.types import RoutingDecision
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            run_base = Path(tmpdir)
+            step_id = "6-final"
+
+            # Write envelope with terminate routing
+            envelope = {
+                "status": "VERIFIED",
+                "confidence": 0.95,
+                "routing_signal": {
+                    "decision": "terminate",
+                    "next_step_id": None,
+                    "reason": "flow_complete",
+                    "confidence": 1.0,
+                },
+            }
+            write_handoff_envelope(run_base, step_id, envelope)
+
+            # Read and parse
+            routing = read_routing_from_envelope(run_base, step_id)
+            decision = parse_routing_decision(routing["decision"])
+
+            assert decision == RoutingDecision.TERMINATE
+            assert routing["next_step_id"] is None

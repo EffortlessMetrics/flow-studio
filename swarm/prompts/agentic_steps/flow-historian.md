@@ -198,9 +198,9 @@ DevLT answers: "How much human attention did this run require?"
 
 Recommended action guidance:
 
-* If missing artifacts likely belong to a specific flow: `recommended_action: BOUNCE`, `route_to_flow: <2|3|4|5|6>` as appropriate
-* If timeline is usable but incomplete due to environment/tooling: `recommended_action: PROCEED` or `RERUN` (choose based on whether rerun could plausibly fill gaps)
-* If mechanical failure: `recommended_action: FIX_ENV`
+* If missing artifacts likely belong to a specific flow: `recommended_action: INJECT_FLOW`, `inject_flow: <plan|build|gate|deploy|wisdom>` as appropriate
+* If timeline is usable but incomplete due to environment/tooling: `recommended_action: CONTINUE` or `DETOUR` (choose based on whether a sidequest could plausibly fill gaps)
+* If mechanical failure: `recommended_action: EXTEND_GRAPH` with a proposed fix patch
 
 ## Handoff Guidelines
 

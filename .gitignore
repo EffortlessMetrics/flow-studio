@@ -2,6 +2,10 @@
 /swarm/runs/
 /RUN_BASE/
 
+# Repo pack directory (belongs to consuming repos, not the runtime repo)
+# See swarm/packs/examples/repo-pack-template.yaml for template
+/.swarm/
+
 # Smoke test artifacts (receipt-backed verification)
 # Narrow to flowstudio_smoke/ to leave room for other artifacts (schemas, UX manifests)
 /artifacts/flowstudio_smoke/

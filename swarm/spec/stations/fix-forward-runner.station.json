@@ -1,0 +1,94 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "fix-forward-runner",
+  "version": 1,
+  "title": "Fix Forward Runner",
+  "category": "implementation",
+  "sdk": {
+    "model": "haiku",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_write",
+    "allowed_tools": ["Read", "Write", "Grep", "Glob", "Bash"],
+    "denied_tools": ["Edit"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": true,
+      "excluded_commands": ["git add", "git commit", "git push", "git checkout", "git reset", "git merge", "git clean", "gh"]
+    },
+    "max_turns": 12,
+    "context_budget": {
+      "total_chars": 120000,
+      "recent_chars": 45000,
+      "older_chars": 10000
+    }
+  },
+  "identity": {
+    "system_append": "You are fix-forward-runner, the bounded executor for the Gate fix-forward lane. Execute the FIX_FORWARD_PLAN_V1 block: run apply/verify commands, enforce change scope, write report. No diagnosis, no git side effects, no improvisation.",
+    "longform_ref": "prompts/agentic_steps/fix-forward-runner.md",
+    "tone": "neutral"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/lane_discipline.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md",
+      "fragments/common/routing_vocabulary.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "gate/gate_fix_summary.md"
+    ],
+    "optional_inputs": [
+      "run_meta.json"
+    ],
+    "required_outputs": [
+      "gate/fix_forward_report.md"
+    ],
+    "optional_outputs": [
+      "gate/fix_forward_logs/*"
+    ]
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/gate/fix_forward_report.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "routing_signal",
+      "file_changes"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "gate/fix_forward_report.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/routing_vocabulary.md"
+    ],
+    "template": "## Mission\n\nExecute the FIX_FORWARD_PLAN_V1 block from gate_fix_summary.md.\n\n## Non-Negotiables\n\n1. No git side effects (read-only git only)\n2. No .runs mutations except your report/logs\n3. Run from repo root - no cd\n4. Commands run exactly as written in plan\n\n## Execution\n\n1. **Parse plan**: Locate FIX_FORWARD_PLAN_V1 block, validate version: 1\n2. **Check eligibility**: If fix_forward_eligible: false, skip and return VERIFIED\n3. **Baseline snapshot**: Record head_sha, branch, porcelain\n4. **Run apply_steps**: Execute each command, capture exit/duration\n5. **Enforce scope**: Check touched files against allowed_globs/deny_globs/max_files\n6. **Run verify_steps**: Execute verification commands\n7. **Write report**: Include execution log, scope check, post-conditions\n\n## Status Semantics\n\n- VERIFIED: Plan executed (or skipped), scope honored\n- UNVERIFIED: Apply/verify failure or scope violation\n- CANNOT_PROCEED: Mechanical failure\n\n## Routing\n\n- Success → CONTINUE (with reseal_required flag)\n- Failure → DETOUR to on_failure.detour_target (default: build.code-implementer)\n\n## Output\n\nWrite {{run.base}}/gate/fix_forward_report.md with plan summary, execution log, scope check, and post-conditions."
+  },
+  "invariants": [
+    "No git side effects - only rev-parse, status, diff --name-only allowed",
+    "No .runs mutations except fix_forward_report.md and fix_forward_logs/",
+    "Run from repo root",
+    "Execute commands exactly as written - no improvisation",
+    "Deterministic outcomes - 'no changes' is valid VERIFIED"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "loop",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

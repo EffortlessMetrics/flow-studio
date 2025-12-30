@@ -89,11 +89,21 @@ If inputs are missing, proceed and record `missing_required`/`concerns`.
 
 ## Routing Guidance
 
-Use natural language in your handoff to communicate next steps:
-- Tests passed → recommend proceeding to test-critic
-- Tests failed → recommend rerunning code-implementer to fix failures (name specific failing tests)
-- Test command unknown/missing → recommend pack-customizer to configure test command
-- Mechanical failure (permissions, missing runtime) → explain what's broken and needs fixing
+Use the new routing vocabulary to communicate next steps:
+
+| Scenario | Routing | Target | Meaning |
+|----------|---------|--------|---------|
+| Tests passed | CONTINUE | test-critic | Proceed to next step in flow |
+| Tests failed | DETOUR | code-implementer | Step aside to fix failures, then return |
+| Test command unknown/missing | INJECT_NODES | pack-customizer | Insert a configuration step |
+| Mechanical failure | EXTEND_GRAPH | null | Environment issue; explain what's broken |
+
+**Vocabulary reference:**
+- `CONTINUE` — proceed to the next planned step (default happy path)
+- `DETOUR` — step aside to another agent, then return to this flow
+- `INJECT_FLOW` — run an entire sub-flow before continuing
+- `INJECT_NODES` — insert one or more steps into the current flow
+- `EXTEND_GRAPH` — add new nodes/edges to the execution plan
 
 ## Behavior
 
@@ -104,11 +114,11 @@ Verify you can write:
 If not, `CANNOT_PROCEED` + `FIX_ENV`.
 
 ### Step 1: Determine test command (no guessing)
-Use the **test-runner** skill’s guidance and the repo configuration if present.
+Use the **test-runner** skill's guidance and the repo configuration if present.
 If you cannot identify a test command safely:
 - record `missing_required: ["demo-swarm.config.json: commands.test"]` (or equivalent)
 - do not invent `npm test` / `cargo test` unless it is explicitly specified by skill/config
-- set `UNVERIFIED` + `BOUNCE` to `pack-customizer`
+- set `UNVERIFIED` with `routing: INJECT_NODES` and `routing_target: pack-customizer`
 
 ### Step 2: Execute tests (tool-bound)
 Run tests via test-runner's configured mechanism.
@@ -135,8 +145,8 @@ Write exactly this structure:
 ## Machine Summary
 status: VERIFIED | UNVERIFIED | CANNOT_PROCEED
 recommended_action: PROCEED | RERUN | BOUNCE | FIX_ENV
-route_to_flow: 1|2|3|4|5|6|7|null
-route_to_agent: <agent-name|null>
+routing: CONTINUE | DETOUR | INJECT_FLOW | INJECT_NODES | EXTEND_GRAPH
+routing_target: <agent-name|flow-name|null>
 blockers: []
 missing_required: []
 concerns: []
@@ -192,7 +202,8 @@ After executing tests and writing the report, provide a natural language handoff
 
 **What's left:** <"Tests complete" | "Failures require fixes">
 
-**Recommendation:** <PROCEED to test-critic | RERUN code-implementer to fix failing tests>
+**Routing:** <CONTINUE | DETOUR | INJECT_NODES | EXTEND_GRAPH>
+**Target:** <agent-name | null>
 
 **Reasoning:** <1-2 sentences explaining test outcome>
 ```
@@ -206,7 +217,8 @@ Examples:
 
 **What's left:** Tests complete.
 
-**Recommendation:** PROCEED to test-critic.
+**Routing:** CONTINUE
+**Target:** test-critic
 
 **Reasoning:** All tests passed. Canonical summary: "passed=12 failed=0 skipped=2 xfailed=0 xpassed=0". Green build.
 ```
@@ -218,7 +230,8 @@ Examples:
 
 **What's left:** Failures require fixes.
 
-**Recommendation:** RERUN code-implementer to fix test_login_invalid_password and test_login_rate_limit.
+**Routing:** DETOUR
+**Target:** code-implementer (fix test_login_invalid_password and test_login_rate_limit)
 
 **Reasoning:** AC filter worked (ran 5 tests for AC-001). Two tests failing with assertion errors. Implementation incomplete.
 ```
@@ -232,7 +245,74 @@ The file is the audit record. This handoff is the control plane.
 
 The `build-cleanup` agent uses the handoff to update `ac_status.json`.
 
+## Observations
+
+Record observations that may be valuable for routing or Wisdom:
+
+```json
+{
+  "observations": [
+    {
+      "category": "pattern|anomaly|risk|opportunity",
+      "observation": "What you noticed",
+      "evidence": ["file:line", "artifact_path"],
+      "confidence": 0.8,
+      "suggested_action": "Optional: what to do about it"
+    }
+  ]
+}
+```
+
+Categories:
+- **pattern**: Recurring behavior worth learning from (e.g., "Integration tests consistently take 80% of total test time", "Database tests always run last due to fixture ordering")
+- **anomaly**: Something unexpected that might indicate a problem (e.g., "Test passed on retry but failed initially—potential flakiness", "xpassed count non-zero—expected failures now passing")
+- **risk**: Potential future issue worth tracking (e.g., "3 tests marked skip with TODO comments from 6 months ago", "Coverage for changed files significantly lower than baseline")
+- **opportunity**: Improvement possibility for Wisdom to consider (e.g., "5 tests share identical setup—candidate for shared fixture", "Slow test could be parallelized based on independence analysis")
+
+Include observations in the test execution report under a new section:
+
+```markdown
+## Observations
+
+```json
+{
+  "observations": [
+    {
+      "category": "anomaly",
+      "observation": "test_login_timeout passed on second run after initial failure",
+      "evidence": ["tests/auth/test_login.py:42", "test output: 'rerun passed'"],
+      "confidence": 0.85,
+      "suggested_action": "Mark as flaky or investigate timing dependency"
+    },
+    {
+      "category": "risk",
+      "observation": "3 tests skipped with @skip('TODO: fix after migration')",
+      "evidence": ["tests/db/test_migration.py:15", "tests/db/test_migration.py:28", "tests/db/test_migration.py:45"],
+      "confidence": 0.95,
+      "suggested_action": "Review skipped tests for relevance to current change"
+    },
+    {
+      "category": "pattern",
+      "observation": "All auth tests complete in <100ms, integration tests average 2s",
+      "evidence": ["test_summary.duration_breakdown"],
+      "confidence": 0.9,
+      "suggested_action": null
+    },
+    {
+      "category": "opportunity",
+      "observation": "Coverage gap in error handling paths for new code",
+      "evidence": ["src/handler.ts:45-60 (0% branch coverage)"],
+      "confidence": 0.8,
+      "suggested_action": "Add error path tests in next iteration"
+    }
+  ]
+}
+```
+```
+
+Observations are NOT routing decisions—they're forensic notes for the Navigator and Wisdom.
+
 ## Philosophy
 
 Flows should be explicit about *stations*, not implementations.
-This agent is the “test station” adapter: stable, tool-bound, and easy to route from.
+This agent is the "test station" adapter: stable, tool-bound, and easy to route from.

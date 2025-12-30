@@ -13,18 +13,99 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional
 
+from swarm.runtime.routing_utils import parse_routing_decision
 from swarm.runtime.types import (
-    RoutingDecision, RoutingSignal, RoutingExplanation,
-    DecisionType, EdgeOption, Elimination, LLMReasoning,
-    MicroloopContext, DecisionMetrics, RoutingFactor,
+    DecisionMetrics,
+    DecisionType,
+    EdgeOption,
+    Elimination,
+    LLMReasoning,
+    MicroloopContext,
+    RoutingCandidate,
+    RoutingDecision,
+    RoutingExplanation,
+    RoutingFactor,
+    RoutingSignal,
 )
 from swarm.spec.types import RoutingConfig, RoutingKind
 
 from ..models import RoutingContext, StepContext
 
 logger = logging.getLogger(__name__)
+
+
+def _create_deterministic_routing_signal(
+    decision: RoutingDecision,
+    next_step_id: Optional[str],
+    reason: str,
+    source: str = "deterministic",
+    confidence: float = 1.0,
+    needs_human: bool = False,
+    loop_count: int = 0,
+    exit_condition_met: bool = False,
+    route: Optional[str] = None,
+    explanation: Optional[RoutingExplanation] = None,
+) -> RoutingSignal:
+    """Create a RoutingSignal for deterministic routing with complete audit trail.
+
+    This helper ensures all deterministic/fast-path routing decisions populate
+    chosen_candidate_id and routing_candidates for consistent audit coverage.
+    No routing decision should be a "dark spot" in the audit trail.
+
+    Args:
+        decision: The routing decision (advance, loop, terminate, branch).
+        next_step_id: Target step ID.
+        reason: Human-readable explanation.
+        source: Routing source identifier (e.g., "deterministic", "fast_path", "spec_linear").
+        confidence: Confidence score (0.0-1.0).
+        needs_human: Whether human intervention is required.
+        loop_count: Current iteration for microloop tracking.
+        exit_condition_met: Whether exit condition was met.
+        route: Named route for branch routing.
+        explanation: Optional structured explanation.
+
+    Returns:
+        RoutingSignal with populated chosen_candidate_id and routing_candidates.
+    """
+    # Generate deterministic candidate_id based on decision and target
+    if decision == RoutingDecision.LOOP:
+        candidate_id = f"loop:{next_step_id}:iter_{loop_count}"
+    elif decision == RoutingDecision.ADVANCE and next_step_id:
+        candidate_id = f"advance:{next_step_id}"
+    elif decision == RoutingDecision.TERMINATE:
+        candidate_id = "terminate"
+    elif decision == RoutingDecision.BRANCH and next_step_id:
+        candidate_id = f"branch:{route or next_step_id}"
+    else:
+        candidate_id = f"{decision.value}:{next_step_id or 'none'}"
+
+    # Create the routing candidate that was implicitly chosen
+    chosen_candidate = RoutingCandidate(
+        candidate_id=candidate_id,
+        action=decision.value,
+        target_node=next_step_id,
+        reason=reason,
+        priority=100,  # Deterministic decisions are highest priority
+        source=source,
+        is_default=True,
+    )
+
+    return RoutingSignal(
+        decision=decision,
+        next_step_id=next_step_id,
+        route=route,
+        reason=reason,
+        confidence=confidence,
+        needs_human=needs_human,
+        loop_count=loop_count,
+        exit_condition_met=exit_condition_met,
+        chosen_candidate_id=candidate_id,
+        routing_candidates=[chosen_candidate],
+        routing_source=source,
+        explanation=explanation,
+    )
 
 
 # Router prompt template for agentic routing decisions with structured JSON output
@@ -162,9 +243,7 @@ def load_resolver_template(repo_root: Optional[Path], resolver_name: str) -> Opt
     if not repo_root:
         return None
 
-    resolver_path = (
-        Path(repo_root) / "swarm" / "prompts" / "resolvers" / f"{resolver_name}.md"
-    )
+    resolver_path = Path(repo_root) / "swarm" / "prompts" / "resolvers" / f"{resolver_name}.md"
     if not resolver_path.exists():
         logger.debug("Resolver template not found: %s", resolver_path)
         return None
@@ -210,7 +289,7 @@ def check_microloop_termination(
         RoutingSignal if termination condition met, None to continue looping.
     """
     # Extract routing configuration
-    loop_target = routing_config.get("loop_target")
+    # Note: loop_target is defined in routing config but routing uses success_values + max_iterations
     success_values = routing_config.get("loop_success_values", ["VERIFIED"])
     max_iterations = routing_config.get("max_iterations", 3)
     loop_condition_field = routing_config.get("loop_condition_field", "status")
@@ -225,32 +304,39 @@ def check_microloop_termination(
 
     # Condition 1: Success status reached - exit loop with ADVANCE
     if current_status in [s.upper() for s in success_values]:
-        return RoutingSignal(
+        return _create_deterministic_routing_signal(
             decision=RoutingDecision.ADVANCE,
             next_step_id=None,  # Orchestrator determines next step
             reason=f"Loop target reached: {loop_condition_field}={current_status}",
-            confidence=1.0,
-            needs_human=False,
+            source="microloop_termination",
+            exit_condition_met=True,
+            loop_count=current_iteration,
         )
 
     # Condition 2: Max iterations exhausted - exit loop with ADVANCE
     if current_iteration >= max_iterations:
-        return RoutingSignal(
+        return _create_deterministic_routing_signal(
             decision=RoutingDecision.ADVANCE,
             next_step_id=None,
             reason=f"Max iterations reached ({current_iteration}/{max_iterations}), exiting with documented concerns",
+            source="microloop_termination",
             confidence=0.7,
             needs_human=True,  # Human should review incomplete work
+            loop_count=current_iteration,
+            exit_condition_met=True,
         )
 
     # Condition 3: can_further_iteration_help is false - exit loop
     if not can_further_help:
-        return RoutingSignal(
+        return _create_deterministic_routing_signal(
             decision=RoutingDecision.ADVANCE,
             next_step_id=None,
             reason="Critic indicated no further iteration can help, exiting loop",
+            source="microloop_termination",
             confidence=0.8,
             needs_human=True,  # Human should review why iteration was not helpful
+            loop_count=current_iteration,
+            exit_condition_met=True,
         )
 
     # No termination condition met - return None to continue looping
@@ -261,6 +347,7 @@ async def run_router_session(
     handoff_data: Dict[str, Any],
     ctx: StepContext,
     cwd: str,
+    model: Optional[str] = None,
 ) -> Optional[RoutingSignal]:
     """Run a lightweight router session to decide the next step.
 
@@ -274,11 +361,12 @@ async def run_router_session(
         handoff_data: The handoff JSON from JIT finalization.
         ctx: Step execution context with routing configuration.
         cwd: Working directory for the session.
+        model: Model to use for routing session (from spec).
 
     Returns:
         RoutingSignal if routing was determined, None if routing failed.
     """
-    from swarm.runtime.claude_sdk import get_sdk_module, create_high_trust_options
+    from swarm.runtime.claude_sdk import create_high_trust_options, get_sdk_module
 
     sdk = get_sdk_module()
     query = sdk.query
@@ -328,23 +416,23 @@ async def run_router_session(
 ## Handoff from Previous Step
 
 ```json
-{template_vars['handoff_json']}
+{template_vars["handoff_json"]}
 ```
 
 ## Step Routing Configuration
 
 ```yaml
-step_id: {template_vars['step_id']}
-flow_key: {template_vars['flow_key']}
+step_id: {template_vars["step_id"]}
+flow_key: {template_vars["flow_key"]}
 routing:
-  kind: {template_vars['routing_kind']}
-  next: {template_vars['routing_next']}
-  loop_target: {template_vars['loop_target']}
-  loop_condition_field: {template_vars['loop_condition_field']}
-  loop_success_values: {template_vars['loop_success_values']}
-  max_iterations: {template_vars['max_iterations']}
-  can_further_iteration_help: {template_vars['can_further_iteration_help']}
-current_iteration: {template_vars['current_iteration']}
+  kind: {template_vars["routing_kind"]}
+  next: {template_vars["routing_next"]}
+  loop_target: {template_vars["loop_target"]}
+  loop_condition_field: {template_vars["loop_condition_field"]}
+  loop_success_values: {template_vars["loop_success_values"]}
+  max_iterations: {template_vars["max_iterations"]}
+  can_further_iteration_help: {template_vars["can_further_iteration_help"]}
+current_iteration: {template_vars["current_iteration"]}
 ```
 
 {resolver_template}
@@ -354,10 +442,11 @@ current_iteration: {template_vars['current_iteration']}
         router_prompt = ROUTER_PROMPT_TEMPLATE.format(**template_vars)
         logger.debug("Using fallback ROUTER_PROMPT_TEMPLATE for routing")
 
-    # Router uses minimal options via adapter
+    # Router uses minimal options via adapter, with spec model for consistency
     options = create_high_trust_options(
         cwd=cwd,
         permission_mode="bypassPermissions",
+        model=model,  # Use spec model if available, otherwise SDK default
     )
 
     # Collect router response
@@ -376,8 +465,7 @@ current_iteration: {template_vars['current_iteration']}
                 content = getattr(message, "content", "")
                 if isinstance(content, list):
                     text_parts = [
-                        getattr(b, "text", str(getattr(b, "content", "")))
-                        for b in content
+                        getattr(b, "text", str(getattr(b, "content", ""))) for b in content
                     ]
                     content = "\n".join(text_parts)
                 if content:
@@ -406,19 +494,9 @@ current_iteration: {template_vars['current_iteration']}
 
         routing_data = json.loads(json_match)
 
-        # Map decision string to enum
-        decision_str = routing_data.get("decision", "advance").lower()
-        decision_map = {
-            "advance": RoutingDecision.ADVANCE,
-            "loop": RoutingDecision.LOOP,
-            "terminate": RoutingDecision.TERMINATE,
-            "branch": RoutingDecision.BRANCH,
-            "proceed": RoutingDecision.ADVANCE,
-            "rerun": RoutingDecision.LOOP,
-            "blocked": RoutingDecision.TERMINATE,
-            "route": RoutingDecision.BRANCH,
-        }
-        decision = decision_map.get(decision_str, RoutingDecision.ADVANCE)
+        # Map decision string to enum using centralized parsing
+        decision_str = routing_data.get("decision", "advance")
+        decision = parse_routing_decision(decision_str)
 
         # Build LLMReasoning from structured response if present
         llm_reasoning = None
@@ -446,24 +524,57 @@ current_iteration: {template_vars['current_iteration']}
 
         # Build explanation
         from datetime import datetime, timezone
+
+        next_step_id = routing_data.get("next_step_id")
+        route = routing_data.get("route")
+        reason = routing_data.get("reason", "")
+        confidence = float(routing_data.get("confidence", 0.7))
+        needs_human = bool(routing_data.get("needs_human", False))
+
         explanation = RoutingExplanation(
             decision_type=DecisionType.LLM_TIEBREAKER,
-            selected_target=routing_data.get("next_step_id") or "",
+            selected_target=next_step_id or "",
             timestamp=datetime.now(timezone.utc),
-            confidence=float(routing_data.get("confidence", 0.7)),
-            reasoning_summary=routing_data.get("reason", "")[:200],
+            confidence=confidence,
+            reasoning_summary=reason[:200],
             llm_reasoning=llm_reasoning,
             metrics=DecisionMetrics(llm_calls=1),
         )
 
+        # Generate candidate_id for LLM-based routing (consistent audit trail)
+        if decision == RoutingDecision.LOOP:
+            candidate_id = f"loop:{next_step_id}"
+        elif decision == RoutingDecision.ADVANCE and next_step_id:
+            candidate_id = f"advance:{next_step_id}"
+        elif decision == RoutingDecision.TERMINATE:
+            candidate_id = "terminate"
+        elif decision == RoutingDecision.BRANCH and next_step_id:
+            candidate_id = f"branch:{route or next_step_id}"
+        else:
+            candidate_id = f"{decision.value}:{next_step_id or 'none'}"
+
+        # Create routing candidate for audit trail
+        chosen_candidate = RoutingCandidate(
+            candidate_id=candidate_id,
+            action=decision.value,
+            target_node=next_step_id,
+            reason=reason,
+            priority=80,  # LLM decisions have lower priority than deterministic
+            source="llm_router_session",
+            is_default=False,
+        )
+
         return RoutingSignal(
             decision=decision,
-            next_step_id=routing_data.get("next_step_id"),
-            route=routing_data.get("route"),
-            reason=routing_data.get("reason", ""),
-            confidence=float(routing_data.get("confidence", 0.7)),
-            needs_human=bool(routing_data.get("needs_human", False)),
+            next_step_id=next_step_id,
+            route=route,
+            reason=reason,
+            confidence=confidence,
+            needs_human=needs_human,
             explanation=explanation,
+            chosen_candidate_id=candidate_id,
+            routing_candidates=[chosen_candidate],
+            routing_source="llm_router_session",
         )
 
     except json.JSONDecodeError as e:
@@ -500,39 +611,38 @@ def route_step_stub(
 
         if status in [v.upper() for v in success_values]:
             next_step = routing_config.get("next")
-            return RoutingSignal(
+            return _create_deterministic_routing_signal(
                 decision=RoutingDecision.ADVANCE,
                 next_step_id=next_step,
                 reason=f"stub_microloop_exit:{status}",
-                confidence=1.0,
-                needs_human=False,
+                source="stub",
+                exit_condition_met=True,
             )
 
         # Check can_further_iteration_help
         can_help = handoff_data.get("can_further_iteration_help", "no")
         if isinstance(can_help, str) and can_help.lower() == "no":
             next_step = routing_config.get("next")
-            return RoutingSignal(
+            return _create_deterministic_routing_signal(
                 decision=RoutingDecision.ADVANCE,
                 next_step_id=next_step,
                 reason="stub_microloop_no_further_help",
-                confidence=1.0,
-                needs_human=False,
+                source="stub",
+                exit_condition_met=True,
             )
 
     # Default: advance to next step
     next_step = routing_config.get("next")
     if next_step:
-        return RoutingSignal(
+        return _create_deterministic_routing_signal(
             decision=RoutingDecision.ADVANCE,
             next_step_id=next_step,
             reason="stub_linear_advance",
-            confidence=1.0,
-            needs_human=False,
+            source="stub",
         )
 
     # No next step - terminate flow
-    return RoutingSignal(
+    return _create_deterministic_routing_signal(
         decision=RoutingDecision.TERMINATE,
         reason="stub_flow_complete",
         confidence=1.0,
@@ -576,65 +686,66 @@ def route_from_routing_config(
 
     # Handle terminal routing - always terminates
     if routing_config.kind == RoutingKind.TERMINAL:
-        return RoutingSignal(
+        return _create_deterministic_routing_signal(
             decision=RoutingDecision.TERMINATE,
+            next_step_id=None,
             reason="spec_terminal",
-            confidence=1.0,
-            needs_human=False,
+            source="spec_routing",
         )
 
     # Handle linear routing - advances to next step or terminates
     if routing_config.kind == RoutingKind.LINEAR:
         if routing_config.next:
-            return RoutingSignal(
+            return _create_deterministic_routing_signal(
                 decision=RoutingDecision.ADVANCE,
                 next_step_id=routing_config.next,
                 reason="spec_linear",
-                confidence=1.0,
-                needs_human=False,
+                source="spec_routing",
             )
         # Linear with no next step means flow complete
-        return RoutingSignal(
+        return _create_deterministic_routing_signal(
             decision=RoutingDecision.TERMINATE,
+            next_step_id=None,
             reason="spec_linear_no_next",
-            confidence=1.0,
-            needs_human=False,
+            source="spec_routing",
         )
 
     # Handle microloop routing - checks success, max iterations, or loops back
     if routing_config.kind == RoutingKind.MICROLOOP:
         # Normalize success values for comparison
-        success_values_upper = tuple(
-            v.upper() for v in routing_config.loop_success_values
-        )
+        success_values_upper = tuple(v.upper() for v in routing_config.loop_success_values)
 
         # Check if success condition met
         if normalized_status in success_values_upper:
-            return RoutingSignal(
+            return _create_deterministic_routing_signal(
                 decision=RoutingDecision.ADVANCE,
                 next_step_id=routing_config.next,
                 reason="spec_microloop_verified",
-                confidence=1.0,
-                needs_human=False,
+                source="spec_routing",
+                exit_condition_met=True,
+                loop_count=iteration_count,
             )
 
         # Check if max iterations reached
         if iteration_count >= routing_config.max_iterations:
-            return RoutingSignal(
+            return _create_deterministic_routing_signal(
                 decision=RoutingDecision.ADVANCE,
                 next_step_id=routing_config.next,
                 reason="spec_microloop_max_iterations",
+                source="spec_routing",
                 confidence=0.7,
                 needs_human=True,  # Human should review incomplete work
+                exit_condition_met=True,
+                loop_count=iteration_count,
             )
 
         # Loop back to target
-        return RoutingSignal(
+        return _create_deterministic_routing_signal(
             decision=RoutingDecision.LOOP,
             next_step_id=routing_config.loop_target,
             reason="spec_microloop_continue",
-            confidence=1.0,
-            needs_human=False,
+            source="spec_routing",
+            loop_count=iteration_count + 1,
         )
 
     # Handle branch routing - routes based on status matching branches
@@ -643,34 +754,32 @@ def route_from_routing_config(
         if routing_config.branches:
             # Try exact match first
             if handoff_status in routing_config.branches:
-                return RoutingSignal(
+                return _create_deterministic_routing_signal(
                     decision=RoutingDecision.BRANCH,
                     next_step_id=routing_config.branches[handoff_status],
-                    route=handoff_status,
                     reason="spec_branch",
-                    confidence=1.0,
-                    needs_human=False,
+                    source="spec_routing",
+                    route=handoff_status,
                 )
             # Try case-insensitive match
             for branch_key, branch_target in routing_config.branches.items():
                 if branch_key.upper() == normalized_status:
-                    return RoutingSignal(
+                    return _create_deterministic_routing_signal(
                         decision=RoutingDecision.BRANCH,
                         next_step_id=branch_target,
-                        route=branch_key,
                         reason="spec_branch",
-                        confidence=1.0,
-                        needs_human=False,
+                        source="spec_routing",
+                        route=branch_key,
                     )
 
         # Fallback to next if no matching branch
         if routing_config.next:
-            return RoutingSignal(
+            return _create_deterministic_routing_signal(
                 decision=RoutingDecision.ADVANCE,
                 next_step_id=routing_config.next,
                 reason="spec_branch_default",
+                source="spec_routing",
                 confidence=0.8,
-                needs_human=False,
             )
 
     # Routing cannot be determined deterministically - requires LLM decision
@@ -753,11 +862,11 @@ def smart_route(
     # Priority 1: Check for exit conditions (deterministic)
     if routing_config.kind == RoutingKind.TERMINAL:
         elapsed_ms = int((time.time() - start_time) * 1000)
-        return RoutingSignal(
+        return _create_deterministic_routing_signal(
             decision=RoutingDecision.TERMINATE,
+            next_step_id=None,
             reason="spec_terminal",
-            confidence=1.0,
-            needs_human=False,
+            source="smart_route",
             explanation=RoutingExplanation(
                 decision_type=DecisionType.EXIT_CONDITION,
                 selected_target="",
@@ -784,21 +893,24 @@ def smart_route(
             # Mark loop edge as eliminated
             for e in edges_considered:
                 if e.edge_type == "loop":
-                    elimination_log.append(Elimination(
-                        edge_id=e.edge_id,
-                        reason_code="exit_condition_met",
-                        detail=f"Status {normalized_status} matches success values",
-                    ))
+                    elimination_log.append(
+                        Elimination(
+                            edge_id=e.edge_id,
+                            reason_code="exit_condition_met",
+                            detail=f"Status {normalized_status} matches success values",
+                        )
+                    )
                 else:
                     e.evaluated_result = True
                     e.score = 1.0
 
-            return RoutingSignal(
+            return _create_deterministic_routing_signal(
                 decision=RoutingDecision.ADVANCE,
                 next_step_id=routing_config.next,
                 reason="spec_microloop_verified",
-                confidence=1.0,
-                needs_human=False,
+                source="smart_route",
+                exit_condition_met=True,
+                loop_count=iteration_count,
                 explanation=RoutingExplanation(
                     decision_type=DecisionType.EXIT_CONDITION,
                     selected_target=routing_config.next or "",
@@ -821,18 +933,23 @@ def smart_route(
             elapsed_ms = int((time.time() - start_time) * 1000)
             for e in edges_considered:
                 if e.edge_type == "loop":
-                    elimination_log.append(Elimination(
-                        edge_id=e.edge_id,
-                        reason_code="max_iterations",
-                        detail=f"Iteration {iteration_count + 1} >= max {routing_config.max_iterations}",
-                    ))
+                    elimination_log.append(
+                        Elimination(
+                            edge_id=e.edge_id,
+                            reason_code="max_iterations",
+                            detail=f"Iteration {iteration_count + 1} >= max {routing_config.max_iterations}",
+                        )
+                    )
 
-            return RoutingSignal(
+            return _create_deterministic_routing_signal(
                 decision=RoutingDecision.ADVANCE,
                 next_step_id=routing_config.next,
                 reason="spec_microloop_max_iterations",
+                source="smart_route",
                 confidence=0.7,
                 needs_human=True,
+                exit_condition_met=True,
+                loop_count=iteration_count,
                 explanation=RoutingExplanation(
                     decision_type=DecisionType.EXIT_CONDITION,
                     selected_target=routing_config.next or "",
@@ -858,18 +975,23 @@ def smart_route(
             elapsed_ms = int((time.time() - start_time) * 1000)
             for e in edges_considered:
                 if e.edge_type == "loop":
-                    elimination_log.append(Elimination(
-                        edge_id=e.edge_id,
-                        reason_code="status_mismatch",
-                        detail="Critic indicated no further iteration can help",
-                    ))
+                    elimination_log.append(
+                        Elimination(
+                            edge_id=e.edge_id,
+                            reason_code="status_mismatch",
+                            detail="Critic indicated no further iteration can help",
+                        )
+                    )
 
-            return RoutingSignal(
+            return _create_deterministic_routing_signal(
                 decision=RoutingDecision.ADVANCE,
                 next_step_id=routing_config.next,
                 reason="spec_microloop_no_further_help",
+                source="smart_route",
                 confidence=0.8,
                 needs_human=True,
+                exit_condition_met=True,
+                loop_count=iteration_count,
                 explanation=RoutingExplanation(
                     decision_type=DecisionType.EXIT_CONDITION,
                     selected_target=routing_config.next or "",
@@ -891,18 +1013,19 @@ def smart_route(
         elapsed_ms = int((time.time() - start_time) * 1000)
         for e in edges_considered:
             if e.edge_type != "loop":
-                elimination_log.append(Elimination(
-                    edge_id=e.edge_id,
-                    reason_code="condition_false",
-                    detail=f"Status {normalized_status} not in success values, loop continues",
-                ))
+                elimination_log.append(
+                    Elimination(
+                        edge_id=e.edge_id,
+                        reason_code="condition_false",
+                        detail=f"Status {normalized_status} not in success values, loop continues",
+                    )
+                )
 
-        return RoutingSignal(
+        return _create_deterministic_routing_signal(
             decision=RoutingDecision.LOOP,
             next_step_id=routing_config.loop_target,
             reason="spec_microloop_continue",
-            confidence=1.0,
-            needs_human=False,
+            source="smart_route",
             loop_count=iteration_count + 1,
             explanation=RoutingExplanation(
                 decision_type=DecisionType.DETERMINISTIC,
@@ -925,12 +1048,11 @@ def smart_route(
     if routing_config.kind == RoutingKind.LINEAR:
         elapsed_ms = int((time.time() - start_time) * 1000)
         if routing_config.next:
-            return RoutingSignal(
+            return _create_deterministic_routing_signal(
                 decision=RoutingDecision.ADVANCE,
                 next_step_id=routing_config.next,
                 reason="spec_linear",
-                confidence=1.0,
-                needs_human=False,
+                source="smart_route",
                 explanation=RoutingExplanation(
                     decision_type=DecisionType.DETERMINISTIC,
                     selected_target=routing_config.next,
@@ -946,11 +1068,11 @@ def smart_route(
                     ),
                 ),
             )
-        return RoutingSignal(
+        return _create_deterministic_routing_signal(
             decision=RoutingDecision.TERMINATE,
+            next_step_id=None,
             reason="spec_linear_no_next",
-            confidence=1.0,
-            needs_human=False,
+            source="smart_route",
             explanation=RoutingExplanation(
                 decision_type=DecisionType.DETERMINISTIC,
                 selected_target="",
@@ -980,20 +1102,21 @@ def smart_route(
                 matched_key = branch_key
                 break
             else:
-                elimination_log.append(Elimination(
-                    edge_id=f"branch_{branch_key}",
-                    reason_code="condition_false",
-                    detail=f"Status '{handoff_status}' != branch key '{branch_key}'",
-                ))
+                elimination_log.append(
+                    Elimination(
+                        edge_id=f"branch_{branch_key}",
+                        reason_code="condition_false",
+                        detail=f"Status '{handoff_status}' != branch key '{branch_key}'",
+                    )
+                )
 
         if matched_target:
-            return RoutingSignal(
+            return _create_deterministic_routing_signal(
                 decision=RoutingDecision.BRANCH,
                 next_step_id=matched_target,
-                route=matched_key,
                 reason="spec_branch",
-                confidence=1.0,
-                needs_human=False,
+                source="smart_route",
+                route=matched_key,
                 explanation=RoutingExplanation(
                     decision_type=DecisionType.DETERMINISTIC,
                     selected_target=matched_target,
@@ -1012,12 +1135,12 @@ def smart_route(
 
         # Fallback to next
         if routing_config.next:
-            return RoutingSignal(
+            return _create_deterministic_routing_signal(
                 decision=RoutingDecision.ADVANCE,
                 next_step_id=routing_config.next,
                 reason="spec_branch_default",
+                source="smart_route",
                 confidence=0.8,
-                needs_human=False,
                 explanation=RoutingExplanation(
                     decision_type=DecisionType.DETERMINISTIC,
                     selected_target=routing_config.next,
@@ -1036,9 +1159,11 @@ def smart_route(
 
     # Fallback: routing could not be determined
     elapsed_ms = int((time.time() - start_time) * 1000)
-    return RoutingSignal(
+    return _create_deterministic_routing_signal(
         decision=RoutingDecision.TERMINATE,
+        next_step_id=None,
         reason="routing_undetermined",
+        source="smart_route_fallback",
         confidence=0.5,
         needs_human=True,
         explanation=RoutingExplanation(

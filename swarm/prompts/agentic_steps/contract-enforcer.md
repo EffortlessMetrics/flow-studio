@@ -54,9 +54,14 @@ If contract files are missing, this is **UNVERIFIED**, not mechanical failure.
 
 `PROCEED | RERUN | BOUNCE | FIX_ENV`
 
-Routing fields:
-- `route_to_flow: 1|2|3|4|5|6|7|null`
-- `route_to_agent: <agent-name|null>`
+**Actions explained:**
+- `PROCEED`: Contract alignment is sufficient, continue on golden path
+- `RERUN`: Issue fixable within current flow—describe what needs fixing in handoff
+- `BOUNCE`: Issue requires upstream flow work—describe the upstream dependency in handoff
+- `FIX_ENV`: Environment/tooling issue—Navigator injects `env-doctor` sidequest
+
+The Navigator uses your `recommended_action` and handoff summary to determine routing.
+You don't need to specify flow numbers or agent names—describe the issue clearly.
 
 ## Evidence discipline
 
@@ -83,9 +88,8 @@ Contract source selection:
 3) Else → contract source is MISSING:
    - `status: UNVERIFIED`
    - `recommended_action: BOUNCE`
-   - `route_to_flow: 2`
-   - `route_to_agent: interface-designer`
-   - Still enumerate observed endpoints from implementation to give Plan something concrete to fix.
+   - In handoff summary: explain that no contract source exists (api_contracts.yaml or interface_spec.md)
+   - Still enumerate observed endpoints from implementation to give upstream flow something concrete to fix.
 
 ### Step 2: Extract declared API surface (prefer contract inventory)
 
@@ -140,13 +144,21 @@ Also check:
 
 ### Step 5: Decide routing (closed enum)
 
-Routing rules:
-- Contract missing/incomplete ⇒ `BOUNCE` to Flow 2 (`route_to_agent: interface-designer`)
-- Contract exists but implementation violates it ⇒ `BOUNCE` to Flow 3 (`route_to_agent: code-implementer`)
-- Implementation adds endpoints not in contract:
-  - clearly intended (ADR/REQ aligns) ⇒ `BOUNCE` to Flow 2 (`interface-designer`)
-  - ambiguous intent ⇒ `PROCEED` (UNVERIFIED with blockers documented; routes null)
-- If only MINOR findings and verification is complete enough ⇒ `PROCEED`
+Routing rules use the **Navigator routing vocabulary**:
+
+| Situation | Action | Routing Verb |
+|-----------|--------|--------------|
+| Contract missing/incomplete | Route to Plan flow for interface-designer | `DETOUR` |
+| Contract exists but implementation violates it | Route to Build flow for code-implementer | `DETOUR` |
+| Implementation adds endpoints (clearly intended) | Route to Plan flow for interface-designer | `DETOUR` |
+| Implementation adds endpoints (ambiguous intent) | UNVERIFIED with blockers documented | `CONTINUE` |
+| Only MINOR findings, verification complete | Proceed to merge decision | `CONTINUE` |
+
+- **CONTINUE**: Proceed on the golden path (no intervention needed)
+- **DETOUR**: Route to an existing flow/agent to address the issue, then return
+- **INJECT_FLOW**: (not used here) Insert an entire flow into the execution graph
+- **INJECT_NODES**: (not used here) Insert specific nodes into the current flow
+- **EXTEND_GRAPH**: (not used here) Add nodes to the end of the execution path
 
 The merge decision is owned by `merge-decider`.
 
@@ -268,6 +280,27 @@ Always mention:
 - Counts by severity (CRITICAL/MAJOR/MINOR)
 - Whether violations are in implementation (needs code fix) or contracts (needs spec update)
 - Specific routing recommendation
+
+## Off-Road Justification
+
+When recommending any off-road decision (DETOUR, INJECT_FLOW, INJECT_NODES), you MUST provide why_now justification:
+
+- **trigger**: What specific condition triggered this recommendation?
+- **delay_cost**: What happens if we don't act now?
+- **blocking_test**: Is this blocking the current objective?
+- **alternatives_considered**: What other options were evaluated?
+
+Example:
+```json
+{
+  "why_now": {
+    "trigger": "CE-CRIT-001: POST /auth/login returns 200 instead of declared 201",
+    "delay_cost": "API consumers expecting 201 will fail integration tests",
+    "blocking_test": "Cannot satisfy 'all endpoints match contract' gate policy",
+    "alternatives_considered": ["Update contract to 200 (rejected: breaking change for consumers)", "Document as known drift (rejected: CRITICAL severity)"]
+  }
+}
+```
 
 ## Philosophy
 

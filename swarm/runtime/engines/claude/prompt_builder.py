@@ -8,6 +8,13 @@ Handles:
 - History priority-aware budgeting
 - Inline finalization prompt injection
 - Scent Trail injection (wisdom from previous runs)
+- SpecCompiler integration for spec-driven prompt assembly (optional, feature-flagged)
+
+The SpecCompiler integration (enabled via USE_SPEC_COMPILER flag) provides:
+- Station-based identity and invariants
+- Fragment-resolved guidelines
+- Template-driven prompt composition
+- Better traceability via prompt_hash
 """
 
 from __future__ import annotations
@@ -15,20 +22,21 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from swarm.config.runtime_config import get_resolved_context_budgets
+from swarm.runtime.flow_loader import load_agent_step_prompt
 from swarm.runtime.history_priority import (
     HistoryPriority,
     get_priority_label,
     prioritize_history,
 )
-from swarm.runtime.flow_loader import load_agent_step_prompt, load_orchestrator_flow_prompt
 
 from ..models import HistoryTruncationInfo, StepContext
 
 if TYPE_CHECKING:
     from swarm.runtime.context_pack import ContextPack
+    from swarm.spec.types import PromptPlan
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +51,20 @@ _CONTEXTPACK_ONLY = os.environ.get("SWARM_CONTEXTPACK_ONLY", "false").lower() ==
 
 # Scent Trail: Cross-run wisdom from previous runs
 WISDOM_LATEST_PATH = ".runs/_wisdom/latest.md"
+
+# =============================================================================
+# SpecCompiler Integration (Feature-Flagged)
+# =============================================================================
+# When enabled, prompts are assembled using the spec system (SpecCompiler)
+# instead of raw file loading. This provides:
+# - Station-based identity with invariants
+# - Fragment-resolved guidelines
+# - Template-driven prompt composition
+# - Better traceability via prompt_hash
+#
+# Set SWARM_USE_SPEC_COMPILER=true to enable.
+
+USE_SPEC_COMPILER = os.environ.get("SWARM_USE_SPEC_COMPILER", "false").lower() == "true"
 
 
 # Inline finalization prompt (appended to work prompt for single-call pattern)
@@ -272,6 +294,170 @@ def build_artifact_pointers(context_pack: "ContextPack") -> List[str]:
     lines.append("")
 
     return lines
+
+
+# =============================================================================
+# SpecCompiler-Based Prompt Building
+# =============================================================================
+
+
+def _get_flow_id_from_context(ctx: StepContext) -> str:
+    """Derive the flow_id for SpecCompiler from StepContext.
+
+    The SpecCompiler expects flow_id in format like "3-build".
+    We map flow_key to a numeric prefix based on standard flow ordering.
+
+    Args:
+        ctx: Step execution context.
+
+    Returns:
+        Flow ID string (e.g., "3-build").
+    """
+    # Standard flow key to index mapping
+    flow_indices = {
+        "signal": 1,
+        "plan": 2,
+        "build": 3,
+        "review": 4,
+        "gate": 5,
+        "deploy": 6,
+        "wisdom": 7,
+    }
+    idx = flow_indices.get(ctx.flow_key, 0)
+    return f"{idx}-{ctx.flow_key}"
+
+
+def build_prompt_from_spec(
+    ctx: StepContext,
+    repo_root: Optional[Path],
+    profile_id: Optional[str] = None,
+) -> Tuple[str, Optional[HistoryTruncationInfo], Optional[str], Optional["PromptPlan"]]:
+    """Build a prompt using the SpecCompiler for spec-driven assembly.
+
+    This function uses the spec system (SpecCompiler) to compile prompts from
+    station specs, fragments, and templates. It provides:
+    - Station-based identity with invariants (system_append)
+    - Fragment-resolved guidelines
+    - Template-driven prompt composition
+    - Better traceability via prompt_hash
+
+    Args:
+        ctx: Step execution context.
+        repo_root: Repository root for loading specs.
+        profile_id: Optional profile ID (unused but kept for API compatibility).
+
+    Returns:
+        Tuple of:
+        - user_prompt: The compiled user prompt (main work instructions)
+        - truncation_info: Always None (SpecCompiler handles its own budgeting)
+        - system_append: Station identity + invariants for system prompt
+        - prompt_plan: The full PromptPlan for traceability (or None on failure)
+
+    Raises:
+        FileNotFoundError: If flow or station spec not found.
+        ValueError: If step not found in flow spec.
+    """
+    # Import here to avoid circular dependencies
+    from swarm.spec.compiler import SpecCompiler
+
+    if not repo_root:
+        raise ValueError("repo_root is required for SpecCompiler")
+
+    # Get context_pack from extra if available
+    context_pack = ctx.extra.get("context_pack") if ctx.extra else None
+
+    # Derive flow_id from context
+    flow_id = _get_flow_id_from_context(ctx)
+
+    # Initialize compiler
+    compiler = SpecCompiler(repo_root)
+
+    # Compile the prompt plan
+    try:
+        prompt_plan = compiler.compile(
+            flow_id=flow_id,
+            step_id=ctx.step_id,
+            context_pack=context_pack,
+            run_base=ctx.run_base,
+            cwd=str(repo_root),
+            policy_invariants_ref=None,  # Use station defaults
+            use_v2=True,  # Use v2 with policy loading
+        )
+
+        logger.info(
+            "Compiled prompt via SpecCompiler: flow=%s, step=%s, hash=%s",
+            flow_id,
+            ctx.step_id,
+            prompt_plan.prompt_hash,
+        )
+
+        # The user_prompt from SpecCompiler is the complete work prompt
+        # The system_append contains station identity + invariants
+        return (
+            prompt_plan.user_prompt,
+            None,  # No truncation info (SpecCompiler handles budgeting)
+            prompt_plan.system_append,
+            prompt_plan,
+        )
+
+    except FileNotFoundError as e:
+        logger.warning(
+            "SpecCompiler failed (spec not found): %s. Falling back to legacy builder.",
+            e,
+        )
+        raise
+    except ValueError as e:
+        logger.warning(
+            "SpecCompiler failed (invalid step): %s. Falling back to legacy builder.",
+            e,
+        )
+        raise
+
+
+def build_prompt_auto(
+    ctx: StepContext,
+    repo_root: Optional[Path],
+    profile_id: Optional[str] = None,
+    use_spec_compiler: Optional[bool] = None,
+) -> Tuple[str, Optional[HistoryTruncationInfo], Optional[str], Optional["PromptPlan"]]:
+    """Build a prompt with automatic selection between legacy and spec-based builders.
+
+    This function automatically chooses between:
+    1. SpecCompiler-based building (if USE_SPEC_COMPILER=true or use_spec_compiler=True)
+    2. Legacy file-based building (default)
+
+    When SpecCompiler fails (missing specs), it falls back to legacy building.
+
+    Args:
+        ctx: Step execution context.
+        repo_root: Repository root for loading specs/personas.
+        profile_id: Optional profile ID for budget resolution.
+        use_spec_compiler: Override for USE_SPEC_COMPILER flag. If None, uses env var.
+
+    Returns:
+        Tuple of:
+        - prompt: The compiled user/work prompt
+        - truncation_info: History truncation info (legacy) or None (spec)
+        - system_append_or_persona: System append (spec) or agent persona (legacy)
+        - prompt_plan: PromptPlan if spec-based, None otherwise
+    """
+    # Determine whether to use SpecCompiler
+    should_use_spec = use_spec_compiler if use_spec_compiler is not None else USE_SPEC_COMPILER
+
+    if should_use_spec:
+        try:
+            return build_prompt_from_spec(ctx, repo_root, profile_id)
+        except (FileNotFoundError, ValueError) as e:
+            logger.info(
+                "SpecCompiler unavailable for step %s, falling back to legacy: %s",
+                ctx.step_id,
+                e,
+            )
+            # Fall through to legacy
+
+    # Legacy path: use file-based prompt building
+    prompt, truncation_info, persona = build_prompt(ctx, repo_root, profile_id)
+    return prompt, truncation_info, persona, None
 
 
 def build_prompt(

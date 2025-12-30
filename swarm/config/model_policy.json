@@ -1,0 +1,40 @@
+{
+  "$schema": "./schemas/model_policy.schema.json",
+  "version": 1,
+  "description": "Model allocation policy for the swarm. Assigns model tiers to task groups.",
+  "user_preferences": {
+    "primary_model": "sonnet",
+    "comment": "User's preferred model for 'primary' tier work. Can be sonnet or opus."
+  },
+  "tiers": {
+    "primary": "inherit_user_primary",
+    "economy": "haiku",
+    "standard": "sonnet",
+    "elite": "opus",
+    "edge": "sonnet"
+  },
+  "group_assignments": {
+    "shaping": "economy",
+    "spec": "standard",
+    "design": "primary",
+    "implementation": "primary",
+    "critic": "edge",
+    "verification": "economy",
+    "analytics": "standard",
+    "reporter": "economy",
+    "infra": "economy",
+    "router": "primary",
+    "wisdom": "elite"
+  },
+  "tier_descriptions": {
+    "primary": "Dynamically resolves to user's chosen model (sonnet or opus). For core reasoning work.",
+    "economy": "Haiku tier. Fast, cheap operations: shaping, verification, reporting, infra.",
+    "standard": "Sonnet tier. Solid reasoning: specs, analytics, general work.",
+    "elite": "Opus tier. Reserved for wisdom, learning, and self-patching.",
+    "edge": "Sonnet-today, Haiku-tomorrow candidates. Currently critics."
+  },
+  "upgrade_notes": {
+    "edge_to_economy": "When Haiku 5.0 matches Sonnet 4.5 reasoning, move 'critic' group to economy tier.",
+    "policy_override": "To pin a specific version for determinism, set env: ANTHROPIC_DEFAULT_SONNET_MODEL=claude-3-5-sonnet-20241022"
+  }
+}

@@ -1,0 +1,307 @@
+{
+  "$schema": "../schemas/flow_graph.schema.json",
+  "id": "plan-flow",
+  "version": 1,
+  "title": "Flow 2 - Plan",
+  "flow_number": 2,
+  "description": "Requirements to ADR, contracts, observability spec, test/work plans, and design validation.",
+  "charter": {
+    "goal": "Produce a complete, validated design with ADR, contracts, and work plan",
+    "question": "What is the best architecture for these requirements?",
+    "exit_criteria": [
+      "ADR documents chosen architecture with context and consequences",
+      "API contracts define all public interfaces",
+      "Test plan maps BDD scenarios to test types with coverage targets",
+      "Work plan breaks implementation into atomic, testable subtasks",
+      "Design critique confirms alignment with requirements"
+    ],
+    "non_goals": [
+      "Writing implementation code",
+      "Creating tests (test plan only, not test code)",
+      "Modifying existing codebase",
+      "Making deployment decisions"
+    ],
+    "prime_directive": "Design for clarity and maintainability. Document the WHY. Produce actionable work plan."
+  },
+  "nodes": [
+    {
+      "node_id": "impact",
+      "template_id": "impact-analyzer",
+      "params": {
+        "objective": "Analyze cross-cutting impact of changes"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Impact Analysis",
+        "position": {"x": 100, "y": 50},
+        "color": "#94a3b8",
+        "teaching": {
+          "highlight": false,
+          "note": "Heavy context loading (20-50k tokens) to identify all affected modules"
+        }
+      }
+    },
+    {
+      "node_id": "options",
+      "template_id": "design-optioneer",
+      "params": {
+        "objective": "Propose 2-3 architecture options with trade-offs"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Design Options",
+        "position": {"x": 100, "y": 120}
+      }
+    },
+    {
+      "node_id": "adr",
+      "template_id": "adr-author",
+      "params": {
+        "objective": "Write Architecture Decision Record for chosen design"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Write ADR",
+        "position": {"x": 100, "y": 190},
+        "color": "#3b82f6",
+        "teaching": {
+          "highlight": true,
+          "note": "ADR is the single source of truth for design decisions. Captures WHY, not just WHAT."
+        }
+      }
+    },
+    {
+      "node_id": "interface",
+      "template_id": "interface-designer",
+      "params": {
+        "objective": "Define API contracts, data models, migrations"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Design Interface",
+        "position": {"x": 100, "y": 260},
+        "color": "#3b82f6",
+        "teaching": {
+          "highlight": true,
+          "note": "Contracts define boundaries. Gate flow will verify implementation matches exactly."
+        }
+      }
+    },
+    {
+      "node_id": "observability",
+      "template_id": "observability-designer",
+      "params": {
+        "objective": "Define metrics, logs, traces, SLOs"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Observability",
+        "position": {"x": 100, "y": 330}
+      }
+    },
+    {
+      "node_id": "test_strategy",
+      "template_id": "test-strategist",
+      "params": {
+        "objective": "Map BDD scenarios to test types, coverage targets"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Test Strategy",
+        "position": {"x": 100, "y": 400}
+      }
+    },
+    {
+      "node_id": "work",
+      "template_id": "work-planner",
+      "params": {
+        "objective": "Break design into subtasks, define rollout strategy"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Work Plan",
+        "position": {"x": 100, "y": 470}
+      }
+    },
+    {
+      "node_id": "design_critique",
+      "template_id": "design-critic",
+      "params": {
+        "objective": "Validate design vs constraints and requirements"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Critique Design",
+        "position": {"x": 100, "y": 540},
+        "color": "#ef4444",
+        "teaching": {
+          "highlight": true,
+          "note": "Design critic ensures plan is sound before implementation. Catching flaws here is far cheaper than in code."
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "edge_id": "e01-impact-to-options",
+      "from": "impact",
+      "to": "options",
+      "type": "sequence"
+    },
+    {
+      "edge_id": "e02-options-to-adr",
+      "from": "options",
+      "to": "adr",
+      "type": "sequence"
+    },
+    {
+      "edge_id": "e03-adr-to-interface",
+      "from": "adr",
+      "to": "interface",
+      "type": "sequence"
+    },
+    {
+      "edge_id": "e04-interface-to-observability",
+      "from": "interface",
+      "to": "observability",
+      "type": "sequence"
+    },
+    {
+      "edge_id": "e05-observability-to-strategy",
+      "from": "observability",
+      "to": "test_strategy",
+      "type": "sequence"
+    },
+    {
+      "edge_id": "e06-strategy-to-work",
+      "from": "test_strategy",
+      "to": "work",
+      "type": "sequence"
+    },
+    {
+      "edge_id": "e07-work-to-critique",
+      "from": "work",
+      "to": "design_critique",
+      "type": "sequence"
+    }
+  ],
+  "subflows": [
+    {
+      "subflow_id": "architecture-phase",
+      "title": "Architecture Phase",
+      "description": "Impact analysis, options, and ADR",
+      "entry_node": "impact",
+      "exit_nodes": ["adr"],
+      "contained_nodes": ["impact", "options", "adr"],
+      "ui": {
+        "color": "#dbeafe",
+        "collapsed_by_default": false
+      }
+    },
+    {
+      "subflow_id": "specification-phase",
+      "title": "Specification Phase",
+      "description": "Contracts, observability, and test strategy",
+      "entry_node": "interface",
+      "exit_nodes": ["test_strategy"],
+      "contained_nodes": ["interface", "observability", "test_strategy"],
+      "ui": {
+        "color": "#fef3c7",
+        "collapsed_by_default": false
+      }
+    }
+  ],
+  "policy": {
+    "max_loop_iterations": 2,
+    "max_depth": 2,
+    "escalation": {
+      "on_blocked": "continue_with_concerns",
+      "max_unverified_streak": 2,
+      "escalate_on_unverified_streak": "continue"
+    },
+    "suggested_detours": [
+      {
+        "from_nodes": ["impact", "adr"],
+        "to_station": "clarifier",
+        "condition": {
+          "field": "blockers",
+          "operator": "contains",
+          "value": "ambiguous"
+        },
+        "return_to": "source",
+        "priority": 70
+      },
+      {
+        "from_nodes": ["design_critique"],
+        "to_station": "risk-analyst",
+        "condition": {
+          "field": "concerns",
+          "operator": "not_equals",
+          "value": []
+        },
+        "return_to": "next",
+        "priority": 60
+      }
+    ],
+    "suggested_injections": [
+      {
+        "station_id": "policy-analyst",
+        "inject_after": ["adr", "interface"],
+        "condition": {
+          "field": "policy_concerns",
+          "operator": "gt",
+          "value": 0
+        },
+        "one_shot": true,
+        "priority": 70
+      }
+    ],
+    "routing_decisions": {
+      "default_decision": "CONTINUE",
+      "signal_interpretation": {
+        "on_verified": "CONTINUE",
+        "on_unverified_can_iterate": "CONTINUE",
+        "on_unverified_cannot_iterate": "CONTINUE",
+        "on_blocked": "DETOUR",
+        "on_concerns": "CONTINUE"
+      }
+    },
+    "invariants": [
+      "ADR must select from design_options.md",
+      "Contracts must be verifiable",
+      "All BDD scenarios must be covered in test plan"
+    ]
+  },
+  "defaults": {
+    "context_pack": {
+      "include_upstream_artifacts": true,
+      "include_previous_envelopes": true,
+      "max_envelopes": 10,
+      "include_scent_trail": true
+    },
+    "sdk": {
+      "model": "inherit",
+      "max_turns": 15
+    }
+  },
+  "on_complete": {
+    "next_flow": "3-build",
+    "reason": "Design complete; proceed to implementation",
+    "pass_artifacts": [
+      "plan/adr.md",
+      "plan/api_contracts.yaml",
+      "plan/test_plan.md",
+      "plan/work_plan.md",
+      "plan/observability_spec.md"
+    ]
+  },
+  "on_failure": {
+    "next_flow": "1-signal",
+    "reason": "Design issues may require requirements clarification"
+  },
+  "metadata": {
+    "author": "flow-studio-swarm",
+    "tags": ["plan", "architecture", "design", "contracts"],
+    "cross_cutting_stations": ["clarifier", "risk-analyst", "policy-analyst", "gh-reporter"]
+  }
+}

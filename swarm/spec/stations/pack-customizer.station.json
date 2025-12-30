@@ -1,0 +1,104 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "pack-customizer",
+  "version": 1,
+  "title": "Pack Customizer",
+  "category": "implementation",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_write",
+    "allowed_tools": ["Read", "Write", "Edit", "Grep", "Glob", "Bash"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": true,
+      "excluded_commands": ["git add", "git commit", "git push", "rm -rf"]
+    },
+    "max_turns": 20,
+    "context_budget": {
+      "total_chars": 180000,
+      "recent_chars": 60000,
+      "older_chars": 15000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Pack Customizer. Detect repo conventions and adapt DemoSwarm pack to match the target stack. Make the pack feel native: correct test/lint commands, correct layout, correct Git provider assumptions. You are NOT a code author or git operator.",
+    "longform_ref": "prompts/agentic_steps/pack-customizer.md",
+    "tone": "neutral"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/lane_discipline.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [],
+    "optional_inputs": [
+      "package.json",
+      "Cargo.toml",
+      "pyproject.toml",
+      "go.mod",
+      ".git/config"
+    ],
+    "required_outputs": [
+      "demo-swarm.config.json",
+      "docs/CUSTOMIZATION_RECEIPT.md"
+    ],
+    "optional_outputs": [
+      ".claude/skills/test-runner/SKILL.md",
+      ".claude/skills/auto-linter/SKILL.md",
+      ".claude/skills/policy-runner/SKILL.md"
+    ]
+  },
+  "handoff": {
+    "draft_path_template": "docs/CUSTOMIZATION_RECEIPT.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "file_changes"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "demo-swarm.config.json",
+      "docs/CUSTOMIZATION_RECEIPT.md"
+    ],
+    "required_commands": [
+      {
+        "command": "bash .claude/scripts/pack-check.sh --no-color",
+        "success_pattern": ".*",
+        "timeout_seconds": 120
+      }
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md"
+    ],
+    "template": "## Mission\n\nAdapt DemoSwarm pack to target repository's stack and conventions.\n\n## Phase 1: Detect (deterministic)\n\n1. **Language + package manager**: Cargo.toml, package.json, pyproject.toml, go.mod\n2. **Test command**: scripts.test from package.json, pytest, cargo test, go test\n3. **Lint/format tooling**: eslint, prettier, ruff, black, rustfmt, clippy, gofmt\n4. **Layout roots**: src/, lib/, tests/, features/, docs/\n5. **Git provider**: github.com, gitlab.com from .git/config\n6. **Hardening harnesses**: scripts/mutation.*, scripts/fuzz.*\n\n## Phase 2: Configure\n\nWrite/update demo-swarm.config.json with detected settings.\n\n## Phase 3: Update skills\n\nUpdate test-runner, auto-linter, policy-runner SKILL.md files to use configured commands.\n\n## Phase 4: Update agent prompts (only if needed)\n\nPatch prompts only when hardcoded paths would mislead the pack.\n\n## Phase 5: Validate\n\nRun pack-check.sh in both text and JSON modes.\n\n## Phase 6: Write receipt\n\nWrite docs/CUSTOMIZATION_RECEIPT.md with detected stack, config, files modified, validation results, and assumptions.\n\n## Question Policy\n\nDo NOT run an interview. Ask only once if answer materially changes test/lint/mutation/fuzz commands, git provider, or layout roots. Proceed with documented defaults if unanswered."
+  },
+  "invariants": [
+    "Work from repo root, do not rely on cd",
+    "Make minimal, targeted edits",
+    "Prefer config-driven behavior over rewriting many files",
+    "Be deterministic: choose sensible defaults, record assumptions",
+    "Never introduce secrets (tokens/keys)",
+    "Do not commit/push"
+  ],
+  "routing_hints": {
+    "on_verified": "complete",
+    "on_unverified": "loop",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

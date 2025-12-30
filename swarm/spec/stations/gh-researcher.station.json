@@ -1,0 +1,82 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "gh-researcher",
+  "version": 1,
+  "title": "GitHub Researcher",
+  "category": "infra",
+  "sdk": {
+    "model": "haiku",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_only",
+    "allowed_tools": ["Read", "Bash", "Grep", "Glob"],
+    "denied_tools": ["Write", "Edit"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": true,
+      "excluded_commands": ["git push", "git commit", "gh issue create", "gh pr create"]
+    },
+    "max_turns": 12,
+    "context_budget": {
+      "total_chars": 150000,
+      "recent_chars": 50000,
+      "older_chars": 15000
+    }
+  },
+  "identity": {
+    "system_append": "You are the GitHub Researcher. Read-only reconnaissance: surface prior art, constraints, and links from GitHub issues/PRs/discussions and local codebase. Do not create or modify issues/PRs. Do not modify code. Write exactly one file: github_research.md.",
+    "longform_ref": "prompts/agentic_steps/gh-researcher.md",
+    "tone": "neutral"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "run_meta.json"
+    ],
+    "optional_inputs": [
+      "_wisdom/latest.md"
+    ],
+    "required_outputs": [
+      "signal/github_research.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/signal/github_research.md",
+    "required_fields": [
+      "status",
+      "summary"
+    ]
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nPerform read-only GitHub reconnaissance for run: {{params.run_id}}.\n\nSignal text: {{params.signal_text}}\n\n## Scent Trail (Wisdom Context)\n\nCheck `.runs/_wisdom/latest.md` for prior learnings before any other work.\n\n## Research Protocol\n\n1. Establish wisdom context\n2. Derive search terms from signal\n3. Search issues, PRs, discussions (if gh available)\n4. Find local prior art pointers\n5. Synthesize implications for Flow 1\n\n## Output\n\nWrite exactly: `.runs/<run-id>/signal/github_research.md`"
+  },
+  "invariants": [
+    "Read-only only - do not create/modify issues/PRs/discussions",
+    "Do not modify code or run state-changing git operations",
+    "Write exactly one file: github_research.md",
+    "Repo-root-relative paths",
+    "Evidence-based pointers - only point to files you actually read",
+    "Wisdom > History - when wisdom conflicts with GitHub history, wisdom wins"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

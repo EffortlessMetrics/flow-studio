@@ -342,7 +342,7 @@ Start loose, tighten over time:
 The script is fast:
 - Validator runtime: ~1-2 seconds
 - JSON parsing: <100ms
-- Total gate latency: ~1-2 seconds on typical repos (48 agents, 6 flows)
+- Total gate latency: ~1-2 seconds on typical repos (48 agents, 7 flows)
 
 For very large swarms (100+ agents), use `validate_swarm.py --check-modified` to validate only changed files.
 

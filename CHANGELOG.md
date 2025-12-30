@@ -29,7 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `stepwise-build-claude/` — Signal + Plan + Build flows
 - `stepwise-gate-claude/` — Through Gate flow (4 flows)
 - `stepwise-deploy-claude/` — Through Deploy flow (5 flows)
-- `stepwise-sdlc-claude/` — Complete 6-flow SDLC with all transcripts and receipts
+- `stepwise-sdlc-claude/` — Complete 7-flow SDLC with all transcripts and receipts
 
 #### Testing & Contracts
 - Contract tests: `test_step_prompt_teaching_notes.py`, `test_build_stepwise_routing.py`, `test_step_engine_contract.py`

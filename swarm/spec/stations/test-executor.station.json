@@ -1,0 +1,101 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "test-executor",
+  "version": 1,
+  "title": "Test Executor",
+  "category": "verification",
+  "sdk": {
+    "model": "haiku",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_only",
+    "allowed_tools": ["Read", "Grep", "Glob", "Bash", "Skill"],
+    "denied_tools": ["Write", "Edit"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": true,
+      "excluded_commands": ["git", "gh", "rm", "mv"]
+    },
+    "max_turns": 8,
+    "context_budget": {
+      "total_chars": 100000,
+      "recent_chars": 40000,
+      "older_chars": 10000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Test Executor. Run the repository's configured test suite and write a single, tool-bound report artifact. You do not change code, tests, or docs. You do not run git. You do not post to GitHub. Tool-bound facts only.",
+    "longform_ref": "prompts/agentic_steps/test-executor.md",
+    "tone": "neutral"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/evidence.md",
+      "fragments/common/run_base.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [],
+    "optional_inputs": [
+      "build/subtask_context_manifest.json",
+      "plan/test_plan.md",
+      "plan/ac_matrix.md",
+      "build/test_critique.md",
+      "build/impl_changes_summary.md"
+    ],
+    "required_outputs": [
+      "build/test_execution.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/build/test_execution.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "routing_signal"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "build/test_execution.md"
+    ],
+    "required_commands": [
+      {
+        "command": "test-runner",
+        "success_pattern": ".*",
+        "timeout_seconds": 300
+      }
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/invariants.md",
+      "fragments/common/evidence.md",
+      "fragments/common/routing_vocabulary.md"
+    ],
+    "template": "## Mission\n\nExecute the configured test suite and write a tool-bound verification report.\n\n## Mode\n\n{{#if params.ac_id}}\nMode: verify_ac (AC-scoped: {{params.ac_id}})\n{{else}}\nMode: verify (full suite)\n{{/if}}\n\n## Context\n\n{{#each inputs}}\n- {{this}}\n{{/each}}\n\n## Constraints\n\n- No git operations\n- No installs or lockfile edits\n- No huge dumps: include only minimal lines to justify status\n- Tool-bound facts only: if you can't extract a count safely, write null\n- Use fail-fast in Flow 3 microloops (-x for pytest, --bail for jest)\n\n## Output\n\nWrite {{run.base}}/build/test_execution.md with:\n- Machine Summary (status, routing, test_summary)\n- Execution details (command, exit_code, duration)\n- Canonical Summary (passed/failed/skipped/xfailed/xpassed)\n- Failures (if any)\n- Observations (patterns, anomalies, risks, opportunities)"
+  },
+  "invariants": [
+    "No git operations",
+    "No code/test/doc changes",
+    "No installs, no lockfile edits",
+    "Tool-bound facts only - if you can't extract a count safely, write null",
+    "No huge dumps - include only minimal lines to justify status",
+    "Use fail-fast in Flow 3 microloops"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "loop",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

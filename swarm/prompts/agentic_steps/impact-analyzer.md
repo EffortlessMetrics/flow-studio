@@ -24,12 +24,14 @@ Do not write markdown. Do not write any other files.
 
 ## Routing Guidance
 
-Use natural language in your handoff to communicate next steps:
-- Impact is clear and bounded → recommend proceeding with Plan
-- Scope creep detected (blast radius larger than spec implies) → recommend scope-assessor review in Flow 1
-- Design gap detected (missing interface/data decisions) → recommend design-optioneer review in Flow 2
-- High-risk unclear impact (security/data boundary) → recommend proceeding with blockers documented
-- Mechanical failure → explain what's broken and needs fixing
+Use the standard routing vocabulary in your handoff:
+- **CONTINUE** — Impact is clear and bounded; proceed to next step in Plan flow
+- **DETOUR** — Scope creep detected (blast radius larger than spec implies); route to scope-assessor in Signal flow before continuing
+- **DETOUR** — Design gap detected (missing interface/data decisions); route to design-optioneer in Plan flow before continuing
+- **INJECT_NODES** — High-risk unclear impact (security/data boundary); inject risk-analyst review node before proceeding
+- **EXTEND_GRAPH** — Mechanical failure prevents progress; extend graph with remediation steps
+
+Note: INJECT_FLOW is for adding an entire sub-flow; use DETOUR for routing to existing agents.
 
 ## Inputs (best-effort)
 
@@ -118,8 +120,11 @@ Your affected register must be a map of **Evidence**, not a list of **Guesses**.
 
   "status": "VERIFIED | UNVERIFIED | CANNOT_PROCEED",
   "recommended_action": "PROCEED | RERUN | BOUNCE | FIX_ENV",
-  "route_to_flow": null,
-  "route_to_agent": null,
+  "routing": {
+    "directive": "CONTINUE | DETOUR | INJECT_FLOW | INJECT_NODES | EXTEND_GRAPH",
+    "target": null,
+    "reason": null
+  },
 
   "blockers": [],
   "missing_required": [],
@@ -191,13 +196,98 @@ After writing the impact map JSON, provide a natural language handoff:
 
 **What's left:** Note any missing inputs or low-confidence areas.
 
-**Recommendation:** Explain the specific next step with reasoning:
-- If scope looks larger than spec → "Blast radius suggests scope creep; recommend scope-assessor review before continuing to Plan"
-- If design gaps found → "Missing interface decisions; recommend design-optioneer review in Flow 2"
-- If impact is clear and bounded → "Impact map is complete; Flow 2 can proceed with these affected surfaces"
-- If mechanical failure → "Fix [specific issue] then rerun"
+**Recommendation:** Use routing vocabulary with reasoning:
+- If scope looks larger than spec → "DETOUR to scope-assessor: Blast radius suggests scope creep; review required before continuing Plan"
+- If design gaps found → "DETOUR to design-optioneer: Missing interface decisions need resolution"
+- If impact is clear and bounded → "CONTINUE: Impact map is complete; Flow 2 can proceed with these affected surfaces"
+- If high-risk areas need review → "INJECT_NODES risk-analyst: Security/data boundary impact needs explicit review"
+- If mechanical failure → "EXTEND_GRAPH: Fix [specific issue] before proceeding"
 
 The JSON file is the audit record. Your handoff is the routing surface.
+
+## Observations
+
+Record observations that may be valuable for routing or Wisdom:
+
+```json
+{
+  "observations": [
+    {
+      "category": "pattern|anomaly|risk|opportunity",
+      "observation": "What you noticed",
+      "evidence": ["file:line", "artifact_path"],
+      "confidence": 0.8,
+      "suggested_action": "Optional: what to do about it"
+    }
+  ]
+}
+```
+
+Categories:
+- **pattern**: Recurring behavior worth learning from (e.g., "Changes to API layer consistently trigger 5+ downstream test files", "Config changes always require matching env var updates")
+- **anomaly**: Something unexpected that might indicate a problem (e.g., "High-traffic endpoint has no test coverage in affected register", "Dependency graph shows circular reference between modules")
+- **risk**: Potential future issue worth tracking (e.g., "Blast radius includes payment processing—consider staged rollout", "Change affects 3 external API contracts with no versioning")
+- **opportunity**: Improvement possibility for Wisdom to consider (e.g., "Found 4 components with identical impact patterns—candidate for shared abstraction", "Test impact could be reduced with better module boundaries")
+
+Include observations in the `impact_map.json` output:
+
+```json
+{
+  "schema_version": 1,
+  ...
+  "observations": [
+    {
+      "category": "pattern",
+      "observation": "Auth changes consistently ripple to session, middleware, and 3 API endpoints",
+      "evidence": ["affected.IMP-001", "affected.IMP-003", "affected.IMP-007"],
+      "confidence": 0.9,
+      "suggested_action": null
+    },
+    {
+      "category": "risk",
+      "observation": "Change touches database migration with no rollback script",
+      "evidence": ["migrations/20250115_add_field.sql"],
+      "confidence": 0.95,
+      "suggested_action": "Verify rollback procedure exists before deployment"
+    },
+    {
+      "category": "anomaly",
+      "observation": "External dependency bump in lockfile but no corresponding code change",
+      "evidence": ["package-lock.json:lodash@4.17.21"],
+      "confidence": 0.7,
+      "suggested_action": "Confirm dependency update is intentional"
+    }
+  ]
+}
+```
+
+Observations are NOT routing decisions—they're forensic notes for the Navigator and Wisdom.
+
+## Off-Road Justification
+
+When recommending any off-road decision (DETOUR, INJECT_FLOW, INJECT_NODES), you MUST provide why_now justification in your routing block:
+
+- **trigger**: What specific condition triggered this recommendation?
+- **delay_cost**: What happens if we don't act now?
+- **blocking_test**: Is this blocking the current objective?
+- **alternatives_considered**: What other options were evaluated?
+
+Example:
+```json
+{
+  "routing": {
+    "directive": "INJECT_NODES",
+    "target": "risk-analyst",
+    "reason": "Security/data boundary impact detected"
+  },
+  "why_now": {
+    "trigger": "Impact analysis found changes to auth token validation affecting 12 downstream services",
+    "delay_cost": "Security boundary changes would proceed without explicit review",
+    "blocking_test": "Cannot satisfy 'security-critical changes reviewed' policy",
+    "alternatives_considered": ["Document as concern (rejected: HIGH severity)", "Proceed with assumptions (rejected: auth changes require explicit review)"]
+  }
+}
+```
 
 ## Philosophy
 

@@ -1,0 +1,31 @@
+# swarm/config/agents/forensic-analyst.yaml
+# Provider-neutral agent definition (Phase 0.5)
+
+key: forensic-analyst
+
+flows:
+  - build         # Flow 3: Plan -> Draft (post-worker analysis)
+  - review        # Flow 4: Draft -> Ready (post-feedback analysis)
+  - gate          # Flow 5: Ready -> Gate (pre-merge verification)
+
+category: analytics
+color: orange
+source: project/user
+
+short_role: Translate raw diffs and logs into semantic summaries for routing decisions
+
+model: inherit
+
+# Medium tier - this is interpretation work requiring semantic understanding
+# but not heavy context loading or complex multi-step reasoning
+
+primary_artifact: semantic_change_log.json
+
+artifacts:
+  - semantic_change_log.json
+
+notes: >
+  Runs after Worker completion, before Navigator routing decision.
+  Translates raw diffs, build logs, and error outputs into structured
+  semantic summaries. Detects discrepancies between worker claims and
+  actual changes. Does not make routing decisions - that's the Navigator's job.

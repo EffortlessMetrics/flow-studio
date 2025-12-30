@@ -299,9 +299,40 @@ class PromptPlan:
     flow_key: str = ""
 
 
+@dataclass(frozen=True)
+class PromptReceipt:
+    """Receipt tracking compilation for audit trail."""
+    prompt_hash: str           # SHA256 of combined prompts (from PromptPlan)
+    fragment_manifest: Tuple[str, ...] = ()  # Fragment paths used
+    context_pack_hash: str = ""     # Hash of input context
+    model_tier: str = ""            # haiku/sonnet/opus
+    tool_profile: Tuple[str, ...] = ()  # Allowed tools
+    compiled_at: str = ""           # ISO timestamp
+    compiler_version: str = "1.0.0"
+    station_id: str = ""
+    flow_id: str = ""
+    step_id: str = ""
+
+
 # =============================================================================
 # Helpers
 # =============================================================================
+
+
+def create_prompt_receipt(plan: PromptPlan, context_pack_hash: str = "") -> PromptReceipt:
+    """Create a PromptReceipt from a compiled PromptPlan."""
+    return PromptReceipt(
+        prompt_hash=plan.prompt_hash,
+        fragment_manifest=(),  # TODO: Track fragments in compiler
+        context_pack_hash=context_pack_hash,
+        model_tier=plan.model.split("-")[1] if "-" in plan.model else plan.model,
+        tool_profile=plan.allowed_tools,
+        compiled_at=plan.compiled_at,
+        compiler_version="1.0.0",
+        station_id=plan.station_id,
+        flow_id=plan.flow_id,
+        step_id=plan.step_id,
+    )
 
 
 def station_spec_from_dict(data: Dict[str, Any]) -> StationSpec:

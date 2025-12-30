@@ -17,13 +17,17 @@ from swarm.runtime.diff_scanner import (
     file_changes_to_dict,
     scan_file_changes_sync,
 )
+from swarm.runtime.handoff_io import write_handoff_envelope
 from swarm.runtime.path_helpers import (
     ensure_llm_dir,
     ensure_receipts_dir,
+)
+from swarm.runtime.path_helpers import (
     receipt_path as make_receipt_path,
+)
+from swarm.runtime.path_helpers import (
     transcript_path as make_transcript_path,
 )
-from swarm.runtime.handoff_io import write_handoff_envelope
 from swarm.runtime.types import (
     HandoffEnvelope,
     RoutingDecision,
@@ -157,9 +161,7 @@ def finalize_step_stub(
         "flow_key": ctx.flow_key,
         "run_id": ctx.run_id,
         "status": "VERIFIED" if step_result.status == "succeeded" else "UNVERIFIED",
-        "summary": work_summary[:500]
-        if work_summary
-        else f"[STUB] Step {ctx.step_id} completed",
+        "summary": work_summary[:500] if work_summary else f"[STUB] Step {ctx.step_id} completed",
         "can_further_iteration_help": "no",
         "artifacts": [],
         "file_changes": file_changes_dict,
@@ -203,6 +205,7 @@ def finalize_step_stub(
     receipt = {
         "engine": engine_id,
         "mode": "stub",
+        "execution_mode": "legacy",
         "provider": provider or "none",
         "model": "claude-stub",
         "step_id": ctx.step_id,
@@ -359,7 +362,9 @@ def run_step_stub(
     ctx: StepContext,
     engine_id: str,
     provider: Optional[str],
-    build_prompt_fn: Callable[[StepContext], Tuple[str, Optional[HistoryTruncationInfo], Optional[str]]],
+    build_prompt_fn: Callable[
+        [StepContext], Tuple[str, Optional[HistoryTruncationInfo], Optional[str]]
+    ],
 ) -> Tuple[StepResult, Iterable[RunEvent]]:
     """Execute a step in stub mode.
 
@@ -411,6 +416,7 @@ def run_step_stub(
     receipt = {
         "engine": engine_id,
         "mode": "stub",
+        "execution_mode": "legacy",
         "provider": provider or "none",
         "model": "claude-stub",
         "step_id": ctx.step_id,
@@ -463,9 +469,7 @@ def run_step_stub(
     return result, events
 
 
-def make_failed_result(
-    ctx: StepContext, error: str
-) -> Tuple[StepResult, Iterable[RunEvent]]:
+def make_failed_result(ctx: StepContext, error: str) -> Tuple[StepResult, Iterable[RunEvent]]:
     """Create a failed result for error cases.
 
     Args:

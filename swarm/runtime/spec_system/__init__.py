@@ -21,7 +21,7 @@ Usage:
     flow_def = bridge.get_flow("signal")
 """
 
-from .canonical import canonical_json, spec_hash
 from .bridge import SpecBridge, get_spec_bridge
+from .canonical import canonical_json, spec_hash
 
 __all__ = ["canonical_json", "spec_hash", "SpecBridge", "get_spec_bridge"]

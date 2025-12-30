@@ -1,0 +1,65 @@
+{
+  "id": "build",
+  "name": "Plan → Draft",
+  "description": "Implement via adversarial microloops - code, tests, receipts",
+  "version": 1,
+  "nodes": [
+    {
+      "node_id": "context-loader",
+      "template_id": "context-loader",
+      "params": {"max_context_tokens": 50000}
+    },
+    {
+      "node_id": "test-author",
+      "template_id": "test-author",
+      "params": {}
+    },
+    {
+      "node_id": "test-critic",
+      "template_id": "test-critic",
+      "params": {},
+      "overrides": {"exit_on": {"status": ["VERIFIED"]}}
+    },
+    {
+      "node_id": "code-implementer",
+      "template_id": "code-implementer",
+      "params": {}
+    },
+    {
+      "node_id": "code-critic",
+      "template_id": "code-critic",
+      "params": {},
+      "overrides": {"exit_on": {"status": ["VERIFIED"]}}
+    },
+    {
+      "node_id": "fixer",
+      "template_id": "fixer",
+      "params": {}
+    },
+    {
+      "node_id": "doc-writer",
+      "template_id": "doc-writer",
+      "params": {}
+    },
+    {
+      "node_id": "self-reviewer",
+      "template_id": "self-reviewer",
+      "params": {}
+    }
+  ],
+  "edges": [
+    {"edge_id": "e1", "from": "context-loader", "to": "test-author", "type": "sequence", "priority": 50},
+    {"edge_id": "e2", "from": "test-author", "to": "test-critic", "type": "sequence", "priority": 50},
+    {"edge_id": "e3-loop", "from": "test-critic", "to": "test-author", "type": "loop", "priority": 40, "condition": {"expression": "status != 'VERIFIED' && can_further_iteration_help == true"}},
+    {"edge_id": "e3-exit", "from": "test-critic", "to": "code-implementer", "type": "sequence", "priority": 50, "condition": {"expression": "status == 'VERIFIED' || can_further_iteration_help == false"}},
+    {"edge_id": "e4", "from": "code-implementer", "to": "code-critic", "type": "sequence", "priority": 50},
+    {"edge_id": "e5-loop", "from": "code-critic", "to": "fixer", "type": "loop", "priority": 40, "condition": {"expression": "status != 'VERIFIED' && can_further_iteration_help == true"}},
+    {"edge_id": "e5-exit", "from": "code-critic", "to": "doc-writer", "type": "sequence", "priority": 50, "condition": {"expression": "status == 'VERIFIED' || can_further_iteration_help == false"}},
+    {"edge_id": "e6", "from": "fixer", "to": "code-critic", "type": "sequence", "priority": 50},
+    {"edge_id": "e7", "from": "doc-writer", "to": "self-reviewer", "type": "sequence", "priority": 50}
+  ],
+  "policy": {
+    "max_loop_iterations": 50,
+    "suggested_sidequests": ["clarifier", "security-review", "risk-assessment"]
+  }
+}

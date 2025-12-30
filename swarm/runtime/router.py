@@ -85,13 +85,13 @@ logger = logging.getLogger(__name__)
 class DecisionType(str, Enum):
     """Type of routing decision made."""
 
-    EXPLICIT = "explicit"           # Step output specified next_step_id
+    EXPLICIT = "explicit"  # Step output specified next_step_id
     EXIT_CONDITION = "exit_condition"  # Exit condition (VERIFIED, max_iterations) met
     DETERMINISTIC = "deterministic"  # Single edge or edge with condition=true
-    CEL = "cel"                     # CEL expression evaluation
+    CEL = "cel"  # CEL expression evaluation
     LLM_TIEBREAKER = "llm_tiebreaker"  # LLM resolved tie between valid edges
     FLOW_COMPLETE = "flow_complete"  # No valid edges, flow is complete
-    ERROR = "error"                 # Routing error occurred
+    ERROR = "error"  # Routing error occurred
 
 
 @dataclass
@@ -215,7 +215,7 @@ class Edge:
 
     edge_id: str
     from_node: str  # 'from' in schema
-    to_node: str    # 'to' in schema
+    to_node: str  # 'to' in schema
     condition: Optional[EdgeCondition] = None
     priority: int = 50
     edge_type: str = "sequence"  # sequence, loop, branch, detour, injection, subflow
@@ -493,8 +493,9 @@ class CELEvaluator:
         value_str = value_str.strip()
 
         # String literal
-        if (value_str.startswith("'") and value_str.endswith("'")) or \
-           (value_str.startswith('"') and value_str.endswith('"')):
+        if (value_str.startswith("'") and value_str.endswith("'")) or (
+            value_str.startswith('"') and value_str.endswith('"')
+        ):
             return value_str[1:-1]
 
         # Boolean
@@ -570,10 +571,7 @@ class SmartRouter:
         Returns:
             RouteDecision with the next node and decision metadata.
         """
-        logger.debug(
-            "Routing from %s with status=%s",
-            current_node, step_output.status
-        )
+        logger.debug("Routing from %s with status=%s", current_node, step_output.status)
 
         # Get all outgoing edges from current node
         all_edges = graph.get_outgoing_edges(current_node)
@@ -587,22 +585,16 @@ class SmartRouter:
             )
 
         # Build evaluation context
-        eval_context = self._build_eval_context(
-            current_node, graph, step_output, context
-        )
+        eval_context = self._build_eval_context(current_node, graph, step_output, context)
 
         # Priority 1: Explicit routing from step output
         if step_output.next_step_id:
-            result = self._try_explicit_routing(
-                step_output.next_step_id, all_edges, eval_context
-            )
+            result = self._try_explicit_routing(step_output.next_step_id, all_edges, eval_context)
             if result:
                 return result
 
         # Priority 2: Exit conditions (VERIFIED, max_iterations)
-        result = self._check_exit_conditions(
-            current_node, graph, step_output, context, all_edges
-        )
+        result = self._check_exit_conditions(current_node, graph, step_output, context, all_edges)
         if result:
             return result
 
@@ -709,8 +701,7 @@ class SmartRouter:
             valid_targets = {e.to_node for e in valid_edges}
             if chosen_id not in valid_targets:
                 logger.warning(
-                    "LLM returned invalid target %s, falling back to first edge",
-                    chosen_id
+                    "LLM returned invalid target %s, falling back to first edge", chosen_id
                 )
                 # Fall back to first edge by priority
                 chosen_id = self._get_default_edge(valid_edges).to_node
@@ -735,7 +726,8 @@ class SmartRouter:
         node_config = graph.get_node(current_node)
         iteration_count = context.get_iteration_count(current_node)
         max_iterations = (
-            node_config.max_iterations if node_config and node_config.max_iterations
+            node_config.max_iterations
+            if node_config and node_config.max_iterations
             else graph.get_max_loop_iterations()
         )
 
@@ -769,10 +761,7 @@ class SmartRouter:
                 reasoning=f"Step output explicitly requested: {target_id}",
             )
 
-        logger.warning(
-            "Explicit target %s is not a valid edge, ignoring",
-            target_id
-        )
+        logger.warning("Explicit target %s is not a valid edge, ignoring", target_id)
         return None
 
     def _check_exit_conditions(
@@ -787,7 +776,8 @@ class SmartRouter:
         node_config = graph.get_node(current_node)
         iteration_count = context.get_iteration_count(current_node)
         max_iterations = (
-            node_config.max_iterations if node_config and node_config.max_iterations
+            node_config.max_iterations
+            if node_config and node_config.max_iterations
             else graph.get_max_loop_iterations()
         )
 
@@ -795,7 +785,7 @@ class SmartRouter:
 
         # Check status-based exit (VERIFIED = done)
         if step_output.status == "VERIFIED":
-            exit_reason = f"status=VERIFIED"
+            exit_reason = "status=VERIFIED"
 
         # Check iteration limit
         elif iteration_count >= max_iterations:
@@ -862,12 +852,14 @@ class SmartRouter:
                         next_node_id=None,
                         decision_type=DecisionType.FLOW_COMPLETE,
                         reasoning=f"Single edge condition failed: {err}",
-                        evaluated_conditions=[ConditionEval(
-                            edge_id=edge.edge_id,
-                            expression=str(edge.condition.expression or edge.condition.field),
-                            result=False,
-                            error=err,
-                        )],
+                        evaluated_conditions=[
+                            ConditionEval(
+                                edge_id=edge.edge_id,
+                                expression=str(edge.condition.expression or edge.condition.field),
+                                result=False,
+                                error=err,
+                            )
+                        ],
                     )
 
             return RouteDecision(
@@ -903,16 +895,21 @@ class SmartRouter:
         for edge in sorted_edges:
             expression_str = ""
             if edge.condition:
-                expression_str = edge.condition.expression or f"{edge.condition.field} {edge.condition.operator} {edge.condition.value}"
+                expression_str = (
+                    edge.condition.expression
+                    or f"{edge.condition.field} {edge.condition.operator} {edge.condition.value}"
+                )
 
             result, err = self.evaluate_edge_condition(edge, eval_context)
 
-            evaluated.append(ConditionEval(
-                edge_id=edge.edge_id,
-                expression=expression_str or "(unconditional)",
-                result=result,
-                error=err,
-            ))
+            evaluated.append(
+                ConditionEval(
+                    edge_id=edge.edge_id,
+                    expression=expression_str or "(unconditional)",
+                    result=result,
+                    error=err,
+                )
+            )
 
             if result:
                 valid_edges.append(edge)
@@ -961,10 +958,7 @@ class SmartRouter:
             raise ValueError("No edges to select from")
 
         # Sort by priority (higher first), then by edge_id for determinism
-        sorted_edges = sorted(
-            edges,
-            key=lambda e: (-e.priority, e.edge_id)
-        )
+        sorted_edges = sorted(edges, key=lambda e: (-e.priority, e.edge_id))
         return sorted_edges[0]
 
 
@@ -1137,6 +1131,7 @@ class StepRouter:
             RoutingResult with selected edge and full audit trail.
         """
         import time
+
         start_time = time.time()
 
         elimination_log: List[Dict[str, Any]] = []
@@ -1262,7 +1257,8 @@ class StepRouter:
         node_config = flow_graph.get_node(current_node)
         iteration_count = context.iteration_counts.get(current_node, 0)
         max_iterations = (
-            node_config.max_iterations if node_config and node_config.max_iterations
+            node_config.max_iterations
+            if node_config and node_config.max_iterations
             else context.max_iterations
         )
 
@@ -1279,7 +1275,9 @@ class StepRouter:
         elif iteration_count >= max_iterations:
             exit_triggered = True
             exit_reason = f"max_iterations={max_iterations}"
-        elif can_help is False or (isinstance(can_help, str) and can_help.lower() in ("no", "false")):
+        elif can_help is False or (
+            isinstance(can_help, str) and can_help.lower() in ("no", "false")
+        ):
             exit_triggered = True
             exit_reason = "can_further_iteration_help=false"
 
@@ -1288,11 +1286,13 @@ class StepRouter:
             remaining = []
             for edge in candidates:
                 if edge.edge_type == "loop":
-                    elimination_log.append({
-                        "edge_id": edge.edge_id,
-                        "reason": f"Exit condition met: {exit_reason}",
-                        "stage": "condition",
-                    })
+                    elimination_log.append(
+                        {
+                            "edge_id": edge.edge_id,
+                            "reason": f"Exit condition met: {exit_reason}",
+                            "stage": "condition",
+                        }
+                    )
                 else:
                     remaining.append(edge)
             return remaining, elimination_log
@@ -1335,18 +1335,18 @@ class StepRouter:
                 remaining.append(edge)
                 continue
 
-            result, error = self._cel_evaluator.evaluate_condition(
-                edge.condition, eval_context
-            )
+            result, error = self._cel_evaluator.evaluate_condition(edge.condition, eval_context)
 
             if result:
                 remaining.append(edge)
             else:
-                elimination_log.append({
-                    "edge_id": edge.edge_id,
-                    "reason": error or f"Condition evaluated to false",
-                    "stage": "condition",
-                })
+                elimination_log.append(
+                    {
+                        "edge_id": edge.edge_id,
+                        "reason": error or "Condition evaluated to false",
+                        "stage": "condition",
+                    }
+                )
 
         return remaining, elimination_log
 
@@ -1382,20 +1382,21 @@ class StepRouter:
 
                 if selected_edge is None:
                     logger.warning(
-                        "LLM returned invalid target %s, using priority fallback",
-                        target_id
+                        "LLM returned invalid target %s, using priority fallback", target_id
                     )
                     selected_edge = candidates[0]  # Already sorted by priority
-                    reasoning = f"LLM returned invalid target, using priority fallback"
+                    reasoning = "LLM returned invalid target, using priority fallback"
 
                 # Log eliminated edges
                 for edge in candidates:
                     if edge.edge_id != selected_edge.edge_id:
-                        elimination_log.append({
-                            "edge_id": edge.edge_id,
-                            "reason": f"Not selected by LLM tiebreaker",
-                            "stage": "llm_tiebreak",
-                        })
+                        elimination_log.append(
+                            {
+                                "edge_id": edge.edge_id,
+                                "reason": "Not selected by LLM tiebreaker",
+                                "stage": "llm_tiebreak",
+                            }
+                        )
 
                 elapsed_ms = (time.time() - start_time) * 1000
                 return RoutingResult(
@@ -1422,11 +1423,13 @@ class StepRouter:
         # Priority-based fallback (no LLM)
         selected_edge = candidates[0]  # Already sorted by priority
         for edge in candidates[1:]:
-            elimination_log.append({
-                "edge_id": edge.edge_id,
-                "reason": f"Lower priority than {selected_edge.edge_id}",
-                "stage": "priority",
-            })
+            elimination_log.append(
+                {
+                    "edge_id": edge.edge_id,
+                    "reason": f"Lower priority than {selected_edge.edge_id}",
+                    "stage": "priority",
+                }
+            )
 
         elapsed_ms = (time.time() - start_time) * 1000
         return RoutingResult(
@@ -1527,6 +1530,7 @@ def emit_routing_event(
     if append_event_fn is None:
         from .storage import append_event
         from .types import RunEvent
+
         append_event_fn = append_event
 
         event = RunEvent(
@@ -1586,8 +1590,10 @@ class StepOutputData:
             next_step_id=data.get("next_step_id"),
             proposed_action=data.get("proposed_action"),
             custom_fields={
-                k: v for k, v in data.items()
-                if k not in ("status", "can_further_iteration_help", "next_step_id", "proposed_action")
+                k: v
+                for k, v in data.items()
+                if k
+                not in ("status", "can_further_iteration_help", "next_step_id", "proposed_action")
             },
         )
 
@@ -1677,9 +1683,6 @@ def route_from_step(
         The result.explanation field contains a WP4-compliant dictionary
         matching routing_explanation.schema.json for audit trail storage.
     """
-    # Convert step output to normalized format
-    step_data = StepOutputData.from_dict(step_output)
-
     # Build run context for StepRouter
     run_ctx = RunContext(
         run_id=context.run_id,
@@ -1693,6 +1696,7 @@ def route_from_step(
     # Adapt llm_tiebreaker signature if provided
     adapted_tiebreaker = None
     if llm_tiebreaker:
+
         def adapted_tiebreaker(edges: List[Edge], ctx: RunContext) -> Tuple[str, str]:
             # Convert RunContext back to RoutingContext for caller's tiebreaker
             routing_ctx = RoutingContext(
@@ -1728,19 +1732,21 @@ def convert_to_wp4_explanation(
     """
     from swarm.runtime.types import (
         WP4EliminationEntry,
-        WP4RoutingMetrics,
         WP4RoutingExplanation,
+        WP4RoutingMetrics,
         wp4_routing_explanation_to_dict,
     )
 
     if not routing_result.explanation:
         # Return minimal explanation
-        return wp4_routing_explanation_to_dict(WP4RoutingExplanation(
-            decision="No explanation available",
-            method=routing_result.method,
-            selected_edge=routing_result.edge.edge_id if routing_result.edge else "",
-            candidates_evaluated=0,
-        ))
+        return wp4_routing_explanation_to_dict(
+            WP4RoutingExplanation(
+                decision="No explanation available",
+                method=routing_result.method,
+                selected_edge=routing_result.edge.edge_id if routing_result.edge else "",
+                candidates_evaluated=0,
+            )
+        )
 
     explanation = routing_result.explanation
 

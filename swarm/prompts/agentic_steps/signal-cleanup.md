@@ -48,12 +48,16 @@ Do **not** use "BLOCKED" as a status. If you feel "blocked", put it in `blockers
 
 `PROCEED | RERUN | BOUNCE | FIX_ENV`
 
-Routing specificity is expressed via fields:
+Routing is expressed via a single `routing` field with closed vocabulary:
 
-- `route_to_flow: 1|2|3|4|5|6|7|null`
-- `route_to_agent: <agent-name|null>`
+- `CONTINUE` — proceed on golden path (normal completion, move to next flow)
+- `DETOUR` — inject sidequest chain (e.g., re-run a specific station)
+- `INJECT_FLOW` — inject named flow (e.g., re-run signal flow from start)
+- `INJECT_NODES` — ad-hoc nodes for targeted fixes
+- `EXTEND_GRAPH` — propose patch to flow graph
 
-Route fields may be populated for **RERUN** or **BOUNCE**. For `PROCEED` and `FIX_ENV`, set both to `null`.
+For `PROCEED`, use `routing: CONTINUE`. For `FIX_ENV`, use `routing: null`.
+For `RERUN` or `BOUNCE`, use `DETOUR`, `INJECT_FLOW`, or `INJECT_NODES` with a `routing_target` describing the destination.
 
 ## Inputs
 
@@ -219,15 +223,15 @@ generated_at: <iso8601>
 
 This ensures nothing is silently missing. Downstream and Flow 7 (Wisdom) can see what happened.
 
-Derive `recommended_action` (closed enum):
+Derive `recommended_action` and `routing` (closed enums):
 
-* `CANNOT_PROCEED` ⇒ `FIX_ENV`
-* `UNVERIFIED` due to missing required artifacts ⇒ `RERUN` with `route_to_flow: 1`
-  * If exactly one missing source is obvious, also set `route_to_agent`:
-    * missing `requirements.md` ⇒ `route_to_agent: requirements-author`
-* `VERIFIED` ⇒ `PROCEED`
+* `CANNOT_PROCEED` ⇒ `FIX_ENV`, `routing: null`
+* `UNVERIFIED` due to missing required artifacts ⇒ `RERUN`, `routing: INJECT_FLOW`, `routing_target: signal`
+  * If exactly one missing source is obvious, use `routing: DETOUR` with `routing_target` describing the station:
+    * missing `requirements.md` ⇒ `routing: DETOUR`, `routing_target: requirements-author`
+* `VERIFIED` ⇒ `PROCEED`, `routing: CONTINUE`
 
-Never invent new action words.
+Never invent new action words or routing values.
 
 ### Step 6: Write `signal_receipt.json`
 
@@ -240,8 +244,8 @@ Write `.runs/<run-id>/signal/signal_receipt.json`:
 
   "status": "VERIFIED | UNVERIFIED | CANNOT_PROCEED",
   "recommended_action": "PROCEED | RERUN | BOUNCE | FIX_ENV",
-  "route_to_flow": null,
-  "route_to_agent": null,
+  "routing": "CONTINUE | DETOUR | INJECT_FLOW | INJECT_NODES | EXTEND_GRAPH | null",
+  "routing_target": "<flow-name | station-name | null>",
 
   "missing_required": [],
   "missing_optional": [],
@@ -335,8 +339,8 @@ Write `.runs/<run-id>/signal/cleanup_report.md`:
 ## Machine Summary
 status: VERIFIED | UNVERIFIED | CANNOT_PROCEED
 recommended_action: PROCEED | RERUN | BOUNCE | FIX_ENV
-route_to_flow: null
-route_to_agent: null
+routing: CONTINUE | DETOUR | INJECT_FLOW | INJECT_NODES | EXTEND_GRAPH | null
+routing_target: <flow-name | station-name | null>
 missing_required: []
 blockers: []
 

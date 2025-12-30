@@ -1,0 +1,109 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://flowstudio.dev/schemas/graph_evolution_proposal.schema.json",
+  "title": "GraphEvolutionProposal",
+  "description": "A proposal to evolve a flow graph based on EXTEND_GRAPH routing events. Used by Flow 7 (Wisdom) to suggest improvements that appear in the Flow Studio UI.",
+  "type": "object",
+  "required": ["id", "source_event", "target_flow", "proposal_type", "description"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^GEP-[A-Z0-9]+$",
+      "description": "Unique identifier for this proposal (e.g., 'GEP-A1B2C3')"
+    },
+    "source_event": {
+      "type": "string",
+      "description": "The EXTEND_GRAPH event ID that triggered this proposal"
+    },
+    "target_flow": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]*$",
+      "description": "The flow to modify (e.g., 'build', 'gate', 'wisdom')"
+    },
+    "proposal_type": {
+      "type": "string",
+      "enum": ["add_node", "add_edge", "modify_node", "modify_policy", "add_detour", "add_injection"],
+      "description": "Type of graph evolution being proposed"
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 500,
+      "description": "Human-readable description of the proposed change"
+    },
+    "json_patch": {
+      "type": "array",
+      "description": "RFC 6902 JSON Patch operations to apply to the target flow graph",
+      "items": {
+        "type": "object",
+        "required": ["op", "path"],
+        "properties": {
+          "op": {
+            "type": "string",
+            "enum": ["add", "remove", "replace", "move", "copy", "test"],
+            "description": "The operation to perform"
+          },
+          "path": {
+            "type": "string",
+            "description": "JSON Pointer path to the target location"
+          },
+          "value": {
+            "description": "The value to add/replace (required for add/replace operations)"
+          },
+          "from": {
+            "type": "string",
+            "description": "Source path for move/copy operations"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Confidence score (0.0 to 1.0) based on evidence strength"
+    },
+    "rationale": {
+      "type": "string",
+      "maxLength": 2000,
+      "description": "Detailed explanation of why this change is recommended"
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of evidence sources (file paths, run IDs, event IDs)"
+    },
+    "source_run_id": {
+      "type": "string",
+      "description": "The run ID that generated this proposal"
+    },
+    "pattern_count": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Number of times this pattern was observed"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "approved", "applied", "dismissed", "superseded"],
+      "default": "pending",
+      "description": "Current proposal status in its lifecycle"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when proposal was created"
+    },
+    "reviewed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when proposal was reviewed"
+    },
+    "reviewed_by": {
+      "type": "string",
+      "description": "Who reviewed the proposal (human or system identifier)"
+    }
+  },
+  "additionalProperties": false
+}

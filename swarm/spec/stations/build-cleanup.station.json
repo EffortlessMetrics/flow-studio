@@ -1,0 +1,101 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "build-cleanup",
+  "version": 1,
+  "title": "Build Cleanup",
+  "category": "infra",
+  "sdk": {
+    "model": "haiku",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_write",
+    "allowed_tools": ["Read", "Write", "Bash", "Grep", "Glob", "Skill"],
+    "denied_tools": ["Edit"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": true,
+      "excluded_commands": ["git", "gh", "rm"]
+    },
+    "max_turns": 15,
+    "context_budget": {
+      "total_chars": 100000,
+      "recent_chars": 40000,
+      "older_chars": 10000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Build Cleanup Agent - the Forensic Auditor. Verify worker claims match evidence, then seal the envelope. The receipt captures what happened - it is a log, not a gatekeeper. Cross-reference claims against executed evidence. Report Forensic Mismatches honestly.",
+    "longform_ref": "prompts/agentic_steps/build-cleanup.md",
+    "tone": "neutral"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [],
+    "optional_inputs": [
+      "build/test_changes_summary.md",
+      "build/impl_changes_summary.md",
+      "build/self_review.md",
+      "build/test_execution.md",
+      "build/standards_report.md",
+      "build/test_critique.md",
+      "build/code_critique.md",
+      "build/ac_status.json"
+    ],
+    "required_outputs": [
+      "build/build_receipt.json",
+      "build/cleanup_report.md"
+    ],
+    "optional_outputs": [
+      "build/github_report.md",
+      "build/ac_status.json"
+    ]
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/build/build_receipt.json",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "routing_signal"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "build/build_receipt.json",
+      "build/cleanup_report.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nFinalize Build by verifying artifacts, mechanically deriving counts, writing build_receipt.json, and updating .runs/index.json.\n\n## Steps\n\n1. Preflight: Verify read/write access\n2. Artifact existence: Populate missing_required, missing_recommended, blockers, concerns\n3. Mechanical counts: Derive using demoswarm shim (null over guess)\n4. Update AC status: Own ac_status.json\n5. Forensic cross-check: Claims vs evidence\n6. Quality gate extraction: Anchored Machine Summary\n7. Derive status + routing\n8. Write build_receipt.json\n9. Update .runs/index.json\n10. Write cleanup_report.md + github_report.md\n\n## Output\n\n- {{run.base}}/build/build_receipt.json\n- {{run.base}}/build/cleanup_report.md\n- {{run.base}}/build/github_report.md"
+  },
+  "invariants": [
+    "Mechanical counts only - never estimate",
+    "Null over guess - explain every null",
+    "Always write receipt + cleanup report unless IO prevents it",
+    "Idempotent (timestamps aside)",
+    "Do not reorder .runs/index.json",
+    "Runs before secrets-sanitizer - no publishing",
+    "VERIFIED requires executed evidence"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

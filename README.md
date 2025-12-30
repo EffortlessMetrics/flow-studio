@@ -1,5 +1,7 @@
 # Flow Studio Swarm
 
+> For: Platform engineers, agent architects, and teams building industrialized agentic SDLC tooling.
+
 Stepwise orchestration for an industrialized SDLC.
 
 This is not a chatbot. It's a system that executes structured flows, one step at a time, with durable state and forensic receipts.
@@ -108,6 +110,7 @@ Open: `http://localhost:5000/?run=demo-health-check&mode=operator`
 | Flow Studio UI | [FLOW_STUDIO.md](docs/FLOW_STUDIO.md) |
 | Stepwise execution | [STEPWISE_BACKENDS.md](docs/STEPWISE_BACKENDS.md) |
 | Adopt for your repo | [ADOPTION_PLAYBOOK.md](docs/ADOPTION_PLAYBOOK.md) |
+| Example runs | [GOLDEN_RUNS.md](docs/GOLDEN_RUNS.md) |
 | Claude Code integration | [CLAUDE.md](CLAUDE.md) |
 | All docs | [docs/INDEX.md](docs/INDEX.md) |
 
@@ -119,6 +122,19 @@ Open: `http://localhost:5000/?run=demo-health-check&mode=operator`
 - **Atomic commits**: `run_state.json` moves only after the handoff envelope is durable
 - **DB-backed UI**: TypeScript queries DuckDB, not JSONL parsing—instant even in large repos
 - **Agent-driven routing**: Next-step decisions come from agents who understand context, not regex on logs
+
+---
+
+## Ready to Adopt?
+
+Before adopting this system, ensure you have:
+
+- [ ] Read the [ADOPTION_PLAYBOOK.md](docs/ADOPTION_PLAYBOOK.md)
+- [ ] Reviewed the [GOLDEN_RUNS.md](docs/GOLDEN_RUNS.md) examples
+- [ ] Run `make dev-check` and confirmed a green build
+- [ ] Understood the [STEPWISE_BACKENDS.md](docs/STEPWISE_BACKENDS.md) execution model
+
+See the [ADOPTION_PLAYBOOK](docs/ADOPTION_PLAYBOOK.md) for the complete readiness checklist.
 
 ---
 

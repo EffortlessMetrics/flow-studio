@@ -335,3 +335,95 @@ deferred_count: 0           # Nothing triaged
 **The first run enables Flow 2/3 to proceed with clear assumptions. The second run forces humans to answer questions the agent could have researched.**
 
 When uncertain: research → default → document the assumption. Only escalate when you've exhausted derivation paths.
+
+## Teaching Notes: Structured Assumption Logging
+
+**This section documents the pattern for logging structured assumptions that flow into the handoff envelope.**
+
+When you make an assumption (DEFAULTED items), you should also log it to the structured handoff envelope. This creates machine-readable records that downstream agents can reference and that appear in the audit trail.
+
+### Assumption Logging Pattern
+
+For each DEFAULTED item, include a structured assumption block in your reasoning:
+
+```yaml
+# Assumption Record (for envelope)
+assumption:
+  id: ASM-001  # Sequential within this step: ASM-001, ASM-002, etc.
+  statement: "API will use REST, not GraphQL"
+  rationale: "No GraphQL mentioned in requirements; REST is conventional for this domain"
+  impact_if_wrong: "Would need to redesign API layer for GraphQL schema and resolvers"
+  confidence: medium  # high | medium | low
+  tags: [architecture, api]
+```
+
+### Decision Logging Pattern
+
+When you make a significant decision (not just an assumption), log it as a decision:
+
+```yaml
+# Decision Record (for envelope)
+decision:
+  id: DEC-001  # Sequential within this step: DEC-001, DEC-002, etc.
+  type: interpretation  # architecture | implementation | routing | interpretation | design
+  subject: "API style for user service"
+  decision: "Proceed with REST endpoints as primary API surface"
+  rationale: "Requirements focus on CRUD operations; REST is simpler for this use case"
+  assumptions_applied: [ASM-001]  # Links to assumptions that informed this decision
+```
+
+### ID Format
+
+- Assumptions: `ASM-001`, `ASM-002`, etc. (sequential per step execution)
+- Decisions: `DEC-001`, `DEC-002`, etc. (sequential per step execution)
+
+These IDs are step-local. The orchestrator combines them with flow/step context to create globally unique identifiers.
+
+### Linking Assumptions to Decisions
+
+When a decision depends on assumptions, explicitly link them:
+
+```yaml
+decision:
+  id: DEC-002
+  type: design
+  subject: "Error response format"
+  decision: "Use RFC 7807 Problem Details for API errors"
+  rationale: "Existing codebase uses this pattern; maintains consistency"
+  assumptions_applied: [ASM-001, ASM-002]  # This decision is based on these assumptions
+```
+
+### Why This Matters
+
+1. **Audit Trail**: Downstream agents can see what assumptions were made and why
+2. **Invalidation Detection**: If an assumption is later proven wrong, we can trace which decisions need revisiting
+3. **Human Review**: Gate reviewers can quickly identify the reasoning chain
+4. **Learning**: Flow 6 (Wisdom) can extract patterns from assumption/decision logs
+
+### Example: Full Structured Output
+
+When you find an ambiguity and choose to default, your output should include both:
+1. The markdown entry in `open_questions.md` (human-readable, append-only)
+2. The structured assumption block in your reasoning (machine-readable, for envelope)
+
+```markdown
+### DEFAULTED (Proceeding With Assumption)
+
+- QID: OQ-SIG-001
+  - Q: What timeout should API requests use? [DEFAULTED]
+  - Default chosen: 30 seconds
+  - Why safe: Matches existing patterns in `src/api/`; easy to tune via config
+  - How to verify: Load test will surface if too short
+  - How to change: Update `API_TIMEOUT_SECONDS` in config
+
+<!-- Structured assumption for envelope -->
+assumption:
+  id: ASM-001
+  statement: "API requests timeout after 30 seconds"
+  rationale: "Matches existing API timeout patterns in src/api/; config-driven so easy to change"
+  impact_if_wrong: "Long-running operations may fail; need to add async pattern or increase timeout"
+  confidence: high
+  tags: [performance, api, config]
+```
+
+The orchestrator extracts these structured blocks and includes them in the handoff envelope for downstream consumption.

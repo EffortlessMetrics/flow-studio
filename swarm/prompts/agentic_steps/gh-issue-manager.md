@@ -43,16 +43,22 @@ Audit-plane files (optional, tighten-only):
 - `UNVERIFIED` — best-effort completed but GitHub operations were incomplete (auth missing, issue inaccessible, edit failed, ambiguous repo context).
 - `CANNOT_PROCEED` — mechanical failure only (cannot read/write required local files due to IO/permissions/tooling).
 
-## Control-Plane Routing (Closed Enum)
+## Control-Plane Routing (V3 Graph-Native)
 
-Use:
-`recommended_action: PROCEED | RERUN | BOUNCE | FIX_ENV`
+Use the V3 routing vocabulary:
+
+| Decision | When to Use |
+|----------|-------------|
+| **CONTINUE** | Proceed on golden path (default when no intervention needed) |
+| **DETOUR** | Inject sidequest chain for known failure patterns |
+| **INJECT_FLOW** | Insert entire flow when a complete flow exists for the situation |
+| **INJECT_NODES** | Ad-hoc nodes when no existing flow matches but nodes can be composed |
+| **EXTEND_GRAPH** | Propose SOP evolution when a novel pattern warrants permanent graph change |
 
 Rules:
-- `FIX_ENV` only when `status: CANNOT_PROCEED` (mechanical/IO/tooling prevents required reads/writes).
-- Otherwise prefer `PROCEED`; use `RERUN`/`BOUNCE` only when a rerun of this agent or an upstream fix is clearly actionable.
-
-`route_to_flow` / `route_to_agent` are almost always `null` here.
+- `CONTINUE` is the default—prefer the golden path when viable.
+- Use `DETOUR` for known failure patterns with established remediation (e.g., gh-auth-fix sidequest).
+- For this agent, most exits are `CONTINUE` (GitHub ops are observability, not blockers).
 
 ## GitHub Access + Content Modes
 
@@ -178,7 +184,7 @@ Read `.runs/<run-id>/run_meta.json`:
 * If not accessible (404/403):
 
   * Prefer: create a new issue in the configured repo and update `run_meta.json` (`issue_number`, `github_repo`, `canonical_key`) and `.runs/index.json`.
-  * If you cannot create (auth/permissions): record `operation_status: FAILED`, set `status: UNVERIFIED`, `recommended_action: BOUNCE`, `route_to_agent: gh-issue-manager` (for rerun), and exit cleanly.
+  * If you cannot create (auth/permissions): record `operation_status: FAILED`, set `status: UNVERIFIED`, routing decision `DETOUR` with `target: gh-auth-fix` (for auth remediation), and exit cleanly.
 
 #### If issue_number is Null
 
@@ -391,7 +397,7 @@ EOF
 
 If edit fails:
 
-* Set `status: UNVERIFIED`, `recommended_action: RERUN`, `route_to_agent: gh-issue-manager`
+* Set `status: UNVERIFIED`, routing decision `CONTINUE` (edit failures are non-blocking; the orchestrator may retry this agent on next flow run)
 * Record failure in `gh_issue_status.md`
 * Still proceed with local metadata updates (Step 6/7).
 

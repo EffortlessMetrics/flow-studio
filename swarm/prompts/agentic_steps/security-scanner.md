@@ -45,9 +45,12 @@ Also useful (if present):
 
 `PROCEED | RERUN | BOUNCE | FIX_ENV`
 
-Routing specificity:
-- `route_to_flow: 1|2|3|4|5|6|7|null`
-- `route_to_agent: <agent-name|null>`
+Routing specificity (use ONE):
+- `CONTINUE` — proceed to the next step in the current flow
+- `DETOUR` — skip to a specific step within the current flow
+- `INJECT_FLOW` — pause current flow and run another flow first
+- `INJECT_NODES` — insert ad-hoc steps into the current flow
+- `EXTEND_GRAPH` — append steps at the end of the current flow
 
 ## Behavior
 
@@ -108,10 +111,10 @@ Severity tiers:
 - **MINOR**: hygiene issues, weak defaults, missing security headers/logging suggestions.
 
 Routing rules:
-- If any **CRITICAL** finding: `recommended_action: BOUNCE` to Flow 3 (route fields set), unless it is clearly already remediated.
-- If only **MAJOR** findings: `recommended_action: BOUNCE`, `route_to_flow: 3`, `route_to_agent: code-implementer`.
-- If only **MINOR** (or none) and scan scope is sound: `recommended_action: PROCEED`.
-- If scan scope is not sound (e.g., changed surface unknown): `status: UNVERIFIED`, usually `recommended_action: PROCEED` with blockers.
+- If any **CRITICAL** finding: `recommended_action: BOUNCE`, `routing: INJECT_FLOW` (build), unless it is clearly already remediated.
+- If only **MAJOR** findings: `recommended_action: BOUNCE`, `routing: INJECT_FLOW` (build), target agent: code-implementer.
+- If only **MINOR** (or none) and scan scope is sound: `recommended_action: PROCEED`, `routing: CONTINUE`.
+- If scan scope is not sound (e.g., changed surface unknown): `status: UNVERIFIED`, usually `recommended_action: PROCEED`, `routing: CONTINUE` with blockers.
 
 ### Step 6: Write `.runs/<run-id>/gate/security_scan.md`
 
@@ -123,8 +126,9 @@ Write exactly this structure:
 ## Machine Summary
 status: VERIFIED | UNVERIFIED | CANNOT_PROCEED
 recommended_action: PROCEED | RERUN | BOUNCE | FIX_ENV
-route_to_flow: <1|2|3|4|5|6|null>
-route_to_agent: <agent-name|null>
+routing: CONTINUE | DETOUR | INJECT_FLOW | INJECT_NODES | EXTEND_GRAPH
+routing_target: <flow-key|step-id|null>
+routing_agent: <agent-name|null>
 
 blockers:
   - <must change to proceed>
@@ -222,6 +226,94 @@ Examples:
 **Recommendation:** BOUNCE to code-implementer to fix credential exposure in auth.ts:42.
 
 **Reasoning:** Found hardcoded API key in auth.ts (CRITICAL) and SQL injection risk in query.ts (MAJOR). Both must be addressed before merging.
+```
+
+## Observations
+
+Record observations that may be valuable for routing or Wisdom:
+
+```json
+{
+  "observations": [
+    {
+      "category": "pattern|anomaly|risk|opportunity",
+      "observation": "What you noticed",
+      "evidence": ["file:line", "artifact_path"],
+      "confidence": 0.8,
+      "suggested_action": "Optional: what to do about it"
+    }
+  ]
+}
+```
+
+Categories:
+- **pattern**: Recurring behavior worth learning from—both good and bad (e.g., "All SQL queries use parameterized statements consistently", "Auth checks always follow the middleware→handler pattern", "Secrets consistently loaded from env vars, not hardcoded")
+- **anomaly**: Something unexpected that might indicate a problem (e.g., "New endpoint bypasses standard auth middleware chain", "Dependency audit passed but found deprecated crypto library in use")
+- **risk**: Potential future issue worth tracking (e.g., "Rate limiting not implemented on new public endpoint", "CORS configuration allows broad origins—may need tightening for production")
+- **opportunity**: Improvement possibility for Wisdom to consider (e.g., "Could consolidate 4 similar input validation patterns into shared sanitizer", "Security headers present but Content-Security-Policy could be stricter")
+
+Include observations in the security scan report under a new section:
+
+```markdown
+## Observations
+
+```json
+{
+  "observations": [
+    {
+      "category": "pattern",
+      "observation": "All database queries use ORM with parameterized inputs—no raw SQL concatenation",
+      "evidence": ["src/db/queries.ts", "src/db/users.ts", "src/db/sessions.ts"],
+      "confidence": 0.95,
+      "suggested_action": null
+    },
+    {
+      "category": "anomaly",
+      "observation": "New /admin/debug endpoint has no auth middleware",
+      "evidence": ["src/routes/admin.ts:45"],
+      "confidence": 0.9,
+      "suggested_action": "Verify this is intentional—appears to be dev-only route left in production code"
+    },
+    {
+      "category": "risk",
+      "observation": "JWT secret loaded from env but no rotation mechanism visible",
+      "evidence": ["src/auth/jwt.ts:12", "config/auth.yaml"],
+      "confidence": 0.75,
+      "suggested_action": "Document secret rotation procedure or implement key versioning"
+    },
+    {
+      "category": "opportunity",
+      "observation": "Input validation duplicated across 5 handlers—candidate for shared middleware",
+      "evidence": ["src/handlers/user.ts:20", "src/handlers/order.ts:18", "src/handlers/payment.ts:25"],
+      "confidence": 0.85,
+      "suggested_action": "Extract to shared validation middleware to ensure consistent sanitization"
+    }
+  ]
+}
+```
+```
+
+Observations are NOT routing decisions—they're forensic notes for the Navigator and Wisdom. Good security patterns are as valuable to record as vulnerabilities—they inform what's working well.
+
+## Off-Road Justification
+
+When recommending any off-road decision (DETOUR, INJECT_FLOW, INJECT_NODES), you MUST provide why_now justification:
+
+- **trigger**: What specific condition triggered this recommendation?
+- **delay_cost**: What happens if we don't act now?
+- **blocking_test**: Is this blocking the current objective?
+- **alternatives_considered**: What other options were evaluated?
+
+Example:
+```json
+{
+  "why_now": {
+    "trigger": "CRITICAL: Hardcoded API key detected in auth.ts:42",
+    "delay_cost": "Credential would be exposed in public repository",
+    "blocking_test": "Cannot satisfy 'no secrets in code' security policy",
+    "alternatives_considered": ["Mask in logs only (rejected: still in source)", "Document for post-merge (rejected: already exposed)"]
+  }
+}
 ```
 
 ## Philosophy

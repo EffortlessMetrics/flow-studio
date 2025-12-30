@@ -204,8 +204,11 @@ Write `.runs/<run-id>/review/review_receipt.json`:
 
   "status": "VERIFIED | UNVERIFIED | CANNOT_PROCEED",
   "recommended_action": "PROCEED | RERUN | BOUNCE | FIX_ENV",
-  "route_to_flow": null,
-  "route_to_agent": null,
+  "routing": {
+    "directive": "CONTINUE | DETOUR | INJECT_FLOW | INJECT_NODES | EXTEND_GRAPH",
+    "target": null,
+    "rationale": null
+  },
 
   "missing_required": [],
   "missing_optional": [],

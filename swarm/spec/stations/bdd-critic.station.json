@@ -1,0 +1,102 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "bdd-critic",
+  "version": 1,
+  "title": "BDD Critic",
+  "category": "critic",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "critic",
+    "allowed_tools": ["Read", "Grep", "Glob"],
+    "denied_tools": ["Write", "Edit"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": false,
+      "excluded_commands": ["git", "gh", "rm", "mv"]
+    },
+    "max_turns": 12,
+    "context_budget": {
+      "total_chars": 150000,
+      "recent_chars": 50000,
+      "older_chars": 10000
+    }
+  },
+  "identity": {
+    "system_append": "You are the BDD Critic. Enforce automation reliability: testability, traceability, concreteness, and portable step design. You do not fix scenarios - you diagnose and route. Be harsh: if a scenario can't be automated, it isn't a specification yet.",
+    "longform_ref": "prompts/agentic_steps/bdd-critic.md",
+    "tone": "critical"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/microloop/critic_never_fixes.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md",
+      "fragments/output/severity_tiers.md",
+      "fragments/microloop/iteration_control.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "signal/requirements.md",
+      "signal/features/*.feature"
+    ],
+    "optional_inputs": [
+      "signal/example_matrix.md",
+      "signal/verification_notes.md"
+    ],
+    "required_outputs": [
+      "signal/bdd_critique.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/signal/bdd_critique.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "can_further_iteration_help",
+      "confidence"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "signal/bdd_critique.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/microloop/critic_never_fixes.md",
+      "fragments/output/severity_tiers.md"
+    ],
+    "template": "## Mission\n\nCritique BDD scenarios for testability, traceability, concreteness, and portability.\n\n## Context\n\n{{#each inputs}}\n- {{this}}\n{{/each}}\n\n## Output\n\n- `{{run.base}}/signal/bdd_critique.md`\n\n## Review Rules\n\n### Traceability (hard)\n- Each Scenario must have exactly one primary @REQ-### tag\n- Additional @REQ tags require justification comment\n- Feature-level tags do NOT count\n- Every REQ needs >=1 scenario OR verification_notes.md exception\n\n### Testability (hard)\n- No vague Thens: 'works', 'successful', 'as expected', 'valid'\n- Thens must be observable (state change, event, returned value)\n\n### Portability (major)\n- Default steps must be domain-level\n- Interface-specific steps require requirement basis or justification\n\n### Sad Path Rule (major)\n- Every REQ must have at least one negative scenario (error/edge/failure)\n- Happy-path-only coverage = MAJOR issue\n\n## Severity Tiers\n\n- CRITICAL: Breaks automation/traceability\n- MAJOR: Likely rework / missing coverage\n- MINOR: Polish"
+  },
+  "invariants": [
+    "Critics never fix - produce reports, not code changes",
+    "No repo mutations - no git/gh, no side effects",
+    "Write exactly one durable artifact: bdd_critique.md",
+    "Testability: scenarios must be automatable, Thens observable/assertable",
+    "Traceability: scenarios map to requirements (REQ IDs)",
+    "Concreteness: no 'vibes' language, explicit conditions/outcomes",
+    "Portability: default to domain-level steps, interface coupling requires justification",
+    "Sad Path Rule: every REQ needs at least one negative scenario",
+    "CRITICAL: breaks automation/traceability",
+    "MAJOR: likely rework / missing coverage",
+    "MINOR: polish"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "loop",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

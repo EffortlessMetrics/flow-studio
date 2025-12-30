@@ -104,13 +104,13 @@ The receipt must include these keys (location may be top-level or nested under a
 * `flow` (string; should be `build`)
 * `status` in {VERIFIED, UNVERIFIED, CANNOT_PROCEED}
 * `recommended_action` in {PROCEED, RERUN, BOUNCE, FIX_ENV}
-* `route_to_flow` (null or 1..6)
-* `route_to_agent` (null or string)
+* `routing_directive` in {CONTINUE, DETOUR, INJECT_FLOW, INJECT_NODES, EXTEND_GRAPH, null}
+* `routing_target` (null or object describing the routing target based on directive)
 * `missing_required` (array; may be empty)
 * `blockers` (array; may be empty)
 * `completed_at` (ISO8601 string) OR equivalent stable timestamp field
 
-If `recommended_action != BOUNCE`, both `route_to_flow` and `route_to_agent` should be `null`.
+If `recommended_action != BOUNCE`, `routing_directive` should be `CONTINUE` or `null`.
 
 ### C) Build-specific minimums (required for Gate usefulness)
 
@@ -207,7 +207,7 @@ Write exactly this structure:
 - flow field: <value or MISSING>
 - status enum valid: YES | NO
 - recommended_action enum valid: YES | NO
-- routing fields consistent: YES | NO
+- routing_directive valid: YES | NO
 
 ## Build-specific Grounding
 - pytest summary present: YES | NO
@@ -253,10 +253,10 @@ Write exactly this structure:
 ## Completion decision rules
 
 * If you cannot read `build_receipt.json` (direct or git-show) due to IO/permissions -> `CANNOT_PROCEED`, `recommended_action: FIX_ENV`.
-* If receipt is missing entirely -> `UNVERIFIED`, typically `recommended_action: BOUNCE`, `route_to_flow: 3`, `route_to_station: build-cleanup`, `route_to_agent: null`.
-* If receipt is unparseable/placeholder-leaky/invalid enums/mismatched grounding -> `UNVERIFIED`, typically BOUNCE to Flow 3.
-* If `review_receipt.json` exists and has `has_critical_pending: true` -> `UNVERIFIED`, `recommended_action: BOUNCE`, `route_to_flow: 4`.
-* If `review_receipt.json` exists and has `review_complete: false` with `worklist_pending > 0` -> `UNVERIFIED`, `recommended_action: BOUNCE`, `route_to_flow: 4`.
+* If receipt is missing entirely -> `UNVERIFIED`, typically `recommended_action: BOUNCE`, `routing_directive: DETOUR`, `routing_target: { flow: "build", station: "build-cleanup" }`.
+* If receipt is unparseable/placeholder-leaky/invalid enums/mismatched grounding -> `UNVERIFIED`, typically `routing_directive: DETOUR` to Flow 3.
+* If `review_receipt.json` exists and has `has_critical_pending: true` -> `UNVERIFIED`, `recommended_action: BOUNCE`, `routing_directive: DETOUR`, `routing_target: { flow: "review" }`.
+* If `review_receipt.json` exists and has `review_complete: false` with `worklist_pending > 0` -> `UNVERIFIED`, `recommended_action: BOUNCE`, `routing_directive: DETOUR`, `routing_target: { flow: "review" }`.
 * If everything validates and cross-checks (when available) are consistent -> `VERIFIED`, `recommended_action: PROCEED`.
 * Snapshot mismatch alone -> concern only (do not fail on this alone).
 

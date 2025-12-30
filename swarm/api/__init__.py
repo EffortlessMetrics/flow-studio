@@ -46,11 +46,12 @@ Legacy API (v1.0) - Backward Compatible:
     GET  /api/runs/<run_id>/events    - SSE event stream
 """
 
-from .server import create_app, SpecManager, app, get_spec_manager
+from .server import SpecManager, app, create_app, get_spec_manager
 
 # Also expose routers for custom integration
 try:
-    from .routes import specs_router, runs_router, events_router
+    from .routes import events_router, runs_router, specs_router
+
     __all__ = [
         "create_app",
         "SpecManager",

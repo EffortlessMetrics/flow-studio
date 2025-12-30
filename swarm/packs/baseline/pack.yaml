@@ -1,0 +1,45 @@
+# swarm/packs/baseline/pack.yaml
+# The baseline pack - ships with the runtime and provides sane defaults.
+# This pack is used when no repo pack is configured or as the base for extends.
+
+version: "1.0"
+id: baseline
+description: "Default swarm configuration with safe, CI-friendly settings"
+
+# Engine configuration
+engines:
+  claude:
+    mode: stub          # Safe default for CI
+    execution: legacy   # Stable execution pattern
+    provider: anthropic
+  gemini:
+    mode: stub
+
+# Feature flags
+features:
+  stepwise_execution: true
+  context_handoff: true
+  write_transcripts: true
+  write_receipts: true
+
+# Runtime settings (conservative defaults)
+runtime:
+  context_budget_chars: 200000
+  history_max_recent_chars: 60000
+  history_max_older_chars: 10000
+  timeout_seconds: 30
+
+# All flows enabled by default
+flows:
+  signal:
+    enabled: true
+  plan:
+    enabled: true
+  build:
+    enabled: true
+  gate:
+    enabled: true
+  deploy:
+    enabled: true
+  wisdom:
+    enabled: true

@@ -200,6 +200,31 @@ Surfaced from `PACK_OBS` markers in learnings.md (agent friction, missing automa
   - evidence: <path>#<heading>
   - proposed_change: <file + insertion point + what>
 
+## Evolution Suggestions
+
+This section contains structured evolution suggestions that can be parsed by the evolution loop.
+Use this exact format for machine-parseable station/flow improvements:
+
+### Station: <station-name>
+- Issue: <description of the problem>
+- Suggestion: <specific improvement to make>
+- Confidence: low | medium | high
+- Evidence: <run-id or artifact path>
+
+Example:
+
+### Station: clarifier
+- Issue: Low clarification acceptance rate
+- Suggestion: Add fallback research step when clarification questions are rejected
+- Confidence: medium
+- Evidence: run-abc123/wisdom/learnings.md#Clarifier Friction
+
+### Station: code-implementer
+- Issue: Repeated test failures on Rust projects
+- Suggestion: Add rust-analyzer to allowed tools
+- Confidence: high
+- Evidence: run-def456/events.jsonl (tool_telemetry patterns)
+
 ## Issues Created
 None. (Drafts only; no GitHub side effects.)
 
@@ -433,6 +458,14 @@ For mechanical counting, preserve these exact line prefixes:
 - Inventory suggestion lines: `^- SUGGESTION: `
 - Inventory pack improvement lines: `^- PACK_IMPROVEMENT: `
 - Tier counts: `^- TIER[123]_LEARNINGS: `
+- Evolution suggestions: `^### Station: ` (followed by station name)
+
+For evolution suggestions (parseable by evolution loop):
+- Station header: `^### Station: (.+)$`
+- Issue line: `^- Issue: (.+)$`
+- Suggestion line: `^- Suggestion: (.+)$`
+- Confidence line: `^- Confidence: (low|medium|high)$`
+- Evidence line: `^- Evidence: (.+)$`
 
 Do not vary these prefixes.
 

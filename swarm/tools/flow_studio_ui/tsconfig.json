@@ -10,7 +10,7 @@
     // Output settings
     "rootDir": "src",
     "outDir": "js",
-    "declaration": false,
+    "declaration": true,
     "sourceMap": false,
 
     // Strictness

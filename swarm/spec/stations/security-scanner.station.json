@@ -1,0 +1,93 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "security-scanner",
+  "version": 1,
+  "title": "Security Scanner",
+  "category": "verification",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_only",
+    "allowed_tools": ["Read", "Grep", "Glob", "Bash"],
+    "denied_tools": ["Write", "Edit"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": true,
+      "excluded_commands": ["git checkout", "git branch", "git add", "git commit", "git push", "git merge", "git tag", "rm", "mv"]
+    },
+    "max_turns": 15,
+    "context_budget": {
+      "total_chars": 180000,
+      "recent_chars": 60000,
+      "older_chars": 15000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Security Scanner. Review the changed surface for security issues (SAST patterns, secrets exposure, dependency risks). You do not modify the repo. You produce an evidence-backed report for merge-decider.",
+    "longform_ref": "prompts/agentic_steps/security-scanner.md",
+    "tone": "analytical"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md",
+      "fragments/common/evidence.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md",
+      "fragments/output/severity_tiers.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [],
+    "optional_inputs": [
+      "build/impl_changes_summary.md",
+      "build/subtask_context_manifest.json"
+    ],
+    "required_outputs": [
+      "gate/security_scan.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/gate/security_scan.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "routing_signal"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "gate/security_scan.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md",
+      "fragments/common/evidence.md",
+      "fragments/output/severity_tiers.md"
+    ],
+    "template": "## Mission\n\nScan the changed surface for security issues.\n\n## Steps\n\n1. Determine changed surface from impl_changes_summary.md (or git diff fallback)\n2. Secrets exposure scan - high-signal patterns (AWS keys, GitHub tokens, etc.)\n3. SAST pattern scan - SQL injection, command injection, path traversal, SSRF, auth issues\n4. Dependency risk - run audit tools if available (npm audit, pip-audit, cargo audit, govulncheck)\n5. Classify severity and decide routing\n\n## Output\n\nWrite {{run.base}}/gate/security_scan.md with:\n- Machine Summary (status, routing, blockers, concerns)\n- Findings by category (Secrets, SAST, Dependencies)\n- Observations (patterns, anomalies, risks, opportunities)\n- Notes for merge-decider"
+  },
+  "invariants": [
+    "Do not modify the repo - report only",
+    "Do not paste secrets - redact to prefix/suffix",
+    "Evidence-first: file:line for every finding",
+    "If you claim a vulnerability, cite the exact location and explain data flow assumption",
+    "Scan scope unknown -> UNVERIFIED with explicit blockers"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

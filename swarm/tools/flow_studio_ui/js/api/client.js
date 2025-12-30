@@ -359,6 +359,7 @@ export class FlowStudioAPI {
             "run:failed", "run:canceled", "run:interrupted",
             "step:started", "step:progress", "step:completed", "step:failed", "step:skipped",
             "artifact:created", "artifact:updated",
+            "flow:completed", "plan:completed",
             "llm:started", "llm:token", "llm:completed",
             "error",
         ];

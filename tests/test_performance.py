@@ -236,7 +236,7 @@ One error.
     assert result.returncode != 0
 
     # Should report multiple errors
-    assert result.stderr.count("✗") >= 3 or "error" in result.stderr.lower()
+    assert result.stderr.count("[FAIL]") >= 3 or "error" in result.stderr.lower()
 
 
 # ============================================================================

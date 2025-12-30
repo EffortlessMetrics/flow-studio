@@ -1,0 +1,736 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://flowstudio.dev/schemas/forensic_verification.schema.json",
+  "title": "ForensicVerification",
+  "description": "Formalizes the DiffScanner output and forensic verification contract. Forensics ensure 'reality over narrative' - the system records what actually happened, not just what the agent claimed to do. This schema defines the structure for forensic evidence collection, verification markers, and test result parsing.",
+  "type": "object",
+  "required": ["scan_id", "timestamp", "scan_type", "source"],
+  "properties": {
+    "scan_id": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]+$",
+      "description": "Unique identifier for this forensic scan. Format: <run_id>-<flow_key>-<step_id>-<timestamp_ms>"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when the scan was performed"
+    },
+    "scan_type": {
+      "type": "string",
+      "enum": ["diff_scan", "test_parse", "artifact_verify"],
+      "description": "Type of forensic scan performed. 'diff_scan' captures file mutations via git, 'test_parse' parses test output for pass/fail evidence, 'artifact_verify' validates artifact existence and integrity."
+    },
+    "source": {
+      "$ref": "#/definitions/ScanSource",
+      "description": "Context identifying where this scan originated (step, flow, run)"
+    },
+    "diff_result": {
+      "$ref": "#/definitions/DiffScanResult",
+      "description": "Results from a diff_scan operation. Present when scan_type is 'diff_scan'."
+    },
+    "test_result": {
+      "$ref": "#/definitions/TestParseResult",
+      "description": "Results from parsing test output. Present when scan_type is 'test_parse'."
+    },
+    "artifact_result": {
+      "$ref": "#/definitions/ArtifactVerifyResult",
+      "description": "Results from artifact verification. Present when scan_type is 'artifact_verify'."
+    },
+    "markers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/ForensicMarker"
+      },
+      "description": "Forensic markers binding evidence to agent claims. Each marker compares what the agent claimed vs what forensics found."
+    },
+    "verification_status": {
+      "type": "string",
+      "enum": ["VERIFIED", "UNVERIFIED", "DISCREPANCY", "ERROR"],
+      "description": "Overall verification status. VERIFIED: all claims match reality. UNVERIFIED: unable to verify claims. DISCREPANCY: claims do not match reality. ERROR: scan failed."
+    },
+    "discrepancy_summary": {
+      "type": "string",
+      "maxLength": 2000,
+      "description": "Human-readable summary of any discrepancies found between claims and reality"
+    },
+    "metadata": {
+      "$ref": "#/definitions/ScanMetadata",
+      "description": "Additional metadata about the scan operation"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "scan_type": { "const": "diff_scan" }
+        }
+      },
+      "then": {
+        "required": ["diff_result"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "scan_type": { "const": "test_parse" }
+        }
+      },
+      "then": {
+        "required": ["test_result"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "scan_type": { "const": "artifact_verify" }
+        }
+      },
+      "then": {
+        "required": ["artifact_result"]
+      }
+    }
+  ],
+  "definitions": {
+    "ScanSource": {
+      "type": "object",
+      "required": ["step_id", "flow_key", "run_id"],
+      "description": "Context identifying the origin of a forensic scan",
+      "properties": {
+        "step_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "description": "Step identifier where the scan was triggered"
+        },
+        "flow_key": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "description": "Flow key (signal, plan, build, review, gate, deploy, wisdom)"
+        },
+        "run_id": {
+          "type": "string",
+          "description": "Unique run identifier"
+        },
+        "agent_key": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "description": "Agent that executed the step (optional)"
+        },
+        "station_id": {
+          "type": "string",
+          "description": "Station template ID if applicable"
+        }
+      },
+      "additionalProperties": false
+    },
+    "DiffScanResult": {
+      "type": "object",
+      "required": ["files", "total_insertions", "total_deletions", "scan_hash"],
+      "description": "Results from scanning git diff for file mutations. Matches the FileChanges dataclass from diff_scanner.py.",
+      "properties": {
+        "files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/FileDiff"
+          },
+          "description": "List of individual file changes detected by git"
+        },
+        "total_insertions": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Sum of all line insertions across all files"
+        },
+        "total_deletions": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Sum of all line deletions across all files"
+        },
+        "untracked": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of untracked file paths (files not yet added to git)"
+        },
+        "staged": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of staged file paths (in index but not committed)"
+        },
+        "scan_error": {
+          "type": "string",
+          "description": "Error message if the scan failed (null/absent on success)"
+        },
+        "scan_hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "SHA256 hash of the serialized scan result for integrity verification"
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Human-readable summary of changes (e.g., '5 files changed, +120, -45')"
+        },
+        "head_commit": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$",
+          "description": "Git HEAD commit SHA at time of scan"
+        },
+        "base_commit": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$",
+          "description": "Base commit SHA used for diff comparison (usually HEAD~1 or branch point)"
+        }
+      },
+      "additionalProperties": false
+    },
+    "FileDiff": {
+      "type": "object",
+      "required": ["path", "status"],
+      "description": "Single file change record from git diff. Matches the FileDiff dataclass from diff_scanner.py.",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Relative path from repo root"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["A", "M", "D", "R", "C", "U", "T", "X", "B"],
+          "description": "Git status code: A=added, M=modified, D=deleted, R=renamed, C=copied, U=unmerged, T=type-changed, X=unknown, B=broken"
+        },
+        "insertions": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Number of lines added"
+        },
+        "deletions": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Number of lines removed"
+        },
+        "old_path": {
+          "type": "string",
+          "description": "Original path for renames/copies (present only for R/C status)"
+        },
+        "is_binary": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether this is a binary file (no line counts available)"
+        },
+        "mode_change": {
+          "type": "object",
+          "properties": {
+            "old_mode": {
+              "type": "string",
+              "pattern": "^[0-7]{6}$",
+              "description": "Old file mode (e.g., '100644')"
+            },
+            "new_mode": {
+              "type": "string",
+              "pattern": "^[0-7]{6}$",
+              "description": "New file mode (e.g., '100755')"
+            }
+          },
+          "additionalProperties": false,
+          "description": "File mode change if applicable (e.g., chmod)"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ForensicMarker": {
+      "type": "object",
+      "required": ["marker_id", "marker_type", "evidence_hash", "claim", "reality", "match"],
+      "description": "Binds forensic evidence to agent claims. Enables verification that what was claimed actually happened.",
+      "properties": {
+        "marker_id": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_-]+$",
+          "description": "Unique identifier for this marker"
+        },
+        "marker_type": {
+          "type": "string",
+          "enum": ["diff_scan", "test_result", "artifact_hash", "coverage_report", "lint_result", "security_scan"],
+          "description": "Type of evidence this marker represents"
+        },
+        "evidence_hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "SHA256 hash of the evidence payload for integrity verification"
+        },
+        "claim": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "What the agent claimed (e.g., 'Created file src/auth.py with login function')"
+        },
+        "reality": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "What the forensics actually found (e.g., 'File src/auth.py exists with 45 lines, contains login function')"
+        },
+        "match": {
+          "type": "boolean",
+          "description": "Whether the claim matches reality (true = verified, false = discrepancy)"
+        },
+        "discrepancy": {
+          "type": "string",
+          "maxLength": 2000,
+          "description": "Explanation of the gap between claim and reality (present only when match is false)"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Confidence score (0-1) in the match determination"
+        },
+        "evidence_path": {
+          "type": "string",
+          "description": "Path to the evidence artifact if stored separately"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When this marker was created"
+        }
+      },
+      "additionalProperties": false
+    },
+    "TestParseResult": {
+      "type": "object",
+      "required": ["total_tests", "passed", "failed", "skipped"],
+      "description": "Parsed test output for forensic verification of test execution claims",
+      "properties": {
+        "total_tests": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total number of tests discovered/executed"
+        },
+        "passed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of tests that passed"
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of tests that failed"
+        },
+        "skipped": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of tests that were skipped"
+        },
+        "errors": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Number of tests that errored (distinct from failures)"
+        },
+        "failures": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/TestFailure"
+          },
+          "description": "Detailed information about each test failure"
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total test execution duration in milliseconds"
+        },
+        "coverage_percent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Code coverage percentage if available"
+        },
+        "coverage_details": {
+          "$ref": "#/definitions/CoverageDetails",
+          "description": "Detailed coverage breakdown if available"
+        },
+        "test_framework": {
+          "type": "string",
+          "enum": ["pytest", "jest", "mocha", "junit", "cargo_test", "go_test", "rspec", "unknown"],
+          "description": "Test framework that produced this output"
+        },
+        "raw_output_hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "SHA256 hash of the raw test output for integrity"
+        },
+        "raw_output_path": {
+          "type": "string",
+          "description": "Path to the raw test output file"
+        },
+        "suites": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/TestSuite"
+          },
+          "description": "Breakdown by test suite if available"
+        }
+      },
+      "additionalProperties": false
+    },
+    "TestFailure": {
+      "type": "object",
+      "required": ["test_name", "error_message"],
+      "description": "Detailed information about a single test failure",
+      "properties": {
+        "test_name": {
+          "type": "string",
+          "description": "Fully qualified test name (e.g., 'test_module::test_function')"
+        },
+        "test_file": {
+          "type": "string",
+          "description": "Path to the test file"
+        },
+        "test_line": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Line number where the test is defined"
+        },
+        "error_message": {
+          "type": "string",
+          "maxLength": 5000,
+          "description": "Error message from the test failure"
+        },
+        "stack_trace": {
+          "type": "string",
+          "maxLength": 20000,
+          "description": "Full stack trace if available"
+        },
+        "failure_type": {
+          "type": "string",
+          "enum": ["assertion", "exception", "timeout", "setup", "teardown", "unknown"],
+          "description": "Category of failure"
+        },
+        "expected": {
+          "type": "string",
+          "description": "Expected value in assertion failures"
+        },
+        "actual": {
+          "type": "string",
+          "description": "Actual value in assertion failures"
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Time spent on this test before failure"
+        }
+      },
+      "additionalProperties": false
+    },
+    "TestSuite": {
+      "type": "object",
+      "required": ["name", "total", "passed", "failed"],
+      "description": "Test results grouped by suite",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Suite name or file path"
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total tests in suite"
+        },
+        "passed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Passed tests in suite"
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Failed tests in suite"
+        },
+        "skipped": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Skipped tests in suite"
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Suite execution duration"
+        }
+      },
+      "additionalProperties": false
+    },
+    "CoverageDetails": {
+      "type": "object",
+      "description": "Detailed code coverage breakdown",
+      "properties": {
+        "line_coverage_percent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Percentage of lines covered"
+        },
+        "branch_coverage_percent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Percentage of branches covered"
+        },
+        "function_coverage_percent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Percentage of functions covered"
+        },
+        "lines_covered": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of lines covered"
+        },
+        "lines_total": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total number of coverable lines"
+        },
+        "branches_covered": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of branches covered"
+        },
+        "branches_total": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total number of branches"
+        },
+        "uncovered_files": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of files with 0% coverage"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ArtifactVerifyResult": {
+      "type": "object",
+      "required": ["artifacts"],
+      "description": "Results from verifying artifact existence and integrity",
+      "properties": {
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ArtifactVerification"
+          },
+          "description": "Verification status for each expected artifact"
+        },
+        "all_present": {
+          "type": "boolean",
+          "description": "Whether all expected artifacts exist"
+        },
+        "all_valid": {
+          "type": "boolean",
+          "description": "Whether all present artifacts pass integrity checks"
+        },
+        "missing_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of expected artifacts that are missing"
+        },
+        "invalid_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of artifacts that failed integrity checks"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ArtifactVerification": {
+      "type": "object",
+      "required": ["path", "expected", "exists"],
+      "description": "Verification status for a single artifact",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Path to the artifact (relative to RUN_BASE or repo root)"
+        },
+        "expected": {
+          "type": "boolean",
+          "description": "Whether this artifact was expected to exist"
+        },
+        "exists": {
+          "type": "boolean",
+          "description": "Whether the artifact actually exists"
+        },
+        "hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "SHA256 hash of the artifact content (if exists)"
+        },
+        "expected_hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "Expected SHA256 hash (if known)"
+        },
+        "hash_match": {
+          "type": "boolean",
+          "description": "Whether actual hash matches expected hash"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "File size in bytes (if exists)"
+        },
+        "last_modified": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last modification timestamp (if exists)"
+        },
+        "content_type": {
+          "type": "string",
+          "description": "MIME type or content category (e.g., 'application/json', 'text/markdown')"
+        },
+        "validation_errors": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of validation errors if content fails schema/format checks"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ScanMetadata": {
+      "type": "object",
+      "description": "Metadata about the forensic scan operation",
+      "properties": {
+        "scanner_version": {
+          "type": "string",
+          "description": "Version of the forensic scanner"
+        },
+        "scan_duration_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "How long the scan took in milliseconds"
+        },
+        "repo_root": {
+          "type": "string",
+          "description": "Repository root path used for the scan"
+        },
+        "git_version": {
+          "type": "string",
+          "description": "Git version used for diff scanning"
+        },
+        "triggered_by": {
+          "type": "string",
+          "enum": ["step_complete", "manual", "scheduled", "on_error"],
+          "description": "What triggered this scan"
+        },
+        "previous_scan_id": {
+          "type": "string",
+          "description": "ID of the previous scan in sequence (for delta tracking)"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "scan_id": "run-123-build-code-impl-1703847600000",
+      "timestamp": "2024-12-29T12:00:00Z",
+      "scan_type": "diff_scan",
+      "source": {
+        "step_id": "code-impl",
+        "flow_key": "build",
+        "run_id": "run-123",
+        "agent_key": "code-implementer"
+      },
+      "diff_result": {
+        "files": [
+          {
+            "path": "src/auth.py",
+            "status": "A",
+            "insertions": 45,
+            "deletions": 0
+          },
+          {
+            "path": "tests/test_auth.py",
+            "status": "A",
+            "insertions": 30,
+            "deletions": 0
+          }
+        ],
+        "total_insertions": 75,
+        "total_deletions": 0,
+        "untracked": [],
+        "staged": ["src/auth.py", "tests/test_auth.py"],
+        "scan_hash": "a1b2c3d4e5f6789012345678901234567890123456789012345678901234abcd",
+        "summary": "2 files changed, +75, -0"
+      },
+      "markers": [
+        {
+          "marker_id": "marker-001",
+          "marker_type": "diff_scan",
+          "evidence_hash": "a1b2c3d4e5f6789012345678901234567890123456789012345678901234abcd",
+          "claim": "Created src/auth.py with login function",
+          "reality": "File src/auth.py exists with 45 lines, status=A (added)",
+          "match": true,
+          "confidence": 0.95
+        }
+      ],
+      "verification_status": "VERIFIED",
+      "metadata": {
+        "scanner_version": "1.0.0",
+        "scan_duration_ms": 150,
+        "triggered_by": "step_complete"
+      }
+    },
+    {
+      "scan_id": "run-456-build-test-exec-1703847700000",
+      "timestamp": "2024-12-29T12:01:40Z",
+      "scan_type": "test_parse",
+      "source": {
+        "step_id": "test-exec",
+        "flow_key": "build",
+        "run_id": "run-456",
+        "agent_key": "test-executor"
+      },
+      "test_result": {
+        "total_tests": 15,
+        "passed": 13,
+        "failed": 2,
+        "skipped": 0,
+        "failures": [
+          {
+            "test_name": "test_auth::test_login_invalid_password",
+            "test_file": "tests/test_auth.py",
+            "test_line": 45,
+            "error_message": "AssertionError: Expected 401, got 500",
+            "stack_trace": "File tests/test_auth.py, line 47\n  assert response.status_code == 401",
+            "failure_type": "assertion",
+            "expected": "401",
+            "actual": "500"
+          },
+          {
+            "test_name": "test_auth::test_session_timeout",
+            "test_file": "tests/test_auth.py",
+            "test_line": 78,
+            "error_message": "TimeoutError: Session did not expire",
+            "failure_type": "timeout"
+          }
+        ],
+        "duration_ms": 3450,
+        "coverage_percent": 78.5,
+        "test_framework": "pytest"
+      },
+      "markers": [
+        {
+          "marker_id": "marker-002",
+          "marker_type": "test_result",
+          "evidence_hash": "b2c3d4e5f6789012345678901234567890123456789012345678901234abcde",
+          "claim": "All 15 tests passed",
+          "reality": "13 passed, 2 failed (test_login_invalid_password, test_session_timeout)",
+          "match": false,
+          "discrepancy": "Agent claimed all tests passed but 2 tests failed: test_login_invalid_password (assertion error: expected 401, got 500), test_session_timeout (timeout error)"
+        }
+      ],
+      "verification_status": "DISCREPANCY",
+      "discrepancy_summary": "Agent claimed all 15 tests passed, but forensic analysis of test output shows 2 failures."
+    }
+  ]
+}

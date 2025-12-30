@@ -49,6 +49,7 @@ class FileDiff:
         deletions: Number of lines removed.
         old_path: Original path for renames (None if not a rename).
     """
+
     path: str
     status: str  # A, M, D, R, C, U, etc.
     insertions: int = 0
@@ -78,6 +79,7 @@ class FileChanges:
         staged: List of staged file paths (in index but not committed).
         scan_error: Error message if scan failed (None on success).
     """
+
     files: List[FileDiff] = field(default_factory=list)
     total_insertions: int = 0
     total_deletions: int = 0
@@ -243,10 +245,10 @@ def _parse_status_line(line: str) -> Optional[Tuple[str, str, Optional[str]]]:
 
     # The path starts after the status and any separator space
     # Position 2 might be a space separator, or the path might start at 2
-    if len(line) > 2 and line[2] == ' ':
+    if len(line) > 2 and line[2] == " ":
         rest = line[3:]
     else:
-        rest = line[2:].lstrip(' ')
+        rest = line[2:].lstrip(" ")
 
     if not rest:
         return None
@@ -341,7 +343,7 @@ def scan_file_changes_sync(
 
             # Determine if staged (first char is not space/?)
             index_status = status[0] if status else " "
-            worktree_status = status[1] if len(status) > 1 else " "
+            # worktree_status would be status[1], but currently unused
 
             if include_staged and index_status not in (" ", "?"):
                 staged_files.append(path)
@@ -359,13 +361,15 @@ def scan_file_changes_sync(
                     simplified_status = char
                     break
 
-            tracked_files.append(FileDiff(
-                path=path,
-                status=simplified_status,
-                insertions=ins,
-                deletions=dels,
-                old_path=old_path,
-            ))
+            tracked_files.append(
+                FileDiff(
+                    path=path,
+                    status=simplified_status,
+                    insertions=ins,
+                    deletions=dels,
+                    old_path=old_path,
+                )
+            )
 
     result.files = tracked_files
     result.total_insertions = total_ins

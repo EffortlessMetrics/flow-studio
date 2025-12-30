@@ -2,6 +2,31 @@
     <div class="section-header">
       <h2>Flows</h2>
     </div>
+    <!-- Run Control Panel -->
+    <div class="run-control-panel" data-uiid="flow_studio.sidebar.run_control">
+      <label class="muted" style="font-size: 10px; display: block; margin-bottom: 6px;">RUN CONTROL</label>
+      <div class="run-control-buttons" data-uiid="flow_studio.sidebar.run_control.buttons">
+        <button id="run-control-play" class="run-control-btn run-control-btn--play" title="Start run" aria-label="Start run" data-uiid="flow_studio.sidebar.run_control.play">
+          <span class="run-control-icon">&#9654;</span>
+          <span class="run-control-label">Start</span>
+        </button>
+        <button id="run-control-pause" class="run-control-btn run-control-btn--pause" title="Pause run" aria-label="Pause run" data-uiid="flow_studio.sidebar.run_control.pause" disabled>
+          <span class="run-control-icon">&#10074;&#10074;</span>
+          <span class="run-control-label">Pause</span>
+        </button>
+        <button id="run-control-resume" class="run-control-btn run-control-btn--resume" title="Resume run" aria-label="Resume run" data-uiid="flow_studio.sidebar.run_control.resume" disabled style="display: none;">
+          <span class="run-control-icon">&#9654;</span>
+          <span class="run-control-label">Resume</span>
+        </button>
+        <button id="run-control-cancel" class="run-control-btn run-control-btn--stop" title="Stop run" aria-label="Stop run" data-uiid="flow_studio.sidebar.run_control.stop" disabled>
+          <span class="run-control-icon">&#9632;</span>
+          <span class="run-control-label">Stop</span>
+        </button>
+      </div>
+      <div id="run-control-status" class="run-control-status" data-uiid="flow_studio.sidebar.run_control.status">
+        <span id="run-control-status-text" class="muted">No active run</span>
+      </div>
+    </div>
     <div style="margin-bottom: 12px;" data-uiid="flow_studio.sidebar.run_selector">
       <label class="muted" style="font-size: 10px; display: block; margin-bottom: 4px;" for="run-selector">RUN</label>
       <select id="run-selector" class="run-selector" style="width: 100%;" aria-label="Select run" data-uiid="flow_studio.sidebar.run_selector.select">
@@ -28,6 +53,9 @@
         <option value="claude-step-orchestrator">Claude Stepwise</option>
         <option value="gemini-step-orchestrator">Gemini Stepwise</option>
       </select>
+    </div>
+    <!-- Inventory Counts Panel -->
+    <div id="inventory-counts-container" class="inventory-counts-container operator-only" data-uiid="flow_studio.sidebar.inventory_counts">
     </div>
     <nav id="flow-list" class="muted" role="navigation" aria-label="Flow list" data-uiid="flow_studio.sidebar.flow_list">Loading...</nav>
     <!-- Run History Panel (collapsible) -->

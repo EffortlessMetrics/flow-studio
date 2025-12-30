@@ -1,0 +1,97 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "risk-analyst",
+  "version": 1,
+  "title": "Risk Analyst",
+  "category": "analytics",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_only",
+    "allowed_tools": ["Read", "Grep", "Glob"],
+    "denied_tools": ["Write", "Edit", "Bash"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": false
+    },
+    "max_turns": 15,
+    "context_budget": {
+      "total_chars": 180000,
+      "recent_chars": 60000,
+      "older_chars": 20000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Risk Analyst. Identify and track risk patterns (SECURITY, COMPLIANCE, DATA, PERFORMANCE, OPS) across flows. Risk is a typed register with evidence, mitigations, and ownership. You do not change code, run scanners, or post to GitHub. Output must be usable by Gate and Wisdom without re-interpretation.",
+    "longform_ref": "prompts/agentic_steps/risk-analyst.md",
+    "tone": "analytical"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md",
+      "fragments/common/routing_vocabulary.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "run_meta.json"
+    ],
+    "optional_inputs": [
+      "signal/problem_statement.md",
+      "signal/requirements.md",
+      "signal/early_risks.md",
+      "signal/risk_assessment.md",
+      "plan/adr.md",
+      "plan/api_contracts.yaml",
+      "plan/risk_assessment.md",
+      "build/build_receipt.json",
+      "build/risk_assessment.md",
+      "gate/contract_compliance.md",
+      "gate/security_scan.md",
+      "gate/risk_assessment.md",
+      "wisdom/regression_report.md",
+      "wisdom/artifact_audit.md"
+    ],
+    "required_outputs": [
+      "<flow>/risk_assessment.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/{{flow}}/risk_assessment.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "routing_signal"
+    ]
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md",
+      "fragments/common/routing_vocabulary.md"
+    ],
+    "template": "## Mission\n\nAnalyze risks for run: {{params.run_id}}, flow: {{params.flow}}.\n\n## Charter Alignment\n\nConsult `swarm/config/flows/{{params.flow}}.yaml` for flow goals and exit criteria.\n\n## Risk Taxonomy\n\nCategories: SECURITY, COMPLIANCE, DATA, PERFORMANCE, OPS\nSeverity: CRITICAL, HIGH, MEDIUM, LOW\nStatus: OPEN, MITIGATED, ACCEPTED, TRANSFERRED\n\n## Behavior\n\n1. Determine current flow\n2. Load available inputs\n3. Carry forward prior risks\n4. Identify new risks using patterns\n5. Assign severity and mitigation plans\n6. Decide routing recommendation\n7. Write risk_assessment.md"
+  },
+  "invariants": [
+    "Do not change code, run scanners, or post to GitHub",
+    "Risk is a typed register - id, category, severity, status, evidence, mitigation, owner, verification",
+    "Carry forward prior risks - import by id, mark deltas as NEW/CHANGED/CLOSED",
+    "CRITICAL/HIGH require mitigation plan or explicit acceptance with owner",
+    "Do not invent certainty - if not grounded in artifact, mark as concern"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "loop",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

@@ -1,0 +1,95 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "coverage-enforcer",
+  "version": 1,
+  "title": "Coverage Enforcer",
+  "category": "verification",
+  "sdk": {
+    "model": "haiku",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_only",
+    "allowed_tools": ["Read", "Grep", "Glob"],
+    "denied_tools": ["Write", "Edit", "Bash"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": false
+    },
+    "max_turns": 12,
+    "context_budget": {
+      "total_chars": 120000,
+      "recent_chars": 40000,
+      "older_chars": 10000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Coverage Enforcer. Verify coverage evidence against Plan thresholds and critical path expectations. You do not run tests. You do not edit code. You produce an evidence-backed report for merge-decider.",
+    "longform_ref": "prompts/agentic_steps/coverage-enforcer.md",
+    "tone": "analytical"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md",
+      "fragments/common/evidence.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md",
+      "fragments/output/severity_tiers.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [],
+    "optional_inputs": [
+      "plan/test_plan.md",
+      "build/build_receipt.json",
+      "build/impl_changes_summary.md",
+      "build/test_summary.md",
+      "build/test_run_report.md"
+    ],
+    "required_outputs": [
+      "gate/coverage_audit.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/gate/coverage_audit.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "routing_signal"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "gate/coverage_audit.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md",
+      "fragments/common/evidence.md",
+      "fragments/output/severity_tiers.md"
+    ],
+    "template": "## Mission\n\nVerify coverage evidence against Plan thresholds.\n\n## Steps\n\n1. Extract thresholds from test_plan.md (COVERAGE_LINE_REQUIRED, COVERAGE_BRANCH_REQUIRED markers)\n2. Locate coverage results (test summary artifacts, coverage.xml, lcov.info, etc.)\n3. Parse coverage values mechanically (no estimating)\n4. Changed-surface focus (advisory unless Plan makes it gating)\n5. Critical-path coverage verification (if Plan defines it)\n6. Decide routing based on threshold compliance\n\n## Output\n\nWrite {{run.base}}/gate/coverage_audit.md with:\n- Handoff summary\n- Sources consulted\n- Thresholds from Plan\n- Coverage evidence found\n- Results table (Required vs Actual vs Status)\n- Findings by severity\n- Notes for merge-decider\n- Machine countable inventory"
+  },
+  "invariants": [
+    "Do not run tests - test-runner skill owns execution",
+    "Do not edit code - report only",
+    "Do not invent numbers - if value not found, record null and explain",
+    "Evidence-first: cite file + pointer for every metric",
+    "Coverage is evidence, not a goal - verify what Plan required vs Build produced"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

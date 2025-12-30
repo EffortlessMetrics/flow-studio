@@ -1,0 +1,91 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "fuzz-triager",
+  "version": 1,
+  "title": "Fuzz Triager",
+  "category": "analytics",
+  "sdk": {
+    "model": "haiku",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_only",
+    "allowed_tools": ["Read", "Grep", "Glob", "Bash"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": true,
+      "excluded_commands": ["git add", "git commit", "git push", "rm", "mv"]
+    },
+    "max_turns": 10,
+    "context_budget": {
+      "total_chars": 100000,
+      "recent_chars": 40000,
+      "older_chars": 8000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Fuzz Triager. Run configured fuzzing (opt-in) and triage crashes into a repro/worklist. Fuzzing is valuable only when the repository has a harness. You do not modify production code or tests.",
+    "longform_ref": "prompts/agentic_steps/fuzz-triager.md",
+    "tone": "analytical"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/lane_discipline.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "demo-swarm.config.json"
+    ],
+    "optional_inputs": [
+      "run_meta.json",
+      "build/subtask_context_manifest.json",
+      "plan/test_plan.md"
+    ],
+    "required_outputs": [
+      "build/fuzz_report.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/build/fuzz_report.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "routing_signal"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "build/fuzz_report.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/routing_vocabulary.md"
+    ],
+    "template": "## Mission\n\nRun configured fuzzing and triage any crashes into a prioritized worklist.\n\n## Execution\n\n1. Check for fuzz.command in demo-swarm.config.json\n2. If no config: skip fuzzing, write report explaining \"no configured fuzz harness\"\n3. Run with budget: {{params.budget_seconds|default:300}}s\n4. Triage crashes into worklist with stable IDs (FUZZ-CRASH-NNN)\n\n## Crash Worklist Items\n\nFor each distinct crash signature:\n- ID: FUZZ-CRASH-NNN\n- Target/harness\n- Minimal repro steps\n- Likely root cause area\n- Suggested regression test\n\n## Routing\n\n- No fuzz config → CONTINUE (fuzzing is opt-in)\n- Fuzz ran clean → CONTINUE\n- Crashes found → DETOUR to code-implementer\n- Tool unavailable → recommend pack-customizer\n\n## Output\n\nWrite {{run.base}}/build/fuzz_report.md with summary, crash worklist, and routing recommendation."
+  },
+  "invariants": [
+    "Do not modify production code or tests",
+    "Use only configured fuzz command - no guessing",
+    "Fuzzing is opt-in - skip gracefully if not configured",
+    "Respect the time budget",
+    "Provide repro steps for each crash"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "loop",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

@@ -374,7 +374,11 @@ class TestSpecCompiler:
             run_base=run_base,
         )
 
-        assert plan.model in ("sonnet", "haiku", "opus", "inherit")
+        # Model should be a valid tier alias (SDK-native) or full model ID (pinned)
+        valid_tiers = {"haiku", "sonnet", "opus"}
+        is_tier_alias = plan.model in valid_tiers
+        is_full_id = plan.model.startswith("claude-")
+        assert is_tier_alias or is_full_id, f"Expected tier alias or model ID, got: {plan.model}"
         assert plan.permission_mode in ("bypassPermissions", "default")
         assert len(plan.allowed_tools) > 0
         assert plan.max_turns >= 1

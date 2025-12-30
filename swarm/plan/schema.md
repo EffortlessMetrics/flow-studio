@@ -83,8 +83,8 @@ FlowGraph
     |
     +-- policy --> GraphPolicy
     |                   |
-    |                   +-- allowed_detours[]
-    |                   +-- allowed_injections[]
+    |                   +-- suggested_detours[] (advisory, not restrictive)
+    |                   +-- routing_decisions (CONTINUE, DETOUR, INJECT_FLOW, INJECT_NODES, EXTEND_GRAPH)
     |                   +-- escalation rules
     |
     +-- subflows[] --> Subflow (microloop groupings)
@@ -653,7 +653,8 @@ New fields in schemas have sensible defaults:
 | RunState | `injected_nodes` | `[]` |
 | RunState | `routing_cursor` | `null` |
 | RunState | `metrics` | `null` |
-| FlowGraph | `policy.allowed_injections` | `[]` |
+| FlowGraph | `policy.suggested_detours` | `[]` |
+| FlowGraph | `policy.routing_decisions` | `["CONTINUE"]` |
 | FlowGraph | `subflows` | `[]` |
 
 Existing JSON files load without error. The Python loader and TypeScript client check for field presence before using them.

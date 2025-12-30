@@ -351,20 +351,22 @@ generated_at: <iso8601>
 
 This ensures nothing is silently missing. Downstream can see what happened, and Flow 7 (Wisdom) can learn "why do we keep skipping X?"
 
-Derive `recommended_action` (closed enum):
+Derive `routing_decision` (closed enum):
 
-* If receipt `status: CANNOT_PROCEED` ⇒ `FIX_ENV`
-* Else if any quality gate is `CANNOT_PROCEED` ⇒ `FIX_ENV`
-* Else if `missing_required` non-empty ⇒ `RERUN` (stay in Flow 3)
-* Else ⇒ `PROCEED`
+* `CONTINUE` — Proceed on golden path (build verified, ready for next flow)
+* `DETOUR` — Inject sidequest chain (e.g., rerun specific stations)
+* `INJECT_FLOW` — Inject named flow (e.g., bounce back to Plan)
+* `INJECT_NODES` — Ad-hoc nodes for targeted fixes
+* `EXTEND_GRAPH` — Propose patch to flow graph
 
-Routing fields:
+Derive routing from receipt state:
 
-* `RERUN` = stay in current flow; `route_to_flow` and `route_to_agent` must be `null`
-* `BOUNCE` = cross-flow routing; only use when routing to a different flow
-* For `PROCEED` and `FIX_ENV`: set both route fields to `null`
+* If receipt `status: CANNOT_PROCEED` ⇒ `INJECT_NODES` (fix environment issues)
+* Else if any quality gate is `CANNOT_PROCEED` ⇒ `INJECT_NODES` (fix environment issues)
+* Else if `missing_required` non-empty ⇒ `DETOUR` (stay in Flow 3, rerun missing stations)
+* Else ⇒ `CONTINUE`
 
-Note: build-cleanup is mechanical and does not determine which fix agent to invoke. That decision is made by the orchestrator based on the specific blockers/concerns.
+Note: build-cleanup is mechanical and does not determine which fix agent to invoke. That decision is made by the orchestrator based on the specific blockers/concerns and the routing decision.
 
 ### Step 5: Write build_receipt.json (single source of truth)
 
@@ -379,14 +381,12 @@ Write `.runs/<run-id>/build/build_receipt.json`:
 
 ```json
 {
-  "schema_version": "build_receipt_v1",
+  "schema_version": "build_receipt_v2",
   "run_id": "<run-id>",
   "flow": "build",
 
   "status": "VERIFIED | UNVERIFIED | CANNOT_PROCEED",
-  "recommended_action": "PROCEED | RERUN | BOUNCE | FIX_ENV",
-  "route_to_flow": null,
-  "route_to_agent": null,
+  "routing_decision": "CONTINUE | DETOUR | INJECT_FLOW | INJECT_NODES | EXTEND_GRAPH",
 
   "missing_required": [],
   "missing_optional": [],

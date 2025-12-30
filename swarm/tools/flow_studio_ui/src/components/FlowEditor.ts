@@ -24,11 +24,22 @@ import type {
   FlowStep,
   FlowGraphNode,
   FlowGraphEdge,
+  ValidationData,
+  FlowValidationResult,
+  ValidationIssue,
+  ValidationSeverity,
+  ValidationDecision,
 } from "../domain.js";
+import { ValidationModal } from "./ValidationModal.js";
 
 // ============================================================================
 // Types
 // ============================================================================
+
+/**
+ * Validation status for display in the UI
+ */
+export type ValidationStatus = "valid" | "warning" | "error" | "unknown";
 
 /**
  * Editor state for a flow
@@ -40,9 +51,14 @@ interface EditorState {
   etag: string;
   isDirty: boolean;
   isSaving: boolean;
+  isValidating: boolean;
   error: string | null;
   undoStack: FlowGraph[];
   redoStack: FlowGraph[];
+  /** Current validation status for UI indicator */
+  validationStatus: ValidationStatus;
+  /** Last validation result */
+  lastValidation: FlowValidationResult | null;
 }
 
 /**
@@ -68,6 +84,10 @@ interface FlowEditorOptions {
   ) => Promise<ConflictResolution>;
   /** Auto-save interval in ms (0 to disable) */
   autoSaveInterval?: number;
+  /** Skip validation modal and always validate silently (for auto-save) */
+  skipValidationModal?: boolean;
+  /** Callback when validation completes (for UI updates) */
+  onValidation?: (result: FlowValidationResult) => void;
 }
 
 // ============================================================================
@@ -89,10 +109,12 @@ export class FlowEditor {
   private options: FlowEditorOptions;
   private autoSaveTimer: ReturnType<typeof setInterval> | null = null;
   private maxUndoDepth = 50;
+  private validationModal: ValidationModal | null = null;
 
   constructor(options: FlowEditorOptions = {}) {
     this.options = {
       autoSaveInterval: 0,
+      skipValidationModal: false,
       ...options,
     };
 
@@ -122,9 +144,12 @@ export class FlowEditor {
       etag: graphResponse.etag,
       isDirty: false,
       isSaving: false,
+      isValidating: false,
       error: null,
       undoStack: [],
       redoStack: [],
+      validationStatus: "unknown",
+      lastValidation: null,
     };
 
     this.notifyChange();
@@ -374,9 +399,18 @@ export class FlowEditor {
   // ==========================================================================
 
   /**
-   * Save the current graph state
+   * Save the current graph state with validation.
+   *
+   * Validation workflow:
+   * 1. Run validation before save
+   * 2. If critical errors: block save, show modal, return to editor
+   * 3. If warnings: show modal with "Save Anyway" option
+   * 4. If no issues or user confirms: proceed with save
+   *
+   * @param options.skipValidation - Skip validation check (use for forced saves)
+   * @param options.silent - Skip validation modal (for auto-save, log issues only)
    */
-  async save(): Promise<EditorState> {
+  async save(options?: { skipValidation?: boolean; silent?: boolean }): Promise<EditorState> {
     if (!this.state) {
       throw new Error("No flow loaded");
     }
@@ -385,6 +419,63 @@ export class FlowEditor {
       return this.state;
     }
 
+    const skipValidation = options?.skipValidation ?? false;
+    const silent = options?.silent ?? this.options.skipValidationModal ?? false;
+
+    // Run validation unless skipped
+    if (!skipValidation) {
+      const validationResult = await this.validateForSave();
+
+      // Update state with validation result
+      this.state.lastValidation = validationResult;
+      this.state.validationStatus = this.getValidationStatus(validationResult);
+
+      // Notify validation callback
+      if (this.options.onValidation) {
+        this.options.onValidation(validationResult);
+      }
+
+      // Check for issues
+      const hasCritical = validationResult.summary.critical > 0;
+      const hasWarnings = validationResult.summary.warning > 0;
+
+      if (hasCritical || hasWarnings) {
+        if (silent) {
+          // Silent mode (auto-save): log issues, block on critical
+          if (hasCritical) {
+            console.warn(
+              `[FlowEditor] Save blocked: ${validationResult.summary.critical} critical error(s)`,
+              validationResult.issues.filter((i) => i.severity === "CRITICAL")
+            );
+            this.state.error = `Cannot save: ${validationResult.summary.critical} critical error(s)`;
+            this.notifyChange();
+            throw new Error(this.state.error);
+          }
+          // Warnings only in silent mode: proceed with save
+          console.warn(
+            `[FlowEditor] Saving with ${validationResult.summary.warning} warning(s)`,
+            validationResult.issues.filter((i) => i.severity === "WARNING")
+          );
+        } else {
+          // Interactive mode: show validation modal
+          const decision = await this.showValidationModal(validationResult);
+
+          if (decision === "fix" || decision === "cancel") {
+            // User chose to fix issues or cancel
+            this.notifyChange();
+            throw new Error("Save cancelled: User chose to fix validation issues");
+          }
+
+          // decision === "save": user confirmed save anyway (warnings only)
+          if (hasCritical) {
+            // This shouldn't happen since modal blocks on critical, but be safe
+            throw new Error("Cannot save: Critical errors must be fixed first");
+          }
+        }
+      }
+    }
+
+    // Proceed with actual save
     this.state.isSaving = true;
     this.state.error = null;
     this.notifyChange();
@@ -432,6 +523,9 @@ export class FlowEditor {
       this.state.undoStack = [];
       this.state.redoStack = [];
 
+      // Update validation status to valid after successful save
+      this.state.validationStatus = "valid";
+
       if (this.options.onSave) {
         this.options.onSave(this.state);
       }
@@ -450,6 +544,29 @@ export class FlowEditor {
 
       throw err;
     }
+  }
+
+  /**
+   * Show the validation modal and wait for user decision.
+   */
+  private async showValidationModal(result: FlowValidationResult): Promise<ValidationDecision> {
+    if (!this.validationModal) {
+      this.validationModal = new ValidationModal();
+    }
+    return this.validationModal.show(result);
+  }
+
+  /**
+   * Convert validation result to status indicator value.
+   */
+  private getValidationStatus(result: FlowValidationResult): ValidationStatus {
+    if (result.summary.critical > 0) {
+      return "error";
+    }
+    if (result.summary.warning > 0) {
+      return "warning";
+    }
+    return "valid";
   }
 
   // ==========================================================================
@@ -605,14 +722,251 @@ export class FlowEditor {
   // ==========================================================================
 
   /**
-   * Validate the current flow
+   * Validate the current flow (returns raw API response)
    */
-  async validate(): Promise<import("../domain.js").ValidationData> {
+  async validate(): Promise<ValidationData> {
     if (!this.state) {
       throw new Error("No flow loaded");
     }
 
     return flowStudioApi.validateFlow(this.state.flowKey);
+  }
+
+  /**
+   * Validate the current flow for save operation.
+   * Returns a structured FlowValidationResult with severity categorization.
+   */
+  async validateForSave(): Promise<FlowValidationResult> {
+    if (!this.state) {
+      throw new Error("No flow loaded");
+    }
+
+    this.state.isValidating = true;
+    this.notifyChange();
+
+    try {
+      // Get raw validation from API
+      const rawValidation = await this.validate();
+
+      // Also perform local graph validation
+      const localIssues = this.validateGraph();
+
+      // Transform API validation to our format
+      const apiIssues = this.transformValidationData(rawValidation);
+
+      // Combine all issues
+      const allIssues = [...localIssues, ...apiIssues];
+
+      // Calculate summary
+      const summary = {
+        critical: allIssues.filter((i) => i.severity === "CRITICAL").length,
+        warning: allIssues.filter((i) => i.severity === "WARNING").length,
+        info: allIssues.filter((i) => i.severity === "INFO").length,
+      };
+
+      const result: FlowValidationResult = {
+        valid: summary.critical === 0,
+        issues: allIssues,
+        summary,
+      };
+
+      this.state.isValidating = false;
+      this.notifyChange();
+
+      return result;
+    } catch (err) {
+      this.state.isValidating = false;
+      this.notifyChange();
+      throw err;
+    }
+  }
+
+  /**
+   * Perform local graph validation for structural issues.
+   * These are CRITICAL issues that should block save.
+   */
+  private validateGraph(): ValidationIssue[] {
+    if (!this.state) return [];
+
+    const issues: ValidationIssue[] = [];
+    const { nodes, edges } = this.state.graph;
+    const nodeIds = new Set(nodes.map((n) => n.data.id));
+
+    // Check for nodes with missing required fields
+    for (let i = 0; i < nodes.length; i++) {
+      const node = nodes[i];
+      const path = `nodes[${i}]`;
+
+      // Check for missing ID
+      if (!node.data.id || node.data.id.trim() === "") {
+        issues.push({
+          code: "MISSING_NODE_ID",
+          severity: "CRITICAL",
+          message: "Node is missing a required ID",
+          path: `${path}.data.id`,
+          fix: "Provide a unique ID for this node",
+        });
+      }
+
+      // Check for missing label
+      if (!node.data.label || node.data.label.trim() === "") {
+        issues.push({
+          code: "MISSING_NODE_LABEL",
+          severity: "CRITICAL",
+          message: `Node "${node.data.id || "(unnamed)"}" is missing a required label`,
+          path: `${path}.data.label`,
+          elementId: node.data.id,
+          fix: "Provide a label for this node",
+        });
+      }
+
+      // Check for missing type
+      if (!node.data.type) {
+        issues.push({
+          code: "MISSING_NODE_TYPE",
+          severity: "CRITICAL",
+          message: `Node "${node.data.id || "(unnamed)"}" is missing a required type`,
+          path: `${path}.data.type`,
+          elementId: node.data.id,
+          fix: "Specify the node type (step, agent, or artifact)",
+        });
+      }
+    }
+
+    // Check for edges with broken references
+    for (let i = 0; i < edges.length; i++) {
+      const edge = edges[i];
+      const path = `edges[${i}]`;
+
+      // Check for missing source
+      if (!edge.data.source) {
+        issues.push({
+          code: "MISSING_EDGE_SOURCE",
+          severity: "CRITICAL",
+          message: `Edge "${edge.data.id}" is missing a source node`,
+          path: `${path}.data.source`,
+          elementId: edge.data.id,
+          fix: "Specify the source node for this edge",
+        });
+      } else if (!nodeIds.has(edge.data.source)) {
+        issues.push({
+          code: "BROKEN_EDGE_SOURCE",
+          severity: "CRITICAL",
+          message: `Edge "${edge.data.id}" references non-existent source node "${edge.data.source}"`,
+          path: `${path}.data.source`,
+          elementId: edge.data.id,
+          fix: "Connect the edge to an existing node or remove it",
+        });
+      }
+
+      // Check for missing target
+      if (!edge.data.target) {
+        issues.push({
+          code: "MISSING_EDGE_TARGET",
+          severity: "CRITICAL",
+          message: `Edge "${edge.data.id}" is missing a target node`,
+          path: `${path}.data.target`,
+          elementId: edge.data.id,
+          fix: "Specify the target node for this edge",
+        });
+      } else if (!nodeIds.has(edge.data.target)) {
+        issues.push({
+          code: "BROKEN_EDGE_TARGET",
+          severity: "CRITICAL",
+          message: `Edge "${edge.data.id}" references non-existent target node "${edge.data.target}"`,
+          path: `${path}.data.target`,
+          elementId: edge.data.id,
+          fix: "Connect the edge to an existing node or remove it",
+        });
+      }
+    }
+
+    // Check for duplicate node IDs
+    const seenIds = new Set<string>();
+    for (const node of nodes) {
+      if (node.data.id) {
+        if (seenIds.has(node.data.id)) {
+          issues.push({
+            code: "DUPLICATE_NODE_ID",
+            severity: "CRITICAL",
+            message: `Duplicate node ID: "${node.data.id}"`,
+            elementId: node.data.id,
+            fix: "Ensure all nodes have unique IDs",
+          });
+        }
+        seenIds.add(node.data.id);
+      }
+    }
+
+    return issues;
+  }
+
+  /**
+   * Transform API ValidationData into ValidationIssue array.
+   * Maps FR check failures to our severity levels.
+   */
+  private transformValidationData(data: ValidationData): ValidationIssue[] {
+    const issues: ValidationIssue[] = [];
+
+    // Map check status to severity
+    const statusToSeverity = (status: "pass" | "fail" | "warn"): ValidationSeverity | null => {
+      switch (status) {
+        case "fail":
+          return "CRITICAL";
+        case "warn":
+          return "WARNING";
+        default:
+          return null;
+      }
+    };
+
+    // Process flow validation for current flow
+    if (this.state) {
+      const flowValidation = data.flows[this.state.flowKey];
+      if (flowValidation) {
+        // Process FR checks
+        for (const [checkId, check] of Object.entries(flowValidation.checks)) {
+          const severity = statusToSeverity(check.status);
+          if (severity) {
+            issues.push({
+              code: checkId,
+              severity,
+              message: check.message || `Check ${checkId} ${check.status}`,
+              fix: check.fix,
+            });
+          }
+        }
+
+        // Process detailed issues
+        if (flowValidation.issues) {
+          for (const issue of flowValidation.issues) {
+            issues.push({
+              code: issue.error_type,
+              severity: "CRITICAL",
+              message: issue.problem,
+              fix: issue.fix_action,
+            });
+          }
+        }
+      }
+    }
+
+    // Check for missing teaching notes (WARNING level)
+    if (this.state?.detail?.steps) {
+      for (const step of this.state.detail.steps) {
+        if (!step.teaching_note && !step.teaching_notes) {
+          issues.push({
+            code: "MISSING_TEACHING_NOTE",
+            severity: "WARNING",
+            message: `Step "${step.id}" is missing teaching notes`,
+            elementId: step.id,
+            fix: "Add teaching notes to help users understand this step",
+          });
+        }
+      }
+    }
+
+    return issues;
   }
 
   /**
@@ -629,6 +983,16 @@ export class FlowEditor {
     return flowStudioApi.compileFlow(this.state.flowKey, stepId, runId);
   }
 
+  /**
+   * Get the current validation status
+   */
+  getValidationState(): { status: ValidationStatus; result: FlowValidationResult | null } {
+    return {
+      status: this.state?.validationStatus ?? "unknown",
+      result: this.state?.lastValidation ?? null,
+    };
+  }
+
   // ==========================================================================
   // Auto-save
   // ==========================================================================
@@ -642,9 +1006,10 @@ export class FlowEditor {
     }
 
     this.autoSaveTimer = setInterval(async () => {
-      if (this.state?.isDirty && !this.state.isSaving) {
+      if (this.state?.isDirty && !this.state.isSaving && !this.state.isValidating) {
         try {
-          await this.save();
+          // Auto-save uses silent mode to avoid modal interruptions
+          await this.save({ silent: true });
         } catch (err) {
           console.error("Auto-save failed", err);
         }
@@ -691,6 +1056,10 @@ export class FlowEditor {
    */
   destroy(): void {
     this.stopAutoSave();
+    if (this.validationModal) {
+      this.validationModal.destroy();
+      this.validationModal = null;
+    }
     this.state = null;
   }
 }

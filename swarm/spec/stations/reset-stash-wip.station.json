@@ -1,0 +1,86 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "reset-stash-wip",
+  "version": 1,
+  "title": "Reset: Stash WIP",
+  "category": "infra",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "full_access",
+    "allowed_tools": ["Read", "Bash", "Grep", "Glob", "Write"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": true,
+      "excluded_commands": ["rm -rf", "git push --force", "git reset --hard", "git clean -fd", "git stash drop", "git stash pop"]
+    },
+    "max_turns": 10,
+    "context_budget": {
+      "total_chars": 100000,
+      "recent_chars": 40000,
+      "older_chars": 10000
+    }
+  },
+  "identity": {
+    "system_append": "You are executing the Stash WIP step in Flow 8 (Reset). Your single task is to stash all uncommitted work (staged, unstaged, and untracked) with a descriptive message that enables reliable recovery. NEVER lose uncommitted work. NEVER drop stash automatically.",
+    "longform_ref": "prompts/steps/reset/stash_wip.md",
+    "tone": "neutral"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "reset/diagnose_report.md"
+    ],
+    "optional_inputs": [],
+    "required_outputs": [
+      "reset/stash_report.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/reset/stash_report.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "routing_signal"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "reset/stash_report.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nSafely preserve any work-in-progress changes before branch synchronization operations.\n\n## Constraints\n\n- NEVER lose uncommitted work\n- Always use --include-untracked flag\n- Always provide descriptive stash message\n- Verify stash was created before proceeding\n- NEVER drop stash automatically (only restore_wip step may drop)\n- Use git stash apply, NOT git stash pop\n\n## Output\n\nWrite {{run.base}}/reset/stash_report.md with stash reference and file inventory."
+  },
+  "invariants": [
+    "NEVER lose uncommitted work",
+    "Always use --include-untracked flag for stash",
+    "Always provide descriptive stash message with timestamp",
+    "Verify stash was created before proceeding",
+    "NEVER drop stash automatically - only restore_wip step may drop",
+    "Record inventory of what was stashed for verification during restore"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

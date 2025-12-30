@@ -1,0 +1,223 @@
+{
+  "$schema": "../schemas/flow_graph.schema.json",
+  "id": "deploy-flow",
+  "version": 1,
+  "title": "Flow 6 - Deploy",
+  "flow_number": 6,
+  "description": "Move an approved artifact from 'ready to merge' to 'deployed' - execute deployment, verify health, create audit trail.",
+  "charter": {
+    "goal": "Execute deployment safely and produce a verified deployment decision (STABLE, INVESTIGATE, ROLLBACK, or NOT_DEPLOYED)",
+    "question": "Did the deployment succeed and is the artifact healthy?",
+    "exit_criteria": [
+      "PR merged to target branch (or NOT_DEPLOYED if Gate bounced)",
+      "Git tag and GitHub release created",
+      "CI/deployment events monitored and recorded",
+      "Smoke verification completed",
+      "deployment_decision.md produced with clear status"
+    ],
+    "non_goals": [
+      "Modifying code (deploy is read-only post-merge)",
+      "Fixing deployment failures (rollback and report only)",
+      "Making architectural decisions",
+      "Debugging production issues beyond smoke tests"
+    ],
+    "prime_directive": "Execute the merge. Verify the result. Report honestly. Never hide failures."
+  },
+  "nodes": [
+    {
+      "node_id": "decide",
+      "template_id": "repo-operator",
+      "params": {
+        "objective": "Merge PR, create git tag and GitHub release"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Execute Merge",
+        "position": {"x": 100, "y": 50},
+        "color": "#ef4444",
+        "teaching": {
+          "highlight": true,
+          "note": "Point of no return - PR gets merged and release is created"
+        }
+      }
+    },
+    {
+      "node_id": "monitor",
+      "template_id": "deploy-monitor",
+      "params": {
+        "objective": "Watch CI/deployment events for the merge commit"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Monitor CI",
+        "position": {"x": 100, "y": 130},
+        "color": "#3b82f6",
+        "teaching": {
+          "highlight": true,
+          "note": "Passive monitoring of CI events after merge"
+        }
+      }
+    },
+    {
+      "node_id": "smoke",
+      "template_id": "smoke-verifier",
+      "params": {
+        "objective": "Run health checks, verify artifact/release existence"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Smoke Test",
+        "position": {"x": 100, "y": 210},
+        "color": "#22c55e",
+        "teaching": {
+          "highlight": true,
+          "note": "Quick validation that deployment succeeded and basic functionality works"
+        }
+      }
+    },
+    {
+      "node_id": "finalize",
+      "template_id": "deploy-decider",
+      "params": {
+        "objective": "Synthesize CI + smoke results into deployment decision"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Finalize Decision",
+        "position": {"x": 100, "y": 290},
+        "color": "#3b82f6",
+        "teaching": {
+          "highlight": true,
+          "note": "Final status: STABLE, INVESTIGATE, ROLLBACK, or NOT_DEPLOYED"
+        }
+      }
+    },
+    {
+      "node_id": "report",
+      "template_id": "gh-reporter",
+      "params": {
+        "objective": "Post deployment summary to PR/issue"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Report",
+        "position": {"x": 100, "y": 370},
+        "color": "#94a3b8",
+        "teaching": {
+          "highlight": true,
+          "note": "Closing the feedback loop by posting results to the original PR/issue"
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "edge_id": "e01-decide-to-monitor",
+      "from": "decide",
+      "to": "monitor",
+      "type": "sequence"
+    },
+    {
+      "edge_id": "e02-monitor-to-smoke",
+      "from": "monitor",
+      "to": "smoke",
+      "type": "sequence"
+    },
+    {
+      "edge_id": "e03-smoke-to-finalize",
+      "from": "smoke",
+      "to": "finalize",
+      "type": "sequence"
+    },
+    {
+      "edge_id": "e04-finalize-to-report",
+      "from": "finalize",
+      "to": "report",
+      "type": "sequence"
+    }
+  ],
+  "subflows": [
+    {
+      "subflow_id": "verification-phase",
+      "title": "Verification Phase",
+      "description": "Monitor CI and run smoke tests",
+      "entry_node": "monitor",
+      "exit_nodes": ["smoke"],
+      "contained_nodes": ["monitor", "smoke"],
+      "ui": {
+        "color": "#fef3c7",
+        "collapsed_by_default": false
+      }
+    }
+  ],
+  "policy": {
+    "max_loop_iterations": 1,
+    "max_depth": 2,
+    "escalation": {
+      "on_blocked": "continue_with_concerns",
+      "max_unverified_streak": 1,
+      "escalate_on_unverified_streak": "human_review"
+    },
+    "suggested_detours": [
+      {
+        "from_nodes": ["smoke"],
+        "to_station": "deploy-monitor",
+        "condition": {
+          "field": "smoke_inconclusive",
+          "operator": "equals",
+          "value": true
+        },
+        "return_to": "next",
+        "priority": 70,
+        "max_uses": 2
+      }
+    ],
+    "suggested_injections": [],
+    "routing_decisions": {
+      "default_decision": "CONTINUE",
+      "signal_interpretation": {
+        "on_verified": "CONTINUE",
+        "on_unverified_can_iterate": "CONTINUE",
+        "on_unverified_cannot_iterate": "CONTINUE",
+        "on_blocked": "CONTINUE",
+        "on_concerns": "CONTINUE"
+      }
+    },
+    "invariants": [
+      "Deploy is read-only post-merge",
+      "No code modifications in deploy flow",
+      "Rollback does not fix - it reverts",
+      "Always produce deployment_decision.md"
+    ]
+  },
+  "defaults": {
+    "context_pack": {
+      "include_upstream_artifacts": true,
+      "include_previous_envelopes": true,
+      "max_envelopes": 10,
+      "include_scent_trail": true
+    },
+    "sdk": {
+      "model": "inherit",
+      "max_turns": 10
+    }
+  },
+  "on_complete": {
+    "next_flow": "7-wisdom",
+    "reason": "Deployment complete; proceed to wisdom extraction",
+    "pass_artifacts": [
+      "deploy/deployment_decision.md",
+      "deploy/verification_report.md",
+      "deploy/deployment_log.md"
+    ]
+  },
+  "on_failure": {
+    "next_flow": "7-wisdom",
+    "reason": "Deployment failed; proceed to wisdom to analyze failure"
+  },
+  "metadata": {
+    "author": "flow-studio-swarm",
+    "tags": ["deploy", "merge", "verification", "smoke"],
+    "cross_cutting_stations": ["repo-operator", "gh-reporter"]
+  }
+}

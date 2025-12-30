@@ -574,9 +574,9 @@ Orchestrators route on this block, not by re-reading `git_status.md`.
 
 - If `safe_to_publish: false`:
 
-  - If `needs_upstream_fix: true`  **BOUNCE** to `route_to_agent` (and optionally `route_to_flow`) with pointer to `secrets_scan.md`
+  - If `needs_upstream_fix: true` → **BOUNCE** (Navigator determines routing from handoff summary + pointer to `secrets_scan.md`)
 
-  - If `status: BLOCKED_PUBLISH`  **CANNOT_PROCEED** (mechanical failure); stop and require human intervention
+  - If `status: BLOCKED_PUBLISH` → **CANNOT_PROCEED** (mechanical failure); stop and require human intervention
 
   - Otherwise → UNVERIFIED; skip push (`publish_surface: NOT_PUSHED`). Continue with GitHub Reporting Ops in RESTRICTED mode when access allows.
 

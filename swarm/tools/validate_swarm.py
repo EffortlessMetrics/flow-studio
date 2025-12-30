@@ -22,11 +22,13 @@ Validates swarm spec/implementation alignment with two layers:
 ## What It Validates
 
 **FR-001: Bijection** — 1:1 mapping between swarm/AGENTS.md entries and .claude/agents/*.md files
+  - LEGACY: Skipped if .claude/agents/ directory does not exist (new architecture uses swarm/config/agents/)
   - Every registry entry has a corresponding file (case-sensitive)
   - Every file has a corresponding registry entry
   - Detects missing/extra files
 
 **FR-002: Frontmatter** — YAML frontmatter in agent definitions
+  - LEGACY: Skipped if .claude/agents/ directory does not exist (new architecture uses swarm/config/agents/)
   - Required fields: name, description, color, model
   - Name matches filename and registry key
   - Model is valid (inherit, haiku, sonnet, opus)
@@ -493,6 +495,9 @@ def validate_bijection(registry: Dict[str, Dict[str, Any]]) -> ValidationResult:
     """
     Validate 1:1 correspondence between AGENTS.md and .claude/agents/*.md files.
 
+    LEGACY: This check is skipped if .claude/agents/ directory does not exist.
+    The new architecture uses swarm/config/agents/ for agent configuration instead.
+
     Checks:
     - Every registry entry has a corresponding file
     - Every file has a corresponding registry entry
@@ -500,13 +505,9 @@ def validate_bijection(registry: Dict[str, Dict[str, Any]]) -> ValidationResult:
     """
     result = ValidationResult()
 
+    # LEGACY: Skip bijection check if .claude/agents/ doesn't exist
+    # The new architecture uses swarm/config/agents/ instead
     if not AGENTS_DIR.is_dir():
-        result.add_error(
-            "BIJECTION",
-            str(AGENTS_DIR),
-            "directory does not exist",
-            "Create .claude/agents/ directory"
-        )
         return result
 
     # Collect agent files
@@ -587,6 +588,9 @@ def validate_frontmatter(_registry: Dict[str, Dict[str, Any]], strict_mode: bool
     """
     Validate YAML frontmatter in all agent files.
 
+    LEGACY: This check is skipped if .claude/agents/ directory does not exist.
+    The new architecture uses swarm/config/agents/ for agent configuration instead.
+
     Checks:
     - YAML parses correctly
     - Required fields present (name, description, model)
@@ -601,6 +605,8 @@ def validate_frontmatter(_registry: Dict[str, Dict[str, Any]], strict_mode: bool
     """
     result = ValidationResult()
 
+    # LEGACY: Skip frontmatter check if .claude/agents/ doesn't exist
+    # The new architecture uses swarm/config/agents/ instead
     if not AGENTS_DIR.is_dir():
         return result
 
@@ -750,6 +756,9 @@ def validate_colors(registry: Dict[str, Dict[str, Any]]) -> ValidationResult:
     """
     Validate that agent colors match expected colors for their role_family.
 
+    LEGACY: This check is skipped if .claude/agents/ directory does not exist.
+    The new architecture uses swarm/config/agents/ for agent configuration instead.
+
     Checks:
     - Agent frontmatter has 'color' field
     - Color is valid (in VALID_COLORS)
@@ -757,6 +766,8 @@ def validate_colors(registry: Dict[str, Dict[str, Any]]) -> ValidationResult:
     """
     result = ValidationResult()
 
+    # LEGACY: Skip color check if .claude/agents/ doesn't exist
+    # The new architecture uses swarm/config/agents/ instead
     if not AGENTS_DIR.is_dir():
         return result
 
@@ -1169,6 +1180,9 @@ def validate_prompt_sections(registry: Dict[str, Dict[str, Any]], strict_mode: b
     """
     Validate that agent prompt bodies include required sections.
 
+    LEGACY: This check is skipped if .claude/agents/ directory does not exist.
+    The new architecture uses swarm/config/agents/ for agent configuration instead.
+
     FR-006: Agent Prompt Sections
     Checks for presence of these required headings after frontmatter:
     - ## Inputs (or ## Input)
@@ -1184,6 +1198,8 @@ def validate_prompt_sections(registry: Dict[str, Dict[str, Any]], strict_mode: b
     """
     result = ValidationResult()
 
+    # LEGACY: Skip prompt sections check if .claude/agents/ doesn't exist
+    # The new architecture uses swarm/config/agents/ instead
     if not AGENTS_DIR.is_dir():
         return result
 
@@ -1624,6 +1640,134 @@ def validate_flow_studio_sync() -> ValidationResult:
 
 
 # ============================================================================
+# FR-UTILITY: Utility Flow Validation
+# ============================================================================
+
+def validate_utility_flow_graphs() -> ValidationResult:
+    """
+    Validate utility flow graph specifications.
+
+    FR-UTILITY: Utility Flow Consistency
+    Checks:
+    - If is_utility_flow is true, injection_trigger should be defined
+    - If is_utility_flow is true, on_complete.next_flow should be "return" or "pause"
+    - If is_utility_flow is true, flow_number should be >= 8
+    - Utility flows should not have next_flow pointing to a flow spec ID
+    - Main SDLC flows (1-7) should not have is_utility_flow=true
+    """
+    result = ValidationResult()
+
+    flow_graphs_dir = ROOT / "swarm" / "spec" / "flows"
+
+    if not flow_graphs_dir.is_dir():
+        return result
+
+    # Valid utility flow next_flow values
+    valid_utility_next_flows = {"return", "pause"}
+
+    for graph_file in sorted(flow_graphs_dir.glob("*.graph.json")):
+        if graph_file.is_symlink():
+            continue
+
+        rel_path = graph_file.relative_to(ROOT)
+
+        try:
+            content = graph_file.read_text(encoding="utf-8")
+            graph_data = json.loads(content)
+        except json.JSONDecodeError as e:
+            result.add_error(
+                "UTILITY",
+                str(rel_path),
+                f"Invalid JSON in flow graph: {e}",
+                "Fix JSON syntax errors in the flow graph file",
+                file_path=str(graph_file)
+            )
+            continue
+        except Exception as e:
+            result.add_error(
+                "UTILITY",
+                str(rel_path),
+                f"Failed to read flow graph: {e}",
+                "Check file permissions and encoding",
+                file_path=str(graph_file)
+            )
+            continue
+
+        # Extract relevant fields
+        flow_number = graph_data.get("flow_number", 0)
+        metadata = graph_data.get("metadata", {})
+        is_utility_flow = metadata.get("is_utility_flow", False)
+        injection_trigger = metadata.get("injection_trigger")
+        on_complete = graph_data.get("on_complete", {})
+        next_flow = on_complete.get("next_flow", "")
+        flow_id = graph_data.get("id", graph_file.stem)
+
+        # Validation Rule 1: Utility flows need injection_trigger
+        if is_utility_flow and not injection_trigger:
+            result.add_error(
+                "UTILITY",
+                str(rel_path),
+                f"Utility flow '{flow_id}' is missing injection_trigger in metadata",
+                "Add 'injection_trigger' to metadata section (e.g., 'upstream_diverged', 'lint_failure')",
+                file_path=str(graph_file)
+            )
+
+        # Validation Rule 2: Utility flows should use 'return' or 'pause' for next_flow
+        if is_utility_flow:
+            if next_flow and next_flow not in valid_utility_next_flows:
+                # Check if it looks like a flow spec ID (e.g., "4-gate")
+                if re.match(r"^\d+-[a-z]+$", next_flow):
+                    result.add_error(
+                        "UTILITY",
+                        str(rel_path),
+                        f"Utility flow '{flow_id}' has on_complete.next_flow='{next_flow}' which is a flow spec ID; utility flows should use 'return' or 'pause'",
+                        "Change on_complete.next_flow to 'return' (to resume interrupted flow) or 'pause' (for human intervention)",
+                        file_path=str(graph_file)
+                    )
+                else:
+                    # Warn about unknown next_flow value
+                    result.add_warning(
+                        "UTILITY",
+                        str(rel_path),
+                        f"Utility flow '{flow_id}' has unusual on_complete.next_flow='{next_flow}'; expected 'return' or 'pause'",
+                        "Consider using 'return' or 'pause' for utility flows",
+                        file_path=str(graph_file)
+                    )
+
+        # Validation Rule 3: Utility flows should have flow_number >= 8
+        if is_utility_flow and flow_number < 8:
+            result.add_error(
+                "UTILITY",
+                str(rel_path),
+                f"Utility flow '{flow_id}' has flow_number={flow_number}; utility flows should use 8+ (main SDLC flows use 1-7)",
+                "Change flow_number to 8 or higher to indicate this is a utility flow",
+                file_path=str(graph_file)
+            )
+
+        # Validation Rule 4: Main SDLC flows (1-7) should not have is_utility_flow=true
+        if flow_number >= 1 and flow_number <= 7 and is_utility_flow:
+            result.add_error(
+                "UTILITY",
+                str(rel_path),
+                f"Flow '{flow_id}' (flow_number={flow_number}) is marked as utility flow but uses SDLC flow number (1-7)",
+                "Either remove is_utility_flow from metadata, or change flow_number to 8+",
+                file_path=str(graph_file)
+            )
+
+        # Validation Rule 5: If injection_trigger is defined but is_utility_flow is not true, warn
+        if injection_trigger and not is_utility_flow:
+            result.add_warning(
+                "UTILITY",
+                str(rel_path),
+                f"Flow '{flow_id}' has injection_trigger='{injection_trigger}' but is_utility_flow is not true",
+                "Add 'is_utility_flow: true' to metadata if this is a utility flow",
+                file_path=str(graph_file)
+            )
+
+    return result
+
+
+# ============================================================================
 # FR-006: Banned Microloop Phrases (Design Constraint Enforcement)
 # ============================================================================
 
@@ -1941,10 +2085,10 @@ class ValidatorRunner:
         Run agent-related validation checks.
 
         Includes:
-        - FR-CONF-001: Config coverage validation
-        - FR-001: Bijection validation
-        - FR-002: Frontmatter validation
-        - FR-002b: Color validation
+        - FR-CONF-001: Config coverage validation (new architecture)
+        - FR-001: Bijection validation (LEGACY: skipped if .claude/agents/ doesn't exist)
+        - FR-002: Frontmatter validation (LEGACY: skipped if .claude/agents/ doesn't exist)
+        - FR-002b: Color validation (LEGACY: skipped if .claude/agents/ doesn't exist)
 
         Returns:
             ValidationResult with agent-related errors and warnings
@@ -2022,6 +2166,7 @@ class ValidatorRunner:
         - Agent validity
         - Documentation completeness
         - Flow Studio sync (optional)
+        - Utility flow consistency (FR-UTILITY)
 
         Returns:
             ValidationResult with flow invariant errors and warnings
@@ -2060,6 +2205,11 @@ class ValidatorRunner:
         flow_studio_result = validate_flow_studio_sync()
         result.extend(flow_studio_result)
         self._debug_print(f"Flow-studio-sync check: {len(flow_studio_result.warnings)} warnings")
+
+        # Invariant 6: Utility flow validation (flow graph JSON files)
+        utility_flow_result = validate_utility_flow_graphs()
+        result.extend(utility_flow_result)
+        self._debug_print(f"Utility-flow check: {len(utility_flow_result.errors)} errors, {len(utility_flow_result.warnings)} warnings")
 
         return result
 
@@ -2565,9 +2715,9 @@ def print_json_output(result: ValidationResult, registry: Dict[str, Dict[str, An
 def print_success(result: ValidationResult) -> None:
     """Print success message to stdout, including warnings if any."""
     print("Swarm validation PASSED.")
-    print("  ✓ All agents conform to Claude Code platform spec")
-    print("  ✓ All agents follow swarm design constraints")
-    print("  ✓ Flow specs reference valid agents")
+    print("  [PASS] All agents conform to Claude Code platform spec")
+    print("  [PASS] All agents follow swarm design constraints")
+    print("  [PASS] Flow specs reference valid agents")
 
     # Print warnings if any (they don't fail validation)
     if result.has_warnings():
@@ -2584,7 +2734,7 @@ def print_success(result: ValidationResult) -> None:
             warnings = warnings_by_type[warn_type]
             print(f"\n{warn_type} Warnings ({len(warnings)}):", file=sys.stderr)
             for warning in warnings:
-                print(warning.format().replace("✗", "⚠"), file=sys.stderr)
+                print(warning.format().replace("[FAIL]", "[WARN]"), file=sys.stderr)
 
         print("\nNote: Warnings indicate swarm design guideline violations.", file=sys.stderr)
         print("      Use --strict flag to treat warnings as errors.", file=sys.stderr)
@@ -2620,7 +2770,7 @@ def print_errors(result: ValidationResult) -> None:
             warnings = warnings_by_type[warn_type]
             print(f"\n{warn_type} Warnings ({len(warnings)}):", file=sys.stderr)
             for warning in warnings:
-                print(warning.format().replace("✗", "⚠"), file=sys.stderr)
+                print(warning.format().replace("[FAIL]", "[WARN]"), file=sys.stderr)
 
         print("\nNote: Warnings indicate swarm design guideline violations.", file=sys.stderr)
         print("      Use --strict flag to treat warnings as errors.", file=sys.stderr)

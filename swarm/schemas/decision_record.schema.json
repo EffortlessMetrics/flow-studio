@@ -1,0 +1,81 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://swarm.dev/schemas/decision_record.schema.json",
+  "title": "DecisionRecord",
+  "description": "A structured record of a decision made during flow execution. Decisions are significant choices made by agents that affect the direction of work.",
+  "type": "object",
+  "required": [
+    "decision_id",
+    "flow",
+    "step",
+    "agent",
+    "decision_type",
+    "subject",
+    "decision",
+    "rationale"
+  ],
+  "properties": {
+    "decision_id": {
+      "type": "string",
+      "description": "Unique identifier for this decision."
+    },
+    "flow": {
+      "type": "string",
+      "description": "Flow key where this decision was made (e.g., 'signal', 'plan', 'build')."
+    },
+    "step": {
+      "type": "string",
+      "description": "Step ID where this decision was made."
+    },
+    "agent": {
+      "type": "string",
+      "description": "Agent key that made this decision."
+    },
+    "decision_type": {
+      "type": "string",
+      "description": "Category of decision (e.g., 'design', 'implementation', 'routing', 'test_strategy', 'architecture')."
+    },
+    "subject": {
+      "type": "string",
+      "description": "What the decision is about (e.g., 'API design', 'test strategy', 'error handling')."
+    },
+    "decision": {
+      "type": "string",
+      "description": "The actual decision made."
+    },
+    "rationale": {
+      "type": "string",
+      "description": "Why this decision was made."
+    },
+    "supporting_evidence": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "Evidence that supports this decision (file paths, quotes, references)."
+    },
+    "conditions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "Conditions under which this decision applies."
+    },
+    "assumptions_applied": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "IDs of assumptions that influenced this decision."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when this decision was recorded."
+    }
+  },
+  "additionalProperties": false
+}

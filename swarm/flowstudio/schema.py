@@ -552,3 +552,97 @@ class RunEventsResponse(BaseModel):
     """Response for GET /api/runs/{run_id}/events."""
     run_id: str = Field(description="Run identifier")
     events: List[RunEventModel] = Field(description="List of events for the run")
+
+
+# =============================================================================
+# Model Policy
+# =============================================================================
+
+
+class ModelPolicyRequest(BaseModel):
+    """Request parameters for model policy preview."""
+    category: str = Field(description="Station category (e.g., implementation, critic, shaping)")
+    model: str = Field(description="Model value to resolve (e.g., inherit, haiku, sonnet, opus)")
+
+
+class EffectiveModel(BaseModel):
+    """Resolved effective model information."""
+    tier: str = Field(description="Resolved tier alias (haiku, sonnet, opus)")
+    model_id: str = Field(description="Full model ID for context budget computation")
+
+
+class ModelPolicyPreviewResponse(BaseModel):
+    """Response for GET /api/model-policy/preview endpoint."""
+    requested: ModelPolicyRequest = Field(description="The original request parameters")
+    effective: EffectiveModel = Field(description="The resolved effective model")
+    resolution_chain: List[str] = Field(
+        description="Chain of resolution steps (e.g., ['inherit -> category', 'category -> group', 'group -> tier'])"
+    )
+
+
+class CategoryAssignment(BaseModel):
+    """Model assignment for a station category."""
+    tier_name: str = Field(description="Tier name from policy (economy, standard, primary, elite, edge)")
+    tier_alias: str = Field(description="Resolved tier alias (haiku, sonnet, opus)")
+    model_id: str = Field(description="Full model ID for context budget computation")
+
+
+class ModelPolicyMatrixResponse(BaseModel):
+    """Response for GET /api/model-policy/matrix endpoint."""
+    user_primary: str = Field(description="User's configured primary model (sonnet or opus)")
+    tiers: Dict[str, str] = Field(
+        description="Tier definitions mapping tier names to aliases (e.g., {'economy': 'haiku'})"
+    )
+    assignments: Dict[str, CategoryAssignment] = Field(
+        description="Model assignments per station category"
+    )
+
+
+# =============================================================================
+# Station Spec Compilation Preview
+# =============================================================================
+
+
+class CompilePreviewRequest(BaseModel):
+    """Request body for POST /api/station/compile-preview."""
+    flow_id: str = Field(description="Flow identifier (e.g., '3-build')")
+    step_id: str = Field(description="Step identifier within the flow (e.g., '3.3')")
+    station_id: str = Field(description="Station identifier (e.g., 'code-implementer')")
+    run_id: Optional[str] = Field(None, description="Optional run ID for context resolution")
+
+
+class SdkOptionsModel(BaseModel):
+    """SDK options for Claude execution."""
+    model: str = Field(description="Full model ID")
+    tools: List[str] = Field(description="Allowed tools list")
+    permission_mode: str = Field(description="Permission mode (default, bypassPermissions, planMode)")
+    max_turns: int = Field(description="Maximum conversation turns")
+    sandbox_enabled: bool = Field(description="Whether sandbox mode is enabled")
+    cwd: str = Field(description="Working directory")
+
+
+class VerificationModel(BaseModel):
+    """Verification requirements for a step."""
+    required_artifacts: List[str] = Field(default_factory=list, description="Required artifact paths")
+    verification_commands: List[str] = Field(default_factory=list, description="Verification commands to run")
+
+
+class TraceabilityModel(BaseModel):
+    """Traceability metadata for audit trail."""
+    prompt_hash: str = Field(description="SHA-256 truncated hash of prompts")
+    compiled_at: str = Field(description="ISO timestamp of compilation")
+    compiler_version: str = Field(description="Compiler version")
+    station_version: int = Field(description="Station spec version")
+    flow_version: int = Field(description="Flow spec version")
+
+
+class CompilePreviewResponse(BaseModel):
+    """Response for POST /api/station/compile-preview."""
+    flow_id: str = Field(description="Flow identifier")
+    step_id: str = Field(description="Step identifier")
+    station_id: str = Field(description="Station identifier")
+    system_prompt: str = Field(description="Full compiled system prompt")
+    user_prompt: str = Field(description="Full compiled user prompt")
+    sdk_options: SdkOptionsModel = Field(description="SDK execution options")
+    verification: VerificationModel = Field(description="Verification requirements")
+    traceability: TraceabilityModel = Field(description="Traceability metadata")

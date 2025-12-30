@@ -25,12 +25,12 @@ Do **not** append into other artifacts.
 
 ## Routing Guidance
 
-Use natural language in your handoff to communicate next steps:
-- No actionable regressions found → recommend proceeding
-- Code regressions with clear ownership → recommend code-implementer or fixer to address
-- Test failures requiring test changes → recommend test-author
-- Spec/design ambiguity causing regressions → recommend routing to Flow 1 (requirements) or Flow 2 (design)
-- High-impact regressions with unclear ownership → recommend proceeding with blockers documented
+Use the routing vocabulary in your handoff to communicate next steps:
+- No actionable regressions found → `CONTINUE` (proceed to next step)
+- Code regressions with clear ownership → `DETOUR` to code-implementer or fixer (fix and return)
+- Test failures requiring test changes → `DETOUR` to test-author (fix and return)
+- Spec/design ambiguity causing regressions → `INJECT_FLOW` to signal (Flow 1) or plan (Flow 2) for upstream rework
+- High-impact regressions with unclear ownership → `CONTINUE` with blockers documented
 - Mechanical failure → explain what's broken and needs fixing
 
 ## Inputs (best-effort)
@@ -132,10 +132,10 @@ Severity guidance:
 
 ### 9) Decide Machine Summary routing
 - If `status: CANNOT_PROCEED` → `recommended_action: FIX_ENV`
-- If CRITICAL regressions with clear owner → `recommended_action: BOUNCE`, `route_to_flow: 3`, `route_to_agent: code-implementer|test-author`
-- If regressions imply spec/design change → `BOUNCE`, `route_to_flow: 1|2`
-- If CRITICAL and unclear → `PROCEED` (UNVERIFIED) with blockers capturing the ownership gap
-- If no actionable regressions → `PROCEED`
+- If CRITICAL regressions with clear owner → `recommended_action: DETOUR` to code-implementer or test-author (fix and return)
+- If regressions imply spec/design change → `INJECT_FLOW` to signal (Flow 1) or plan (Flow 2) for upstream rework
+- If CRITICAL and unclear → `CONTINUE` (UNVERIFIED) with blockers capturing the ownership gap
+- If no actionable regressions → `CONTINUE`
 
 ## Output format (write exactly)
 
@@ -250,10 +250,77 @@ After completing your analysis, provide a clear handoff:
 
 **What's left:** Nothing (analysis complete) OR Missing test_critique.md prevents baseline comparison.
 
-**Recommendation:** No critical regressions found - proceed. OR Found 2 critical regressions in auth tests (REG-001, REG-002) - route to test-author to fix failing assertions. OR Found 1 high-severity regression traced to commit abc123 - route to code-implementer to revert breaking change.
+**Recommendation:** No critical regressions found - CONTINUE. OR Found 2 critical regressions in auth tests (REG-001, REG-002) - DETOUR to test-author to fix failing assertions. OR Found 1 high-severity regression traced to commit abc123 - DETOUR to code-implementer to revert breaking change.
 ```
 
 The file is the audit record. The handoff is the routing signal.
+
+## Observations
+
+Record observations that may be valuable for routing or Wisdom:
+
+```json
+{
+  "observations": [
+    {
+      "category": "pattern|anomaly|risk|opportunity",
+      "observation": "What you noticed",
+      "evidence": ["file:line", "artifact_path"],
+      "confidence": 0.8,
+      "suggested_action": "Optional: what to do about it"
+    }
+  ]
+}
+```
+
+Categories:
+- **pattern**: Recurring behavior worth learning from (e.g., "Auth module regressions correlate with session changes 80% of the time", "Coverage drops consistently follow large refactors", "Same 3 tests fail together—likely shared dependency")
+- **anomaly**: Something unexpected that might indicate a problem (e.g., "Regression in unchanged code—possible transitive dependency issue", "Flaky test suddenly stable after unrelated change")
+- **risk**: Potential future issue worth tracking (e.g., "Coverage threshold barely met—next change may breach", "Regression pattern suggests test isolation issues")
+- **opportunity**: Improvement possibility for Wisdom to consider (e.g., "5 regressions traced to same author in same week—possible onboarding gap", "Recurring blame pattern suggests need for better module documentation")
+
+Include observations in the regression report under a new section:
+
+```markdown
+## Observations
+
+```json
+{
+  "observations": [
+    {
+      "category": "pattern",
+      "observation": "REG-001 and REG-003 both trace to session.ts changes—consistent coupling pattern",
+      "evidence": ["REG-001.blamed_commit", "REG-003.blamed_commit", "git log --oneline src/session/"],
+      "confidence": 0.9,
+      "suggested_action": "Document session module dependencies in architecture notes"
+    },
+    {
+      "category": "anomaly",
+      "observation": "test_payment_flow failed but blamed commit only touched auth code",
+      "evidence": ["REG-002.blamed_commit:abc123", "tests/payment/test_flow.py:45"],
+      "confidence": 0.7,
+      "suggested_action": "Investigate hidden coupling between auth and payment modules"
+    },
+    {
+      "category": "risk",
+      "observation": "Coverage dropped 2% with this change—approaching 80% threshold",
+      "evidence": ["gate/coverage_audit.md:threshold=80%", "current=81.2%"],
+      "confidence": 0.95,
+      "suggested_action": "Add coverage for new code paths before next change"
+    },
+    {
+      "category": "opportunity",
+      "observation": "3 regressions this month all traced to database migration timing",
+      "evidence": ["REG-001", "wisdom/regression_report_prev1.md:REG-005", "wisdom/regression_report_prev2.md:REG-002"],
+      "confidence": 0.85,
+      "suggested_action": "Create migration testing checklist or automated migration validation"
+    }
+  ]
+}
+```
+```
+
+Observations are NOT routing decisions—they're forensic notes for the Navigator and Wisdom. Regression patterns across multiple runs are especially valuable for process improvement.
 
 ## Philosophy
 

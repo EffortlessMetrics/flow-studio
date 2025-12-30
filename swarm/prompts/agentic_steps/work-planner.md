@@ -129,8 +129,8 @@ Both outputs must agree. `subtasks.yaml` is the source of truth for downstream a
 ## Machine Summary
 status: VERIFIED | UNVERIFIED | CANNOT_PROCEED
 recommended_action: PROCEED | RERUN | BOUNCE | FIX_ENV
-route_to_agent: <agent-name | null>
-route_to_flow: <1|2|3|4|5|6 | null>
+routing_decision: CONTINUE | DETOUR | INJECT_FLOW | INJECT_NODES | EXTEND_GRAPH
+routing_target: <flow-key or node-id | null>
 
 blockers:
   - <must change to reach VERIFIED / to proceed>

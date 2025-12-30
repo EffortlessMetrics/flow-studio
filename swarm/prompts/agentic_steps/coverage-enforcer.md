@@ -59,11 +59,14 @@ Missing inputs are **UNVERIFIED**, not mechanical failure, unless you cannot rea
 
 `PROCEED | RERUN | BOUNCE | FIX_ENV`
 
-Routing fields:
-- `route_to_flow: 1|2|3|4|5|6|7|null`
-- `route_to_agent: <agent-name|null>`
+Routing directive (one of):
+- `CONTINUE` — proceed on golden path (default when thresholds met)
+- `DETOUR` — inject sidequest chain (e.g., add coverage tests before proceeding)
+- `INJECT_FLOW` — inject named flow (e.g., bounce to Plan for policy definition)
+- `INJECT_NODES` — ad-hoc nodes (e.g., specific agent re-run)
+- `EXTEND_GRAPH` — propose patch (e.g., suggest new coverage verification step)
 
-Populate `route_to_*` **only** when `recommended_action: BOUNCE`.
+Populate routing directive **only** when `recommended_action: BOUNCE`.
 
 ## Severity model (bounded taste)
 
@@ -143,18 +146,18 @@ If Plan declares critical-path coverage expectations:
 - Verify whether evidence can support it (e.g., per-module report, package-level summary, tagged test suite).
 - If Plan expects critical-path coverage but provides no measurement method AND evidence can't support it:
   - UNVERIFIED (MAJOR)
-  - bounce to Plan to clarify measurement (`route_to_flow: 2`, `route_to_agent: test-strategist`)
+  - bounce to Plan to clarify measurement (`routing: INJECT_FLOW`, `target: plan`, `hint: test-strategist`)
 - If Plan is clear but Build didn't produce the needed artifact:
   - UNVERIFIED (MAJOR)
-  - bounce to Build to produce evidence (`route_to_flow: 3`, `route_to_agent: test-author` or null)
+  - bounce to Build to produce evidence (`routing: INJECT_NODES`, `target: test-author`)
 
 ### Step 6: Decide routing (closed enum)
 
-- Thresholds PRESENT and unmet ⇒ `BOUNCE` to Flow 3
-- Thresholds MISSING/ambiguous ⇒ `BOUNCE` to Flow 2 (define policy), but still report any observed coverage
-- Coverage evidence missing but thresholds exist ⇒ `BOUNCE` to Flow 3 (produce coverage artifacts)
-- Evidence inconsistent/ambiguous ⇒ typically `PROCEED` (UNVERIFIED with blockers) unless a clear bounce target exists
-- Everything met with consistent evidence ⇒ `PROCEED`
+- Thresholds PRESENT and unmet ⇒ `BOUNCE` with `routing: INJECT_NODES` (target: test-author)
+- Thresholds MISSING/ambiguous ⇒ `BOUNCE` with `routing: INJECT_FLOW` (target: plan), but still report any observed coverage
+- Coverage evidence missing but thresholds exist ⇒ `BOUNCE` with `routing: INJECT_NODES` (target: test-author to produce coverage artifacts)
+- Evidence inconsistent/ambiguous ⇒ typically `PROCEED` with `routing: CONTINUE` (UNVERIFIED with blockers) unless a clear bounce target exists
+- Everything met with consistent evidence ⇒ `PROCEED` with `routing: CONTINUE`
 
 ## Required Output Format (`coverage_audit.md`)
 

@@ -124,7 +124,7 @@ If `run_meta.github_ops_allowed == false` (e.g., repo mismatch):
 
 - Use orchestrator-provided `<run-id>` and `<flow>`.
 - Read `.runs/<run-id>/run_meta.json` and require `issue_number` **and** `github_repo` for posting.
-  - If either is null/missing → SKIP (do not infer), write `gh_report_status.md` with `posting_status: SKIPPED` and `recommended_action: BOUNCE`, `route_to_agent: gh-issue-manager`.
+  - If either is null/missing → SKIP (do not infer), write `gh_report_status.md` with `posting_status: SKIPPED` and `recommended_action: DETOUR` with `detour_target: gh-issue-manager` (inject issue-manager sidequest to resolve binding before retrying).
 
 ### Step 2: Confirm `gh` is available + authenticated
 

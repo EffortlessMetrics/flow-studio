@@ -1,0 +1,105 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "bdd-author",
+  "version": 1,
+  "title": "BDD Author",
+  "category": "spec",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_write",
+    "allowed_tools": ["Read", "Write", "Grep", "Glob"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": false,
+      "excluded_commands": ["git", "gh", "rm", "mv"]
+    },
+    "max_turns": 20,
+    "context_budget": {
+      "total_chars": 200000,
+      "recent_chars": 60000,
+      "older_chars": 15000
+    }
+  },
+  "identity": {
+    "system_append": "You are the BDD Author. Convert requirements into executable specifications (BDD) with strict traceability. BDD is the bridge between human intent and machine verification. Write scenarios that survive refactors (domain-first) without becoming vague: observable outcomes, strict traceability, honest assumptions.",
+    "longform_ref": "prompts/agentic_steps/bdd-author.md",
+    "tone": "neutral"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md",
+      "fragments/common/lane_discipline.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md",
+      "fragments/output/machine_summary.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "signal/requirements.md"
+    ],
+    "optional_inputs": [
+      "signal/problem_statement.md",
+      "signal/requirements_critique.md",
+      "signal/open_questions.md",
+      "signal/bdd_critique.md"
+    ],
+    "required_outputs": [
+      "signal/features/*.feature",
+      "signal/example_matrix.md",
+      "signal/verification_notes.md"
+    ],
+    "optional_outputs": [
+      "signal/open_questions.md"
+    ]
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/signal/example_matrix.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "can_further_iteration_help",
+      "proposed_next_step"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "signal/example_matrix.md",
+      "signal/verification_notes.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nConvert requirements into BDD scenarios with strict traceability.\n\n## Context\n\n{{#each inputs}}\n- {{this}}\n{{/each}}\n\n{{#if critique_exists}}\n## Critique to Address\n\nTreat CRITICAL and MAJOR items from bdd_critique.md as your worklist.\n{{/if}}\n\n## Outputs\n\n- `{{run.base}}/signal/features/*.feature` - BDD scenarios\n- `{{run.base}}/signal/example_matrix.md` - Coverage matrix\n- `{{run.base}}/signal/verification_notes.md` - Non-BDD verification strategies\n\n## Traceability Rules\n\n1. Each scenario has exactly one primary @REQ-### tag above Scenario:\n2. Every REQ must have >=1 scenario OR explicit entry in verification_notes.md\n3. Feature-level tags do NOT count for traceability\n4. Multi-REQ scenarios require justification comment above tag line\n\n## Portability Contract\n\n- Default to domain-level steps unless requirement explicitly specifies interface\n- Interface-level requires justification comment"
+  },
+  "invariants": [
+    "Write only under .runs/<run-id>/signal/: features/*.feature, example_matrix.md, verification_notes.md",
+    "No git ops - no commit/push/checkout",
+    "No secrets - never include real tokens/credentials in scenarios",
+    "Each scenario has exactly one primary @REQ-### tag above Scenario:",
+    "Every REQ must have >=1 scenario OR explicit verification_notes.md entry",
+    "Feature-level tags do NOT count for traceability",
+    "Multi-REQ scenarios require justification comment above tag line",
+    "Default to domain-level steps; interface coupling requires justification",
+    "No vague Thens ('works', 'as expected', 'appropriate')",
+    "Thens must be observable outputs/state"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "loop",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

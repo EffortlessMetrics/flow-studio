@@ -80,6 +80,16 @@ ci-validate-strict:
 quick-check:
 	uv run swarm/tools/validate_swarm.py
 
+.PHONY: lint-routing
+lint-routing:
+	@echo "Checking for deprecated routing field patterns..."
+	uv run python swarm/tools/lint_routing_fields.py
+
+.PHONY: lint-routing-strict
+lint-routing-strict:
+	@echo "Checking for deprecated routing field patterns (strict mode)..."
+	uv run python swarm/tools/lint_routing_fields.py --strict
+
 # Operator Spine: the 8 docs every operator should read
 SPINE_DOCS = README.md docs/GETTING_STARTED.md CHEATSHEET.md GLOSSARY.md \
              docs/SELFTEST_SYSTEM.md docs/FLOW_STUDIO.md REPO_MAP.md docs/VALIDATION_RULES.md

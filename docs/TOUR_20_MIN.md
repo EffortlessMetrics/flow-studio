@@ -29,24 +29,24 @@ Flow Studio opens at
 
 ## The Interface (1 min)
 
-You're looking at a 6-flow SDLC with 48 agents. Here's what you see:
+You're looking at a 7-flow SDLC with 56 agents. Here's what you see:
 
 ```text
-┌─────────────────────────────────────────────────────────┐
-│  Flow Studio   [?]                         [👤 operator] │
-├──[Signal ✓ Plan ✓ Build ✓ Gate ✓ Deploy ✓ Wisdom ✓]───┤
-├─────┬─────────────────────────────────────────┬────────┤
-│     │                                         │        │
-│  6  │      6-step SDLC Flow Graph            │Details │
-│flows│      (nodes = steps, colors = agents)  │ panel  │
-│ in  │                                         │        │
-│side │  Click nodes to see details             │        │
-│ bar │                                         │        │
-│     │                                         │        │
-└─────┴─────────────────────────────────────────┴────────┘
+┌───────────────────────────────────────────────────────────────────┐
+│  Flow Studio   [?]                                   [👤 operator] │
+├──[Signal ✓ Plan ✓ Build ✓ Review ✓ Gate ✓ Deploy ✓ Wisdom ✓]─────┤
+├─────┬───────────────────────────────────────────────────┬────────┤
+│     │                                                   │        │
+│  7  │         SDLC Flow Graph                          │Details │
+│flows│      (nodes = steps, colors = agents)            │ panel  │
+│ in  │                                                   │        │
+│side │  Click nodes to see details                       │        │
+│ bar │                                                   │        │
+│     │                                                   │        │
+└─────┴───────────────────────────────────────────────────┴────────┘
 ```
 
-**Left sidebar**: 6 flows (click to switch)
+**Left sidebar**: 7 flows (click to switch)
 **Center**: Step and agent graph for the current flow
 **Top bar**: SDLC progress across all flows (all green = complete)
 **Right panel**: Details for the selected node (3 tabs: Node, Run, Selftest)
@@ -174,6 +174,6 @@ Press `?` in Flow Studio to see all shortcuts:
 
 ## One Slide Summary
 
-> Flow Studio visualizes an agentic SDLC where 45 narrow agents implement 6 flows (Signal → Specs → Plan → Build → Gate → Deploy → Wisdom). Each flow has steps (roles), agents (specialists), and artifacts (proof). Selftest validates everything in tiers (KERNEL/GOVERNANCE/OPTIONAL). You review the receipts, not the process.
+> Flow Studio visualizes an agentic SDLC where agents implement 7 flows (Signal → Plan → Build → Review → Gate → Deploy → Wisdom). Each flow has steps (roles), agents (specialists), and artifacts (proof). Selftest validates everything in tiers (KERNEL/GOVERNANCE/OPTIONAL). You review the receipts, not the process.
 
 That's the whole idea in 30 seconds.

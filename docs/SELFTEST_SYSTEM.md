@@ -2,7 +2,7 @@
 
 > For: Platform engineers understanding the governance architecture.
 
-This document explains the selftest system: its architecture, design goals, the 16 steps, governance model, and how it integrates with the six Swarm flows.
+This document explains the selftest system: its architecture, design goals, the 16 steps, governance model, and how it integrates with the seven Swarm flows.
 
 > **First time?**
 > Try Lane B of [docs/GETTING_STARTED.md](./GETTING_STARTED.md) (10 min) to see selftest in action:
@@ -553,7 +553,7 @@ make check-flows
 **What it checks**:
 - Flow Studio FastAPI app starts successfully
 - `/api/health` returns 200 with flow and agent counts
-- `/api/flows` returns all 6 flows
+- `/api/flows` returns all 7 flows
 - `/api/graph/signal` returns nodes and edges
 - `/api/runs` includes health-check example
 
@@ -579,7 +579,7 @@ make check-flows
 FAIL flowstudio-smoke:
   /api/health returned 500
   OR
-  /api/flows returned only 5 flows (expected 6)
+  /api/flows returned only 6 flows (expected 7)
   OR
   health-check example not found in /api/runs
 ```
@@ -590,7 +590,7 @@ FAIL flowstudio-smoke:
 uv run python -m swarm.tools.flow_studio_smoke
 
 # Verify config files exist
-ls swarm/config/flows/*.yaml  # Should show 6 files
+ls swarm/config/flows/*.yaml  # Should show 7 files
 ls swarm/examples/health-check/run.json  # Should exist
 
 # Regenerate if needed

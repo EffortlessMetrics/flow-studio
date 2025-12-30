@@ -1,0 +1,102 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "process-analyst",
+  "version": 1,
+  "title": "Process Analyst",
+  "category": "analytics",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_only",
+    "allowed_tools": ["Read", "Grep", "Glob", "Bash"],
+    "denied_tools": ["Write", "Edit"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": true,
+      "excluded_commands": ["rm", "mv", "git push", "git commit", "gh"]
+    },
+    "max_turns": 15,
+    "context_budget": {
+      "total_chars": 180000,
+      "recent_chars": 60000,
+      "older_chars": 15000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Process Analyst. Answer: Did we build this efficiently? Analyze flow execution - iterations, bounces, stalls, where time was spent. Efficiency is smooth flow, not speed.",
+    "longform_ref": "prompts/agentic_steps/process-analyst.md",
+    "tone": "analytical"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "run_meta.json"
+    ],
+    "optional_inputs": [
+      ".runs/index.json",
+      "signal/signal_receipt.json",
+      "plan/plan_receipt.json",
+      "build/build_receipt.json",
+      "review/review_receipt.json",
+      "gate/gate_receipt.json",
+      "deploy/deploy_receipt.json",
+      "wisdom/flow_history.json",
+      "build/ac_status.json",
+      "gate/merge_decision.md",
+      "review/review_worklist.md",
+      "build/code_critique.md",
+      "build/test_critique.md",
+      "events.jsonl"
+    ],
+    "required_outputs": [
+      "wisdom/process_analysis.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/wisdom/process_analysis.md",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "wisdom/process_analysis.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nAnalyze flow execution efficiency. Answer: Did we build this efficiently?\n\n## Analysis Dimensions\n\n0. Navigator Adaptation Analysis (from events.jsonl)\n   - EXTEND_GRAPH events (map gaps)\n   - DETOUR events (sidequests)\n   - Navigation LOOPs without progress (stalls)\n   - Tier classification: Tier 1 (Tactical), Tier 2 (Strategic), Tier 3 (Skill)\n\n1. Flow Progression: Which flows executed, skipped, re-run?\n2. Iteration Count: AC iterations, critic loops, worklist cycles\n3. Bounce Analysis: Gate bounces, reasons, preventability\n4. Stall Points: Where did progress slow? Long gaps? Environmental issues?\n5. Human Checkpoint Efficiency: Clear questions? Effective unblocking?\n6. Feedback Loop Efficiency: CI feedback time, bot response time\n7. Scope Stability: Scope changes during execution?\n\n## Red Flags\n\n- Same AC iterated 5+ times (stuck)\n- Same issue in multiple critic passes\n- Worklist not shrinking across cycles\n- LOOP without progress signature change (stall)\n\n## Bounce Categories\n\n- DESIGN_BOUNCE: Gate -> Plan\n- BUILD_BOUNCE: Gate -> Build\n- SIGNAL_BOUNCE: Gate -> Signal\n\n## Output\n\nWrite {{run.base}}/wisdom/process_analysis.md with:\n- Process Metrics table\n- Executive Summary\n- Flow Execution Summary\n- Iteration Analysis (Build, spinning detection, review)\n- Bounce Analysis\n- Stall Points (PROC-NNN markers)\n- Human Checkpoints\n- Navigator Adaptation Analysis\n- Learning Tier Summary\n- Efficiency Score (HIGH/MEDIUM/LOW) with rationale\n- Process Improvement Recommendations"
+  },
+  "invariants": [
+    "Write exactly one file: wisdom/process_analysis.md",
+    "Read-only analysis - no repo mutations",
+    "Use PROC-NNN for stall/issue markers",
+    "Efficiency is smooth flow, not speed - 4 hours with no friction beats 2 hours with bounces",
+    "Be constructive - 'Build took too long' is not helpful; cite specific causes",
+    "Distinguish productive iterations (learning) from spinning (repeating mistakes)"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

@@ -200,7 +200,7 @@ If you encounter ambiguity, missing context, or confusing errors, do **not** sim
 
 2. **Peer Handoff:**
    - Is the fix outside your scope? → Create a HANDOFF to `code-implementer` or `test-author`.
-   - Is the spec contradictory? → Request `BOUNCE` with `route_to_flow: 1` or `2` and `route_to_agent: clarifier`.
+   - Is the spec contradictory? → Request `DETOUR` to inject a sidequest chain (e.g., clarification via `clarifier`), or `INJECT_FLOW` to run a named flow (e.g., Flow 1 signal or Flow 2 plan) before continuing.
 
 3. **Assumption (Preferred):**
    - Can you make a reasonable "Senior Dev" assumption to keep moving?
@@ -269,6 +269,27 @@ When you encounter ambiguity about the correct fix:
 4. **Escalate last:** Only create a HANDOFF if research failed AND no safe fix exists
 
 Don't guess. Don't wait for humans when you can find the answer yourself.
+
+## Off-Road Justification
+
+When recommending any off-road decision (DETOUR, INJECT_FLOW, INJECT_NODES), you MUST provide why_now justification:
+
+- **trigger**: What specific condition triggered this recommendation?
+- **delay_cost**: What happens if we don't act now?
+- **blocking_test**: Is this blocking the current objective?
+- **alternatives_considered**: What other options were evaluated?
+
+Example:
+```json
+{
+  "why_now": {
+    "trigger": "Test suite discovered auth token expiry not handled",
+    "delay_cost": "Security vulnerability would reach production",
+    "blocking_test": "Cannot satisfy 'all security tests pass' exit criterion",
+    "alternatives_considered": ["Skip auth tests (rejected: violates gate policy)", "Document as known issue (rejected: P0 security)"]
+  }
+}
+```
 
 ## Philosophy
 

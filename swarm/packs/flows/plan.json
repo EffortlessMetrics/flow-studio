@@ -1,0 +1,55 @@
+{
+  "id": "plan",
+  "name": "Specs → Plan",
+  "description": "Transform requirements into ADR, contracts, and work plan",
+  "version": 1,
+  "nodes": [
+    {
+      "node_id": "impact-analyzer",
+      "template_id": "impact-analyzer",
+      "params": {"max_context_tokens": 50000}
+    },
+    {
+      "node_id": "design-optioneer",
+      "template_id": "design-optioneer",
+      "params": {}
+    },
+    {
+      "node_id": "adr-author",
+      "template_id": "adr-author",
+      "params": {}
+    },
+    {
+      "node_id": "interface-designer",
+      "template_id": "interface-designer",
+      "params": {}
+    },
+    {
+      "node_id": "test-strategist",
+      "template_id": "test-strategist",
+      "params": {}
+    },
+    {
+      "node_id": "work-planner",
+      "template_id": "work-planner",
+      "params": {}
+    },
+    {
+      "node_id": "design-critic",
+      "template_id": "design-critic",
+      "params": {}
+    }
+  ],
+  "edges": [
+    {"edge_id": "e1", "from": "impact-analyzer", "to": "design-optioneer", "type": "sequence", "priority": 50},
+    {"edge_id": "e2", "from": "design-optioneer", "to": "adr-author", "type": "sequence", "priority": 50},
+    {"edge_id": "e3", "from": "adr-author", "to": "interface-designer", "type": "sequence", "priority": 50},
+    {"edge_id": "e4", "from": "interface-designer", "to": "test-strategist", "type": "sequence", "priority": 50},
+    {"edge_id": "e5", "from": "test-strategist", "to": "work-planner", "type": "sequence", "priority": 50},
+    {"edge_id": "e6", "from": "work-planner", "to": "design-critic", "type": "sequence", "priority": 50}
+  ],
+  "policy": {
+    "max_loop_iterations": 50,
+    "suggested_sidequests": ["clarifier", "impact-analysis"]
+  }
+}

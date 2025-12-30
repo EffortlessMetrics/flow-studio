@@ -583,7 +583,7 @@ Prompt.
     assert_validator_failed(result)
 
     # All 3 errors should be reported
-    assert result.stderr.count("✗") >= 3
+    assert result.stderr.count("[FAIL]") >= 3
 
 
 # ============================================================================

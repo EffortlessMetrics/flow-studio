@@ -25,6 +25,8 @@ interface SelectionCallbacks {
   showEmptyState?: () => void;
   updateURL?: () => void;
   updateOutlineSelection?: (nodeId: string | null) => void;
+  /** Called when a step is selected - for updating inventory counts delta display */
+  onStepSelected?: (flowKey: FlowKey | null, stepId: string | null) => void;
 }
 
 let _callbacks: SelectionCallbacks = {};
@@ -201,10 +203,22 @@ export function clearSelection(): void {
 function showNodeDetails(data: NodeData): void {
   if (data.type === "step" && _callbacks.showStepDetails) {
     _callbacks.showStepDetails(data);
+    // Notify about step selection for inventory counts delta display
+    if (_callbacks.onStepSelected && data.flow && data.step_id) {
+      _callbacks.onStepSelected(data.flow, data.step_id);
+    }
   } else if (data.type === "agent" && _callbacks.showAgentDetails) {
     _callbacks.showAgentDetails(data);
+    // Clear step selection when switching to agent
+    if (_callbacks.onStepSelected) {
+      _callbacks.onStepSelected(null, null);
+    }
   } else if (data.type === "artifact" && _callbacks.showArtifactDetails) {
     _callbacks.showArtifactDetails(data);
+    // Clear step selection when switching to artifact
+    if (_callbacks.onStepSelected) {
+      _callbacks.onStepSelected(null, null);
+    }
   }
 }
 

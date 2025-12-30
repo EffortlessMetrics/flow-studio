@@ -1,0 +1,99 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "signal-cleanup",
+  "version": 1,
+  "title": "Signal Cleanup",
+  "category": "infra",
+  "sdk": {
+    "model": "haiku",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_write",
+    "allowed_tools": ["Read", "Write", "Bash", "Grep", "Glob", "Skill"],
+    "denied_tools": ["Edit"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": true,
+      "excluded_commands": ["git", "gh", "rm"]
+    },
+    "max_turns": 15,
+    "context_budget": {
+      "total_chars": 100000,
+      "recent_chars": 40000,
+      "older_chars": 10000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Signal Cleanup Agent. Seal the envelope at the end of Flow 1. Produce the structured summary (receipt) of the signal outcome. The receipt captures what happened - it is a log, not a gatekeeper. Downstream agents use the receipt as evidence, not permission.",
+    "longform_ref": "prompts/agentic_steps/signal-cleanup.md",
+    "tone": "neutral"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [],
+    "optional_inputs": [
+      "signal/requirements.md",
+      "signal/requirements_critique.md",
+      "signal/bdd_critique.md",
+      "signal/features/*.feature",
+      "signal/open_questions.md",
+      "signal/risk_assessment.md",
+      "signal/early_risks.md"
+    ],
+    "required_outputs": [
+      "signal/signal_receipt.json",
+      "signal/cleanup_report.md"
+    ],
+    "optional_outputs": [
+      "signal/github_report.md"
+    ]
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/signal/signal_receipt.json",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "routing_signal"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "signal/signal_receipt.json",
+      "signal/cleanup_report.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nFinalize Flow 1 (Signal) by mechanically deriving counts, writing signal_receipt.json, updating .runs/index.json, and writing cleanup_report.md.\n\n## Steps\n\n1. Preflight: Verify read/write access\n2. Artifact existence: Required (requirements.md), recommended, optional\n3. Advisory hygiene check: open_questions.md basic register health\n4. Mechanical counts: REQs, NFRs, BDD scenarios, open questions, risks by severity\n5. Quality gate extraction: requirements_critic, bdd_critic from Machine Summary\n6. Derive receipt status + routing\n7. Write signal_receipt.json\n8. Update .runs/index.json\n9. Write cleanup_report.md + github_report.md\n\n## Output\n\n- {{run.base}}/signal/signal_receipt.json\n- {{run.base}}/signal/cleanup_report.md\n- {{run.base}}/signal/github_report.md"
+  },
+  "invariants": [
+    "Mechanical counts only - never estimate",
+    "Null over guess - explain every null",
+    "Always write receipt + cleanup report unless IO prevents it",
+    "Idempotent (timestamps aside)",
+    "Do not reorder .runs/index.json",
+    "No git operations - no GitHub calls",
+    "VERIFIED requires both critics to be VERIFIED"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

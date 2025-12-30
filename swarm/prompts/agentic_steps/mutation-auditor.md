@@ -106,11 +106,11 @@ For each worklist item:
 ### Step 5: Decide control-plane recommendation
 
 Defaults:
-- If mutation could not run due to missing config/tool: `UNVERIFIED`, `recommended_action: PROCEED` (with a clear “enable mutation by adding config” note).
+- If mutation could not run due to missing config/tool: `UNVERIFIED`, `recommended_action: CONTINUE` (with a clear "enable mutation by adding config" note).
 - If mutation ran and survivor count is material:
   - threshold = `mutation.survivor_threshold` from config, else default `0`
-  - if `survived > threshold`: `UNVERIFIED`, `recommended_action: RERUN`, `route_to_flow: 3`, `route_to_agent: test-author`
-- If mutation ran and `survived <= threshold`: `VERIFIED`, `recommended_action: PROCEED`
+  - if `survived > threshold`: `UNVERIFIED`, `recommended_action: DETOUR` (inject test-author to address survivor worklist)
+- If mutation ran and `survived <= threshold`: `VERIFIED`, `recommended_action: CONTINUE`
 
 ## mutation_report.md format (must follow)
 
@@ -141,7 +141,7 @@ Results:
   - Location: <path>:<line|?>
   - What it suggests: <one sentence>
   - Next action: <concrete test improvement>
-  - Route: test-author
+  - Routing: DETOUR to test-author
 - MUT-SURV-002 [MISSING_EDGE_CASE]
   ...
 

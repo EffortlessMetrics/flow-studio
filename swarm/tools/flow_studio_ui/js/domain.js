@@ -1,6 +1,10 @@
 /**
  * Flow Studio Domain Types
  *
+ * CANONICAL SOURCE: src/domain.ts
+ * The js/domain.d.ts file is GENERATED from this file — do not edit it directly.
+ * Run `make ts-build` to regenerate declaration files after editing this source.
+ *
  * These types define the core data structures used throughout Flow Studio.
  * They serve as the contract between:
  * - Python backend (FastAPI endpoints)

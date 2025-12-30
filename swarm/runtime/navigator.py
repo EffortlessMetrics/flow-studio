@@ -50,7 +50,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -62,16 +62,18 @@ logger = logging.getLogger(__name__)
 
 class RouteIntent(str, Enum):
     """Navigator's routing intent."""
-    ADVANCE = "advance"        # Proceed to next node
-    LOOP = "loop"              # Continue iteration (microloop)
-    DETOUR = "detour"          # Inject sidequest before continuing
-    PAUSE = "pause"            # Request human intervention
-    TERMINATE = "terminate"    # Flow complete
+
+    ADVANCE = "advance"  # Proceed to next node
+    LOOP = "loop"  # Continue iteration (microloop)
+    DETOUR = "detour"  # Inject sidequest before continuing
+    PAUSE = "pause"  # Request human intervention
+    TERMINATE = "terminate"  # Flow complete
     EXTEND_GRAPH = "extend_graph"  # Propose edge not in graph (map gap)
 
 
 class SignalLevel(str, Enum):
     """Signal severity levels."""
+
     NONE = "none"
     LOW = "low"
     MEDIUM = "medium"
@@ -81,6 +83,7 @@ class SignalLevel(str, Enum):
 @dataclass
 class EdgeCandidate:
     """A candidate edge for navigation (pre-filtered by graph)."""
+
     edge_id: str
     target_node: str
     edge_type: str = "sequence"  # sequence, loop, branch, detour
@@ -91,6 +94,7 @@ class EdgeCandidate:
 @dataclass
 class SidequestOption:
     """A sidequest option from the catalog."""
+
     sidequest_id: str
     station_template: str  # Station/template to execute
     trigger_description: str  # When to use this sidequest
@@ -102,6 +106,7 @@ class SidequestOption:
 @dataclass
 class VerificationSummary:
     """Summary of verification results from traditional tooling."""
+
     passed: bool
     checks_run: int = 0
     checks_passed: int = 0
@@ -114,6 +119,7 @@ class VerificationSummary:
 @dataclass
 class FileChangesSummary:
     """Summary of file changes from diff scanner."""
+
     files_modified: int = 0
     files_added: int = 0
     files_deleted: int = 0
@@ -126,6 +132,7 @@ class FileChangesSummary:
 @dataclass
 class StallSignals:
     """Signals for stall detection from ProgressTracker."""
+
     is_stalled: bool = False
     stall_count: int = 0  # Consecutive iterations with no progress
     last_change_signature: str = ""
@@ -147,6 +154,7 @@ class ProposedNode:
         objective: Specific objective for this node execution.
         params: Additional parameters for execution.
     """
+
     template_id: Optional[str] = None
     station_id: Optional[str] = None
     node_id: Optional[str] = None
@@ -179,6 +187,7 @@ class ProposedEdge:
         is_return: Whether execution should return after this node.
         proposed_node: Optional ProposedNode with execution details.
     """
+
     from_node: str
     to_node: str
     why: str
@@ -195,6 +204,7 @@ class NavigatorInput:
     All fields are pre-computed by traditional tooling. The Navigator
     receives a digested view, not raw data.
     """
+
     # Identity
     run_id: str
     flow_key: str
@@ -224,10 +234,23 @@ class NavigatorInput:
     # Optional: worker's suggested route (if available)
     worker_suggested_route: Optional[str] = None
 
+    # Forensic verdict: comparison of handoff claims vs actual evidence
+    # This is the key input for Semantic Handoff Injection - Navigator uses
+    # this to detect "reward hacking" (claimed progress without evidence).
+    # See forensic_comparator.py for ForensicVerdict structure.
+    forensic_verdict: Optional[Dict[str, Any]] = None
+
+    # Candidate-set pattern: pre-computed routing candidates from the kernel.
+    # Navigator MUST choose from these candidates via chosen_candidate_id.
+    # Each candidate has: candidate_id, action, target_node, reason, priority, source.
+    # See types.py RoutingCandidate for full structure.
+    routing_candidates: List[Dict[str, Any]] = field(default_factory=list)
+
 
 @dataclass
 class RouteProposal:
     """Navigator's proposed route."""
+
     intent: RouteIntent
     target_node: Optional[str] = None  # Required for advance/loop
     reasoning: str = ""  # Why this route (stored in audit, not sent to worker)
@@ -237,6 +260,7 @@ class RouteProposal:
 @dataclass
 class DetourRequest:
     """Request to inject a sidequest."""
+
     sidequest_id: str
     objective: str  # Specific objective for this detour
     priority: int = 50
@@ -246,6 +270,7 @@ class DetourRequest:
 @dataclass
 class NavigatorSignals:
     """Signals emitted by Navigator for observability."""
+
     stall: SignalLevel = SignalLevel.NONE
     risk: SignalLevel = SignalLevel.NONE
     uncertainty: SignalLevel = SignalLevel.NONE
@@ -259,6 +284,7 @@ class NextStepBrief:
     This is the key output - tells the next worker what to focus on
     given what just happened.
     """
+
     objective: str  # What the next station should accomplish
     focus_areas: List[str] = field(default_factory=list)  # Specific things to check
     context_pointers: List[str] = field(default_factory=list)  # File paths to read
@@ -269,12 +295,16 @@ class NextStepBrief:
 @dataclass
 class NavigatorOutput:
     """Complete output from Navigator."""
+
     route: RouteProposal
     next_step_brief: NextStepBrief
     signals: NavigatorSignals = field(default_factory=NavigatorSignals)
     detour_request: Optional[DetourRequest] = None
     proposed_edge: Optional[ProposedEdge] = None  # For EXTEND_GRAPH intent
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+    # Candidate-set pattern: Navigator must choose from provided candidates
+    chosen_candidate_id: Optional[str] = None  # ID of selected candidate
 
     # Audit trail (not sent to next worker)
     elimination_log: List[Dict[str, str]] = field(default_factory=list)
@@ -381,9 +411,9 @@ class ProgressTracker:
             same_failure = history[-1] == history[-2] if len(history) >= 2 else False
 
         no_file_changes = file_changes is None or (
-            file_changes.files_modified == 0 and
-            file_changes.files_added == 0 and
-            file_changes.files_deleted == 0
+            file_changes.files_modified == 0
+            and file_changes.files_added == 0
+            and file_changes.files_deleted == 0
         )
 
         return StallSignals(
@@ -423,12 +453,37 @@ def build_navigator_input(
     previous_step_summary: str = "",
     previous_step_status: str = "",
     worker_suggested_route: Optional[str] = None,
+    forensic_verdict: Optional[Dict[str, Any]] = None,
+    routing_candidates: Optional[List[Dict[str, Any]]] = None,
 ) -> NavigatorInput:
     """Build NavigatorInput from traditional tooling outputs.
 
     This function collects outputs from various traditional tools
-    (graph traversal, verification, diff scanner, progress tracker)
-    and packages them into a compact input for the Navigator LLM.
+    (graph traversal, verification, diff scanner, progress tracker,
+    forensic comparator) and packages them into a compact input for
+    the Navigator LLM.
+
+    Args:
+        run_id: The run identifier.
+        flow_key: The flow key.
+        current_node: Current node/step being navigated from.
+        iteration: Current iteration number (for microloops).
+        candidate_edges: Available edges from current node.
+        sidequest_options: Available sidequests to inject.
+        verification: Verification results from spec checks.
+        file_changes: File changes from diff scanner.
+        stall_signals: Stall detection signals.
+        context_digest: Compressed context summary.
+        previous_step_summary: Summary from last step's handoff.
+        previous_step_status: Status from last step (VERIFIED, etc.).
+        worker_suggested_route: Route suggested by the worker.
+        forensic_verdict: ForensicVerdict comparing claims vs evidence
+            (Semantic Handoff Injection). See forensic_comparator.py.
+        routing_candidates: Pre-computed routing candidates from the kernel.
+            Navigator MUST choose from these via chosen_candidate_id.
+
+    Returns:
+        NavigatorInput ready for Navigator.navigate().
     """
     return NavigatorInput(
         run_id=run_id,
@@ -444,6 +499,8 @@ def build_navigator_input(
         previous_step_summary=previous_step_summary,
         previous_step_status=previous_step_status,
         worker_suggested_route=worker_suggested_route,
+        forensic_verdict=forensic_verdict,
+        routing_candidates=routing_candidates or [],
     )
 
 
@@ -463,15 +520,19 @@ def extract_candidate_edges_from_graph(
             if edge.condition.expression:
                 condition_summary = edge.condition.expression
             elif edge.condition.field:
-                condition_summary = f"{edge.condition.field} {edge.condition.operator} {edge.condition.value}"
+                condition_summary = (
+                    f"{edge.condition.field} {edge.condition.operator} {edge.condition.value}"
+                )
 
-        candidates.append(EdgeCandidate(
-            edge_id=edge.edge_id,
-            target_node=edge.to_node,
-            edge_type=edge.edge_type,
-            priority=edge.priority,
-            condition_summary=condition_summary,
-        ))
+        candidates.append(
+            EdgeCandidate(
+                edge_id=edge.edge_id,
+                target_node=edge.to_node,
+                edge_type=edge.edge_type,
+                priority=edge.priority,
+                condition_summary=condition_summary,
+            )
+        )
 
     # Sort by priority (higher first)
     candidates.sort(key=lambda e: -e.priority)
@@ -548,23 +609,57 @@ class Navigator:
         """Build system prompt for Navigator."""
         return """You are a Navigator for a stepwise execution system.
 
-Your job is to:
-1. Decide the best route among valid candidates
-2. Write a brief for the next station (what to focus on)
-3. Detect when sidequests are needed (e.g., clarifier, env-doctor)
-4. Signal stalls, risks, or uncertainty
+## The Candidate-Set Pattern (CRITICAL)
 
-You receive a compact packet with:
-- Current node and candidate edges
-- Verification results (what passed/failed)
-- File changes summary
-- Stall signals (are we making progress?)
-- Context digest
+You receive a set of **Valid Moves** (routing candidates) generated by the kernel.
+Your job is to SELECT the best move from this set, not invent new routes.
+
+Each candidate has:
+- `candidate_id`: Unique identifier (MUST be returned in your response)
+- `action`: What the move does (advance, loop, detour, escalate, repeat, terminate)
+- `target_node`: Where it goes (if applicable)
+- `reason`: Why this is a valid option
+- `priority`: Default ranking (higher = more likely correct)
+- `is_default`: Whether this is the suggested choice
+
+**RULE**: You MUST return a `chosen_candidate_id` that matches one of the provided candidates.
+The only exception is EXTEND_GRAPH, when you need a transition not in the candidate set.
+
+## Your Responsibilities
+
+1. **Choose** the best route from valid candidates (return `chosen_candidate_id`)
+2. **Write** a brief for the next station (what to focus on)
+3. **Detect** when sidequests are needed (e.g., clarifier, env-doctor)
+4. **Signal** stalls, risks, or uncertainty
+5. **Verify** worker claims against forensic evidence
+
+## Forensic Verification (IMPORTANT)
+
+The forensic_verdict field compares worker claims against actual evidence:
+- claim_verified: Did claims match evidence?
+- confidence: How trustworthy is this verdict (0.0-1.0)?
+- recommendation: TRUST (proceed), VERIFY (double-check), REJECT (flag issue)
+- reward_hacking_flags: Specific patterns like "test_count_decreased", "claimed_pass_but_failed"
+
+**If recommendation is REJECT or multiple reward_hacking_flags are present**:
+- Set signals.risk to "high"
+- Add warnings to next_step_brief about the discrepancies
+- Choose RETRY or ESCALATE candidate, NOT the ADVANCE candidate
+- Consider PAUSE intent if multiple critical flags
+
+Common reward hacking patterns:
+- "test_count_decreased": Tests may have been deleted to hide failures
+- "claimed_pass_but_failed": Worker claims tests pass but evidence shows failures
+- "claimed_progress_no_diff": Worker claims progress but no file changes detected
+- "coverage_dropped": Code coverage decreased (possible test deletion)
+
+## Response Schema
 
 Respond with JSON matching this schema:
 {
+    "chosen_candidate_id": "REQUIRED: ID from candidates list (or 'extend_graph' for EXTEND_GRAPH)",
     "route": {
-        "intent": "advance|loop|detour|pause|terminate",
+        "intent": "advance|loop|detour|pause|terminate|extend_graph",
         "target_node": "node-id or null",
         "reasoning": "why this route (brief)"
     },
@@ -595,7 +690,21 @@ Be concise. The next worker needs actionable instructions, not essays."""
             "previous_status": nav_input.previous_step_status,
         }
 
-        # Add candidate edges
+        # Add routing candidates (candidate-set pattern - primary routing input)
+        if nav_input.routing_candidates:
+            data["routing_candidates"] = [
+                {
+                    "candidate_id": c.get("candidate_id", ""),
+                    "action": c.get("action", ""),
+                    "target_node": c.get("target_node"),
+                    "reason": c.get("reason", ""),
+                    "priority": c.get("priority", 50),
+                    "is_default": c.get("is_default", False),
+                }
+                for c in nav_input.routing_candidates
+            ]
+
+        # Add candidate edges (legacy format, for backwards compatibility)
         if nav_input.candidate_edges:
             data["candidate_edges"] = [
                 {
@@ -634,6 +743,24 @@ Be concise. The next worker needs actionable instructions, not essays."""
         if nav_input.context_digest:
             data["context"] = nav_input.context_digest[:500]  # Limit length
 
+        # Add forensic verdict (Semantic Handoff Injection)
+        if nav_input.forensic_verdict:
+            fv = nav_input.forensic_verdict
+            data["forensic_verdict"] = {
+                "claim_verified": fv.get("claim_verified", True),
+                "confidence": fv.get("confidence", 1.0),
+                "recommendation": fv.get("recommendation", "TRUST"),
+                "reward_hacking_flags": fv.get("reward_hacking_flags", []),
+            }
+            # Add summary of discrepancies if present
+            discrepancies = fv.get("discrepancies", [])
+            if discrepancies:
+                data["forensic_verdict"]["discrepancy_count"] = len(discrepancies)
+                # Include first critical discrepancy as example
+                critical = [d for d in discrepancies if d.get("severity") == "critical"]
+                if critical:
+                    data["forensic_verdict"]["critical_issue"] = critical[0].get("details", "")
+
         return json.dumps(data, indent=2)
 
     def _parse_response(
@@ -656,6 +783,32 @@ Be concise. The next worker needs actionable instructions, not essays."""
                 json_match = response[start:end]
 
             data = json.loads(json_match)
+
+            # Extract and validate chosen_candidate_id (candidate-set pattern)
+            chosen_candidate_id = data.get("chosen_candidate_id")
+            valid_candidate_ids = {
+                c.get("candidate_id") for c in nav_input.routing_candidates
+            }
+
+            # Validate chosen_candidate_id if routing_candidates were provided
+            if nav_input.routing_candidates and chosen_candidate_id:
+                if chosen_candidate_id not in valid_candidate_ids:
+                    # Special case: extend_graph doesn't need to match
+                    if chosen_candidate_id != "extend_graph":
+                        logger.warning(
+                            "Navigator chose invalid candidate_id: %s (valid: %s)",
+                            chosen_candidate_id,
+                            valid_candidate_ids,
+                        )
+                        # Fall back to default candidate
+                        default_candidates = [
+                            c for c in nav_input.routing_candidates
+                            if c.get("is_default")
+                        ]
+                        if default_candidates:
+                            chosen_candidate_id = default_candidates[0].get("candidate_id")
+                        elif nav_input.routing_candidates:
+                            chosen_candidate_id = nav_input.routing_candidates[0].get("candidate_id")
 
             # Parse route
             route_data = data.get("route", {})
@@ -704,6 +857,7 @@ Be concise. The next worker needs actionable instructions, not essays."""
                 next_step_brief=brief,
                 signals=signals,
                 detour_request=detour_request,
+                chosen_candidate_id=chosen_candidate_id,
             )
 
         except (json.JSONDecodeError, KeyError, ValueError) as e:
@@ -775,10 +929,57 @@ Be concise. The next worker needs actionable instructions, not essays."""
         if nav_input.stall_signals and nav_input.stall_signals.is_stalled:
             signals.stall = SignalLevel.HIGH
 
+        # Incorporate forensic verdict into signals and warnings (Semantic Handoff Injection)
+        if nav_input.forensic_verdict:
+            fv = nav_input.forensic_verdict
+            recommendation = fv.get("recommendation", "TRUST")
+            reward_flags = fv.get("reward_hacking_flags", [])
+
+            if recommendation == "REJECT" or len(reward_flags) >= 2:
+                signals.risk = SignalLevel.HIGH
+                signals.uncertainty = SignalLevel.HIGH
+                brief.warnings.append(
+                    f"Forensic verdict: {recommendation} - claims do not match evidence"
+                )
+                # Add specific flag warnings
+                for flag in reward_flags[:2]:  # Limit to first 2
+                    brief.warnings.append(f"Reward hacking detected: {flag}")
+                # Consider PAUSE if too many flags
+                if len(reward_flags) >= 2 and route.intent != RouteIntent.TERMINATE:
+                    route = RouteProposal(
+                        intent=RouteIntent.PAUSE,
+                        reasoning="Forensic verdict REJECT with multiple reward hacking flags (deterministic)",
+                    )
+            elif recommendation == "VERIFY" or len(reward_flags) == 1:
+                signals.risk = SignalLevel.MEDIUM
+                brief.warnings.append(
+                    f"Forensic verdict: {recommendation} - verify claims before proceeding"
+                )
+                if reward_flags:
+                    brief.warnings.append(f"Potential issue: {reward_flags[0]}")
+
+        # Determine chosen_candidate_id from routing_candidates if available
+        chosen_candidate_id = None
+        if nav_input.routing_candidates:
+            # Find candidate matching the route
+            for candidate in nav_input.routing_candidates:
+                if (candidate.get("action") == route.intent.value and
+                    candidate.get("target_node") == route.target_node):
+                    chosen_candidate_id = candidate.get("candidate_id")
+                    break
+            # Fall back to default if no match
+            if not chosen_candidate_id:
+                default_candidates = [
+                    c for c in nav_input.routing_candidates if c.get("is_default")
+                ]
+                if default_candidates:
+                    chosen_candidate_id = default_candidates[0].get("candidate_id")
+
         return NavigatorOutput(
             route=route,
             next_step_brief=brief,
             signals=signals,
+            chosen_candidate_id=chosen_candidate_id,
         )
 
 
@@ -810,6 +1011,7 @@ def navigator_output_to_dict(output: NavigatorOutput) -> Dict[str, Any]:
             "needs_human": output.signals.needs_human,
         },
         "timestamp": output.timestamp.isoformat(),
+        "chosen_candidate_id": output.chosen_candidate_id,
     }
 
     if output.detour_request:
@@ -914,6 +1116,7 @@ def navigator_output_from_dict(data: Dict[str, Any]) -> NavigatorOutput:
         signals=signals,
         detour_request=detour_request,
         proposed_edge=proposed_edge,
+        chosen_candidate_id=data.get("chosen_candidate_id"),
         elimination_log=data.get("elimination_log", []),
         factors_considered=data.get("factors_considered", []),
     )

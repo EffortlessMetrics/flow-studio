@@ -108,8 +108,8 @@ Run formatters and linters via **auto-linter** skill.
 ## Machine Summary
 status: VERIFIED | UNVERIFIED | HIGH_RISK | CANNOT_PROCEED
 recommended_action: PROCEED | RERUN | BOUNCE | FIX_ENV
-route_to_flow: 1|2|3|4|5|6|7|null
-route_to_agent: <agent-name|null>
+routing_decision: CONTINUE | DETOUR | INJECT_FLOW | INJECT_NODES | EXTEND_GRAPH
+routing_target: <agent-name|flow-key|node-spec|null>
 blockers: []
 missing_required: []
 concerns: []
@@ -142,7 +142,7 @@ safety_check: PASS | HIGH_RISK
 ### Removed
 - `path/to/file.ts:42` — `console.log("debug")`
 
-### Routes to code-implementer
+### Detours to code-implementer
 - `path/to/file.go:100` — inline debug mixed with logic
 
 ## Coherence Check
@@ -170,12 +170,12 @@ safety_check: PASS | HIGH_RISK
 
 ## Routing
 
-| Status | Action | Notes |
-|--------|--------|-------|
-| VERIFIED | PROCEED | Ready to commit |
-| HIGH_RISK | PROCEED | Flag visible to Gate |
-| UNVERIFIED | BOUNCE to code-implementer | Coherence or lint issues |
-| CANNOT_PROCEED | FIX_ENV | Tooling failure |
+| Status | Routing Decision | Target | Notes |
+|--------|------------------|--------|-------|
+| VERIFIED | CONTINUE | null | Ready to commit |
+| HIGH_RISK | CONTINUE | null | Flag visible to Gate |
+| UNVERIFIED | DETOUR | code-implementer | Coherence or lint issues require fix |
+| CANNOT_PROCEED | EXTEND_GRAPH | fix-env | Tooling failure needs intervention |
 
 ## Cross-Flow Invocation
 
@@ -210,7 +210,7 @@ After writing the standards report, provide a natural language handoff:
 
 **What's left:** <"Ready to commit" | "Issues require attention">
 
-**Recommendation:** <PROCEED to repo-operator | BOUNCE to code-implementer to fix <issues>>
+**Recommendation:** <CONTINUE to repo-operator | DETOUR to code-implementer to fix <issues>>
 
 **Reasoning:** <1-2 sentences explaining safety check and polish results>
 ```
@@ -224,7 +224,7 @@ Examples:
 
 **What's left:** Ready to commit.
 
-**Recommendation:** PROCEED to repo-operator.
+**Recommendation:** CONTINUE to repo-operator.
 
 **Reasoning:** No suspicious deletions detected. Removed 3 debug prints, ran prettier (touched 5 files), eslint clean. Diff is polished and honest.
 ```
@@ -236,7 +236,7 @@ Examples:
 
 **What's left:** HIGH_RISK flag visible to Gate.
 
-**Recommendation:** PROCEED to repo-operator (commit proceeds with flag).
+**Recommendation:** CONTINUE to repo-operator (commit proceeds with flag).
 
 **Reasoning:** Test deleted without removing code it tested. Flagged as reward hacking. Commit will proceed locally but merge-decider will see this risk.
 ```

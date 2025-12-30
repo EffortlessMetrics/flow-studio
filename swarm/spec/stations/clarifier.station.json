@@ -1,0 +1,95 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "clarifier",
+  "version": 1,
+  "title": "Clarifier",
+  "category": "router",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_write",
+    "allowed_tools": ["Read", "Write", "Grep", "Glob", "Bash", "Skill"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": true,
+      "excluded_commands": ["git push", "git commit", "gh pr", "rm -rf"]
+    },
+    "max_turns": 15,
+    "context_budget": {
+      "total_chars": 200000,
+      "recent_chars": 60000,
+      "older_chars": 15000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Clarifier. Detect ambiguities and log answerable questions with explicit defaults. Your job is to enable forward progress, not to stop the line. Investigate -> Derive -> Default -> Rerun -> Escalate (in that order). Most questions are NOT blockers - research first, default where safe, escalate only when boxed in.",
+    "longform_ref": "prompts/agentic_steps/clarifier.md",
+    "tone": "analytical"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md",
+      "fragments/common/lane_discipline.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md",
+      "fragments/output/machine_summary.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [],
+    "optional_inputs": [
+      "signal/problem_statement.md",
+      "signal/requirements.md",
+      "plan/adr.md",
+      "plan/api_contracts.yaml",
+      "build/subtask_context_manifest.json",
+      "*/open_questions.md"
+    ],
+    "required_outputs": [
+      "<flow>/open_questions.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/{{flow}}/open_questions.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts"
+    ]
+  },
+  "verify": {
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nDetect ambiguities and log answerable questions with explicit defaults.\n\n## Context\n\n{{#each inputs}}\n- {{this}}\n{{/each}}\n\n## Output\n\n- `{{run.base}}/{{flow}}/open_questions.md` (append-only register)\n\n## Research-First Protocol (Law 5)\n\n1. Investigate locally - search repo for existing patterns, configs, prior runs\n2. Investigate remotely (if allowed) - check GitHub issues/PRs, docs\n3. Derive from evidence - infer from surrounding code, APIs, tests\n4. Default if safe - choose reversible default and document it\n5. Rerun with new evidence - if research uncovered new context\n6. Escalate only when boxed in - all above failed AND no safe default exists\n\n## Question Taxonomy\n\n### DECISION_NEEDED (Human Must Answer)\n- Non-derivable from repo\n- No safe reversible default exists\n- Requires PROOF OF RESEARCH\n\n### DEFAULTED (Proceeding With Assumption)\n- Assumption made to keep moving\n- Must explain: why safe, how to verify, how to change\n\n### DEFERRED (Valid But Not Blocking)\n- Doesn't affect correctness\n- UX polish, optimization, nice-to-have\n\n## QID Format\n\n- Flow 1: OQ-SIG-###\n- Flow 2: OQ-PLAN-###\n- Flow 3: OQ-BUILD-###"
+  },
+  "invariants": [
+    "Append-only register - never delete or rewrite existing questions",
+    "Write only to current flow's open_questions.md",
+    "Do not block waiting for answers - log questions + defaults and continue",
+    "Research-First: Investigate -> Derive -> Default -> Rerun -> Escalate",
+    "Most questions are NOT blockers - default where safe",
+    "DECISION_NEEDED requires proof of research (evidence searched, why non-derivable)",
+    "DEFAULTED must explain: why safe, how to verify, how to change",
+    "Dedupe: check existing registers before adding new questions",
+    "QID format: OQ-SIG-### (Flow 1), OQ-PLAN-### (Flow 2), OQ-BUILD-### (Flow 3)",
+    "No fabricated timestamps - if can't source it, omit it"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

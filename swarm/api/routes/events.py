@@ -39,11 +39,18 @@ class EventType:
     # Run lifecycle events
     RUN_STARTED = "run:started"
     RUN_PAUSED = "run:paused"
+    RUN_PAUSING = "run:pausing"  # Graceful pause initiated (waiting for step)
     RUN_RESUMED = "run:resumed"
     RUN_COMPLETED = "run:completed"
     RUN_FAILED = "run:failed"
     RUN_CANCELED = "run:canceled"
     RUN_INTERRUPTED = "run:interrupted"
+    RUN_STOPPING = "run:stopping"  # Graceful stop initiated
+    RUN_STOPPED = "run:stopped"  # Clean stop with savepoint
+
+    # Flow lifecycle events (for autopilot runs with multiple flows)
+    FLOW_COMPLETED = "flow:completed"  # Individual flow in a multi-flow run
+    PLAN_COMPLETED = "plan:completed"  # Entire plan completed (autopilot run)
 
     # Step events
     STEP_STARTED = "step:started"
@@ -60,6 +67,13 @@ class EventType:
     LLM_STARTED = "llm:started"
     LLM_TOKEN = "llm:token"
     LLM_COMPLETED = "llm:completed"
+
+    # Wisdom events
+    WISDOM_PATCH_APPLIED = "wisdom:patch_applied"
+    WISDOM_PATCH_REJECTED = "wisdom:patch_rejected"
+    WISDOM_PATCH_VALIDATED = "wisdom:patch_validated"
+    WISDOM_AUTO_APPLY_STARTED = "wisdom:auto_apply_started"
+    WISDOM_AUTO_APPLY_COMPLETED = "wisdom:auto_apply_completed"
 
     # Error events
     ERROR = "error"
@@ -107,6 +121,12 @@ def format_sse_event(
     # Add timestamp if not present
     if "timestamp" not in data:
         data["timestamp"] = datetime.now(timezone.utc).isoformat()
+
+    # Include event type in data for client-side type dispatch
+    # Convert colon-separated format (flow:completed) to underscore format (flow_completed)
+    # for TypeScript compatibility
+    if "type" not in data:
+        data["type"] = event_type.replace(":", "_")
 
     lines.append(f"data: {json.dumps(data)}")
     lines.append("")  # Empty line terminates event
@@ -216,11 +236,28 @@ async def generate_run_events(
             for event in events:
                 event_counter += 1
                 event_type = event.pop("event", "message")
-                yield format_sse_event(
-                    event_type,
-                    event,
-                    event_id=str(event_counter),
-                )
+
+                # Transform autopilot events to flow boundary events for frontend
+                if event_type == "autopilot_flow_completed":
+                    # Emit flow:completed for individual flow completion in autopilot
+                    yield format_sse_event(
+                        EventType.FLOW_COMPLETED,
+                        event,
+                        event_id=str(event_counter),
+                    )
+                elif event_type == "autopilot_completed":
+                    # Emit plan:completed when entire autopilot run finishes
+                    yield format_sse_event(
+                        EventType.PLAN_COMPLETED,
+                        event,
+                        event_id=str(event_counter),
+                    )
+                else:
+                    yield format_sse_event(
+                        event_type,
+                        event,
+                        event_id=str(event_counter),
+                    )
 
             # Send heartbeat if interval elapsed
             now = datetime.now(timezone.utc)
@@ -238,7 +275,7 @@ async def generate_run_events(
                 last_heartbeat = now
 
             # Check for terminal states
-            if status in ("succeeded", "failed", "canceled"):
+            if status in ("succeeded", "failed", "canceled", "stopped"):
                 event_counter += 1
 
                 # Map status to event type
@@ -246,6 +283,7 @@ async def generate_run_events(
                     "succeeded": EventType.RUN_COMPLETED,
                     "failed": EventType.RUN_FAILED,
                     "canceled": EventType.RUN_CANCELED,
+                    "stopped": EventType.RUN_STOPPED,
                 }
 
                 yield format_sse_event(
@@ -254,7 +292,9 @@ async def generate_run_events(
                         "run_id": run_id,
                         "status": status,
                         "completed_at": state.get("completed_at"),
+                        "stopped_at": state.get("stopped_at"),
                         "error": state.get("error"),
+                        "stop_reason": state.get("stop_reason"),
                     },
                     event_id=str(event_counter),
                 )
@@ -288,6 +328,8 @@ async def stream_run_events(run_id: str, request: Request):
     Provides a real-time event stream for monitoring run progress.
     Events include step progress, status changes, and artifacts.
 
+    Performs a health tick on SSE connect to keep database status coherent.
+
     Args:
         run_id: Run identifier.
         request: FastAPI request object for disconnect detection.
@@ -316,6 +358,14 @@ async def stream_run_events(run_id: str, request: Request):
 
     manager = get_spec_manager()
     runs_root = manager.runs_root
+
+    # Health tick on SSE connect to keep DB status coherent
+    try:
+        from swarm.runtime.resilient_db import check_db_health
+
+        check_db_health()
+    except Exception as e:
+        logger.warning("DB health check failed on SSE connect: %s", e)
 
     # Verify run exists
     run_dir = runs_root / run_id

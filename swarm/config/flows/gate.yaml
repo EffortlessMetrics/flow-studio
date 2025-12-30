@@ -1,13 +1,65 @@
-# Flow 4 - Code → Artifact (Gate)
+# Flow 5 - Code → Artifact (Gate)
 # Source of truth for gate flow ordering and agent roles
+#
+# PARALLELIZATION: The four audit steps (contract, security, coverage, policy_check)
+# run in parallel after receipt, then join before gate_fix. This is a 4-way fork/join
+# pattern that significantly reduces gate latency while maintaining independent audits.
+#
+# Execution pattern:
+#   receipt (1) → FORK → [contract, security, coverage, policy_check] (parallel)
+#                      → JOIN → gate_fix (5) → merge_decision (6)
 
 key: gate
-title: "Flow 4 - Code → Artifact (Gate)"
-description: "Pre-merge gate—audit receipts, check contracts/security/policy; recommend merge or bounce."
+title: "Flow 5 - Code → Artifact (Gate)"
+description: "Pre-merge gate—audit receipts, check contracts/security/policy; recommend merge or bounce. Uses parallel execution for independent audits."
+
+charter:
+  goal: "Produce a confident MERGE, BOUNCE, or ESCALATE decision based on objective audits"
+  exit_criteria:
+    - "Receipt audit confirms build artifacts are complete"
+    - "Contract audit verifies API compliance"
+    - "Security scan finds no critical vulnerabilities"
+    - "Coverage audit confirms threshold compliance"
+    - "merge_decision.md produced with clear verdict and rationale"
+  non_goals:
+    - "Fixing logic or design issues (mechanical fixes only)"
+    - "Adding new features or tests"
+    - "Changing API contracts"
+    - "Making subjective quality judgments"
+  offroad_policy:
+    justified:
+      - "DETOUR to apply mechanical fixes (lint, format, docstrings, typos)"
+      - "DETOUR to update changelog if missing"
+      - "INJECT_NODES for additional security scan if initial scan inconclusive"
+    not_justified:
+      - "Fixing logic bugs (bounce to Build)"
+      - "Changing tests to make them pass (bounce to Build)"
+      - "Modifying API contracts (bounce to Plan)"
+      - "Approving merge despite failing audits"
+      - "Any fix that changes program behavior"
 
 teaching:
   title: "Code to Artifact: The Pre-Merge Quality Gate"
-  summary: "The Gate is where automated audits catch issues before merge. Critically, the Gate only applies MECHANICAL fixes (lint, format, typos). Logic/design issues bounce back to Build or Plan. This keeps the gate fast and objective."
+  summary: "The Gate is where automated audits catch issues before merge. Critically, the Gate only applies MECHANICAL fixes (lint, format, typos). Logic/design issues bounce back to Build or Plan. This keeps the gate fast and objective. The four audits run in PARALLEL for speed."
+
+# Parallel execution configuration for the gate audits
+parallel:
+  fork_point: receipt
+  fork_config:
+    targets:
+      - contract
+      - security
+      - coverage
+      - policy_check
+    execution_policy: concurrent
+    isolation: isolated
+    failure_policy: continue_all
+  join_point: gate_fix
+  join_config:
+    strategy: all_complete
+    merge_artifacts: true
+    merge_concerns: true
+    aggregate_status: worst
 
 steps:
   - id: receipt
@@ -17,8 +69,12 @@ steps:
     teaching_note: "Gate checkpoint: verify all build artifacts exist and receipt is well-formed."
     teaching_highlight: true
     routing:
-      kind: linear
-      next: contract
+      kind: fork
+      fork_targets:
+        - contract
+        - security
+        - coverage
+        - policy_check
     teaching_notes:
       inputs:
         - "RUN_BASE/build/build_receipt.json"
@@ -36,11 +92,12 @@ steps:
     agents:
       - contract-enforcer
     role: "Check API changes versus contracts → contract_audit.md."
-    teaching_note: "Verify implementation matches api_contracts.yaml from Plan."
+    teaching_note: "Verify implementation matches api_contracts.yaml from Plan. Runs in PARALLEL with security/coverage/policy."
     teaching_highlight: true
+    parallel_branch: true
     routing:
       kind: linear
-      next: security
+      next: gate_fix
     teaching_notes:
       inputs:
         - "RUN_BASE/gate/receipt_audit.md"
@@ -59,11 +116,12 @@ steps:
     agents:
       - security-scanner
     role: "Run SAST and secret scans → security_audit.md."
-    teaching_note: "Security checkpoint: SAST, secret detection, dependency check."
+    teaching_note: "Security checkpoint: SAST, secret detection, dependency check. Runs in PARALLEL with contract/coverage/policy."
     teaching_highlight: true
+    parallel_branch: true
     routing:
       kind: linear
-      next: coverage
+      next: gate_fix
     teaching_notes:
       inputs:
         - "RUN_BASE/gate/receipt_audit.md"
@@ -82,8 +140,9 @@ steps:
     agents:
       - coverage-enforcer
     role: "Verify test coverage meets thresholds → coverage_audit.md."
-    teaching_note: "Coverage checkpoint: verify test coverage against thresholds from test_plan.md."
+    teaching_note: "Coverage checkpoint: verify test coverage against thresholds from test_plan.md. Runs in PARALLEL with contract/security/policy."
     teaching_highlight: true
+    parallel_branch: true
     routing:
       kind: linear
       next: gate_fix
@@ -101,14 +160,45 @@ steps:
         - "compare against test_plan.md targets"
         - "flag coverage gaps"
 
+  - id: policy_check
+    agents:
+      - policy-analyst
+    role: "Check policy compliance → policy_audit.md."
+    teaching_note: "Policy checkpoint: verify compliance with org policies. Runs in PARALLEL with contract/security/coverage."
+    teaching_highlight: true
+    parallel_branch: true
+    routing:
+      kind: linear
+      next: gate_fix
+    teaching_notes:
+      inputs:
+        - "RUN_BASE/gate/receipt_audit.md"
+        - "RUN_BASE/build/impl_changes_summary.md"
+        - "swarm/spec/policies/**"
+      outputs:
+        - "RUN_BASE/gate/policy_audit.md"
+      emphasizes:
+        - "verify policy compliance"
+        - "check org-specific constraints"
+      constraints:
+        - "mechanical policy checks only"
+        - "flag policy violations"
+
   - id: gate_fix
     agents:
       - gate-fixer
     role: "Apply mechanical fixes only → gate_fix_summary.md."
-    teaching_note: "MECHANICAL ONLY: lint, format, docstrings, typos, changelog. NO logic changes."
+    teaching_note: "JOIN POINT: Aggregates results from all parallel audits. MECHANICAL ONLY: lint, format, docstrings, typos, changelog. NO logic changes."
     teaching_highlight: true
+    join_point: true
     routing:
-      kind: linear
+      kind: join
+      join_strategy: all_complete
+      join_from:
+        - contract
+        - security
+        - coverage
+        - policy_check
       next: merge_decision
     teaching_notes:
       inputs:
@@ -116,9 +206,11 @@ steps:
         - "RUN_BASE/gate/contract_audit.md"
         - "RUN_BASE/gate/security_audit.md"
         - "RUN_BASE/gate/coverage_audit.md"
+        - "RUN_BASE/gate/policy_audit.md"
       outputs:
         - "RUN_BASE/gate/gate_fix_summary.md"
       emphasizes:
+        - "aggregate all parallel audit results"
         - "lint and format fixes"
         - "docstring additions"
         - "typo corrections"
@@ -126,6 +218,7 @@ steps:
         - "MECHANICAL ONLY"
         - "no logic changes"
         - "no API contract changes"
+        - "waits for all parallel branches"
 
   - id: merge_decision
     agents:
@@ -141,6 +234,7 @@ steps:
         - "RUN_BASE/gate/contract_audit.md"
         - "RUN_BASE/gate/security_audit.md"
         - "RUN_BASE/gate/coverage_audit.md"
+        - "RUN_BASE/gate/policy_audit.md"
         - "RUN_BASE/gate/gate_fix_summary.md"
       outputs:
         - "RUN_BASE/gate/merge_decision.md"

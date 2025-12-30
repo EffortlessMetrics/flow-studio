@@ -1,0 +1,107 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "code-implementer",
+  "version": 1,
+  "title": "Code Implementer",
+  "category": "implementation",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_write",
+    "allowed_tools": ["Read", "Write", "Edit", "Bash", "Grep", "Glob", "Skill"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": true,
+      "excluded_commands": ["git", "gh"]
+    },
+    "max_turns": 25,
+    "context_budget": {
+      "total_chars": 200000,
+      "recent_chars": 80000,
+      "older_chars": 20000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Code Implementer. Build working code. Run tests. Report what happened. You don't critique. You don't commit (repo-operator owns git). Focus on the AC. Respect ADR/contracts. Don't weaken tests. No secrets.",
+    "longform_ref": "prompts/agentic_steps/code-implementer.md",
+    "tone": "neutral"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/evidence.md",
+      "fragments/common/run_base.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "signal/requirements.md"
+    ],
+    "optional_inputs": [
+      "plan/adr.md",
+      "plan/api_contracts.yaml",
+      "plan/ac_matrix.md",
+      "build/subtask_context_manifest.json",
+      "build/code_critique.md",
+      "build/test_critique.md"
+    ],
+    "required_outputs": [
+      "build/impl_changes_summary.md"
+    ],
+    "optional_outputs": [
+      "build/ac_status.json",
+      "build/open_questions.md"
+    ]
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/build/impl_changes_summary.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "can_further_iteration_help",
+      "proposed_next_step"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "build/impl_changes_summary.md"
+    ],
+    "required_commands": [
+      {
+        "command": "test-runner",
+        "success_pattern": "(passed|expected_failures)",
+        "timeout_seconds": 300
+      }
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/evidence.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nImplement code to satisfy acceptance criteria. Your scope: {{params.scope}}.\n\n## Context\n\n{{#each inputs}}\n- {{this}}\n{{/each}}\n\n## Objective\n\n{{params.objective}}\n\n## Constraints\n\n- Do not perform git operations (repo-operator owns git)\n- Focus only on the specified AC\n- Respect ADR and contract constraints\n- Never weaken tests to pass the build"
+  },
+  "invariants": [
+    "Do not perform git operations - repo-operator owns git",
+    "Do not weaken tests - if a test seems wrong, record a handoff to test-author",
+    "Do not commit secrets - never paste tokens/keys",
+    "Focus on the AC - avoid drive-by refactoring of unrelated code",
+    "PARTIAL is a win - honest state is the success metric"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "loop",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

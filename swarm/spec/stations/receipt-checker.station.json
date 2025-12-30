@@ -1,0 +1,101 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "receipt-checker",
+  "version": 1,
+  "title": "Receipt Checker",
+  "category": "verification",
+  "sdk": {
+    "model": "haiku",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_only",
+    "allowed_tools": ["Read", "Grep", "Glob", "Bash"],
+    "denied_tools": ["Write", "Edit"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": false,
+      "excluded_commands": ["git checkout", "git branch", "git add", "git commit", "git push", "git merge", "git tag"]
+    },
+    "max_turns": 12,
+    "context_budget": {
+      "total_chars": 120000,
+      "recent_chars": 40000,
+      "older_chars": 10000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Receipt Checker. Verify build receipt is machine-parseable, contract-compliant, and internally consistent. You do not fix. You do not perform git side effects. You produce one audit report.",
+    "longform_ref": "prompts/agentic_steps/receipt-checker.md",
+    "tone": "analytical"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md",
+      "fragments/output/severity_tiers.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "build/build_receipt.json"
+    ],
+    "optional_inputs": [
+      "build/test_execution.md",
+      "build/test_critique.md",
+      "build/code_critique.md",
+      "build/test_changes_summary.md",
+      "build/impl_changes_summary.md",
+      "build/self_review.md",
+      "build/git_status.md",
+      "review/review_receipt.json",
+      "run_meta.json"
+    ],
+    "required_outputs": [
+      "gate/receipt_audit.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/gate/receipt_audit.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "routing_signal"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "gate/receipt_audit.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md",
+      "fragments/output/severity_tiers.md"
+    ],
+    "template": "## Mission\n\nVerify the Build receipt is parseable, contract-compliant, and internally consistent.\n\n## Validation Checklist\n\n1. JSON parse + placeholder leakage detection\n2. Pack-wide contract fields (run_id, flow, status, recommended_action, routing_directive)\n3. Build-specific minimums (test grounding, critic verdicts, AC completion)\n4. Cross-checks against test_execution.md and critique artifacts\n5. Snapshot sanity (optional)\n6. Review receipt check (if present)\n\n## Output\n\nWrite {{run.base}}/gate/receipt_audit.md with:\n- Summary table (checks passed/total, issue counts)\n- Receipt parse + contract checks\n- Build-specific grounding verification\n- Cross-reference results\n- Issues found by severity\n- Routing recommendation"
+  },
+  "invariants": [
+    "Write exactly one file: gate/receipt_audit.md",
+    "No repo mutations - read-only verification",
+    "No git side effects (no checkout/branch/add/commit/push/merge/tag)",
+    "Read-only git commands allowed: git show, git rev-parse",
+    "State-first verification: repo state is truth, receipts are evidence",
+    "Stale receipt (commit_sha != HEAD) is a concern, not a blocker"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

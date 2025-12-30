@@ -148,7 +148,7 @@ Recovery follows the principle: **degrade to deterministic, never block**.
 - Cannot adapt to runtime conditions without code deployment
 - Microloop exit conditions become fragile receipt field parsing
 
-**Rejected:** Too brittle for the complexity of 6-flow SDLC with microloops.
+**Rejected:** Too brittle for the complexity of 7-flow SDLC with microloops.
 
 ### B. Fully Autonomous LLM Routing
 

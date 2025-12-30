@@ -181,8 +181,8 @@ Write `.runs/<run-id>/wisdom/wisdom_receipt.json`:
 
   "status": "VERIFIED | UNVERIFIED | CANNOT_PROCEED",
   "recommended_action": "PROCEED | RERUN | BOUNCE | FIX_ENV",
-  "route_to_flow": null,
-  "route_to_agent": null,
+  "routing_decision": "CONTINUE | DETOUR | INJECT_FLOW | INJECT_NODES | EXTEND_GRAPH",
+  "routing_target": null,
 
   "missing_required": [],
   "missing_optional": [],
@@ -220,11 +220,18 @@ Write `.runs/<run-id>/wisdom/wisdom_receipt.json`:
 
 Recommended action:
 
-- `CANNOT_PROCEED` ⇒ `FIX_ENV`, `route_to_*: null`
-- `missing_required` non-empty ⇒ `BOUNCE`, `route_to_flow: 6`
-- otherwise ⇒ `PROCEED`, `route_to_*: null`
+- `CANNOT_PROCEED` ⇒ `FIX_ENV`, `routing_decision: CONTINUE`, `routing_target: null`
+- `missing_required` non-empty ⇒ `BOUNCE`, `routing_decision: INJECT_FLOW`, `routing_target: "deploy"`
+- otherwise ⇒ `PROCEED`, `routing_decision: CONTINUE`, `routing_target: null`
 
-**Note:** `route_to_*` fields must only be populated when `recommended_action: BOUNCE`. For `PROCEED`, `RERUN`, and `FIX_ENV`, set both to `null`.
+**Routing vocabulary:**
+- `CONTINUE` — proceed on golden path (default for PROCEED, RERUN, FIX_ENV)
+- `DETOUR` — inject sidequest chain
+- `INJECT_FLOW` — inject named flow (use for BOUNCE)
+- `INJECT_NODES` — ad-hoc nodes
+- `EXTEND_GRAPH` — propose patch
+
+**Note:** `routing_target` should only be populated when `routing_decision` is not `CONTINUE`. For `CONTINUE`, set `routing_target: null`.
 
 ### Step 5: Update .runs/index.json (minimal ownership)
 

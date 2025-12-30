@@ -435,6 +435,146 @@ def create_fastapi_app() -> FastAPI:
                 status_code=500
             )
 
+    # =========================================================================
+    # Model Policy Endpoints
+    # =========================================================================
+
+    @app.get("/api/model-policy/preview", response_model=schema.ModelPolicyPreviewResponse if schema else None)
+    async def api_model_policy_preview(
+        category: str = Query(..., description="Station category (e.g., implementation, critic, shaping)"),
+        model: str = Query("inherit", description="Model value to resolve (inherit, haiku, sonnet, opus)")
+    ):
+        """Preview model resolution for a given category and model value.
+
+        Shows the effective model that would be used for a station with the given
+        category and model specification, along with the resolution chain explaining
+        how the final model was determined.
+
+        Resolution chain steps:
+        - "inherit -> category": Model was 'inherit', looked up category default
+        - "category -> group": Category mapped to tier group via policy
+        - "group -> tier": Tier group resolved to final tier alias
+        - "primary -> user": Primary tier resolved to user's configured model
+        """
+        try:
+            from swarm.config.model_registry import (
+                load_model_policy,
+                resolve_station_model,
+                resolve_model_tier,
+                VALID_TIERS,
+            )
+
+            policy = load_model_policy()
+            resolution_chain: list[str] = []
+            model_lower = model.lower()
+
+            # Track resolution steps
+            if model_lower == "inherit":
+                resolution_chain.append(f"inherit -> category '{category}'")
+                # Look up the category's tier assignment
+                tier_name = policy.group_assignments.get(category.lower())
+                if tier_name:
+                    resolution_chain.append(f"category -> tier group '{tier_name}'")
+                    # Resolve tier name to alias
+                    tier_def = policy.tiers.get(tier_name, tier_name)
+                    if tier_def == "inherit_user_primary":
+                        resolution_chain.append(f"group '{tier_name}' -> user primary '{policy.user_primary}'")
+                    elif tier_def in VALID_TIERS:
+                        resolution_chain.append(f"group '{tier_name}' -> tier '{tier_def}'")
+                    else:
+                        resolution_chain.append(f"group '{tier_name}' -> fallback 'sonnet'")
+                else:
+                    resolution_chain.append(f"category '{category}' -> fallback 'sonnet'")
+            elif model_lower in VALID_TIERS:
+                resolution_chain.append(f"explicit tier '{model_lower}'")
+            else:
+                resolution_chain.append(f"explicit model ID '{model}'")
+
+            # Get the actual resolved values
+            effective_tier = resolve_station_model(model, category, return_tier_alias=True)
+            effective_model_id = resolve_model_tier(effective_tier)
+
+            return {
+                "requested": {
+                    "category": category,
+                    "model": model,
+                },
+                "effective": {
+                    "tier": effective_tier,
+                    "model_id": effective_model_id,
+                },
+                "resolution_chain": resolution_chain,
+            }
+
+        except ValueError as e:
+            return JSONResponse(
+                {"error": str(e)},
+                status_code=400
+            )
+        except ImportError:
+            return JSONResponse(
+                {"error": "Model registry not available"},
+                status_code=503
+            )
+        except Exception as e:
+            return JSONResponse(
+                {"error": f"Failed to preview model policy: {str(e)}"},
+                status_code=500
+            )
+
+    @app.get("/api/model-policy/matrix", response_model=schema.ModelPolicyMatrixResponse if schema else None)
+    async def api_model_policy_matrix():
+        """Get the complete model policy matrix showing effective models per station category.
+
+        Returns the user's primary model preference, tier definitions, and the
+        resolved model assignments for all station categories. This provides
+        a complete view of how models are allocated across the swarm.
+        """
+        try:
+            from swarm.config.model_registry import (
+                load_model_policy,
+                resolve_tier_alias,
+                resolve_model_tier,
+            )
+
+            policy = load_model_policy()
+
+            # Build resolved tier definitions
+            resolved_tiers: dict[str, str] = {}
+            for tier_name, tier_def in policy.tiers.items():
+                if tier_def == "inherit_user_primary":
+                    resolved_tiers[tier_name] = policy.user_primary
+                else:
+                    resolved_tiers[tier_name] = tier_def
+
+            # Build category assignments
+            assignments: dict[str, dict[str, str]] = {}
+            for category, tier_name in policy.group_assignments.items():
+                tier_alias = resolve_tier_alias(tier_name, policy)
+                model_id = resolve_model_tier(tier_alias)
+                assignments[category] = {
+                    "tier_name": tier_name,
+                    "tier_alias": tier_alias,
+                    "model_id": model_id,
+                }
+
+            return {
+                "user_primary": policy.user_primary,
+                "tiers": resolved_tiers,
+                "assignments": assignments,
+            }
+
+        except ImportError:
+            return JSONResponse(
+                {"error": "Model registry not available"},
+                status_code=503
+            )
+        except Exception as e:
+            return JSONResponse(
+                {"error": f"Failed to get model policy matrix: {str(e)}"},
+                status_code=500
+            )
+
     @app.get("/api/flows", response_model=schema.FlowsListResponse if schema else None)
     async def api_flows():
         """List all flows."""
@@ -1838,6 +1978,120 @@ def create_fastapi_app() -> FastAPI:
             "description": tour["description"],
             "steps": steps,
         }
+
+    # =========================================================================
+    # Station Spec Compilation Preview
+    # =========================================================================
+
+    @app.post(
+        "/api/station/compile-preview",
+        response_model=schema.CompilePreviewResponse if schema else None,
+    )
+    async def api_station_compile_preview(
+        request: schema.CompilePreviewRequest if schema else None,
+    ):
+        """Preview the compiled station spec before execution.
+
+        This endpoint compiles a station spec for a given flow/step combination
+        and returns the fully resolved prompt plan without executing it.
+
+        This is useful for:
+        - Debugging prompt construction
+        - Previewing what the LLM will see
+        - Validating spec changes before execution
+        - Understanding the compilation pipeline
+
+        Request body:
+            flow_id: Flow identifier (e.g., "3-build")
+            step_id: Step identifier within the flow (e.g., "3.3")
+            station_id: Station identifier (e.g., "code-implementer")
+            run_id: Optional run ID for context resolution
+
+        Returns:
+            Compiled prompt plan with system prompt, user prompt, SDK options,
+            verification requirements, and traceability metadata.
+        """
+        if request is None:
+            return JSONResponse(
+                {"error": "Request body required"},
+                status_code=400
+            )
+
+        # Import the SpecCompiler
+        try:
+            from swarm.spec.compiler import SpecCompiler, COMPILER_VERSION
+        except ImportError:
+            return JSONResponse(
+                {"error": "SpecCompiler not available"},
+                status_code=503
+            )
+
+        # Determine run base path
+        run_base = REPO_ROOT / "swarm" / "runs" / (request.run_id or "default")
+
+        try:
+            # Create compiler and compile the step
+            compiler = SpecCompiler(repo_root=REPO_ROOT)
+            plan = compiler.compile(
+                flow_id=request.flow_id,
+                step_id=request.step_id,
+                context_pack=None,  # No runtime context for preview
+                run_base=run_base,
+                cwd=str(REPO_ROOT),
+            )
+
+            # Build response
+            return {
+                "flow_id": plan.flow_id,
+                "step_id": plan.step_id,
+                "station_id": plan.station_id,
+                "system_prompt": plan.system_append,
+                "user_prompt": plan.user_prompt,
+                "sdk_options": {
+                    "model": plan.model,
+                    "tools": list(plan.allowed_tools),
+                    "permission_mode": plan.permission_mode,
+                    "max_turns": plan.max_turns,
+                    "sandbox_enabled": plan.sandbox_enabled,
+                    "cwd": plan.cwd,
+                },
+                "verification": {
+                    "required_artifacts": list(plan.verification.required_artifacts),
+                    "verification_commands": list(plan.verification.verification_commands),
+                },
+                "traceability": {
+                    "prompt_hash": plan.prompt_hash,
+                    "compiled_at": plan.compiled_at,
+                    "compiler_version": COMPILER_VERSION,
+                    "station_version": plan.station_version,
+                    "flow_version": plan.flow_version,
+                },
+            }
+
+        except FileNotFoundError as e:
+            # Flow or station spec not found
+            return JSONResponse(
+                {
+                    "error": f"Spec not found: {str(e)}",
+                    "hint": "Check that flow_id and step_id reference valid specs in swarm/specs/",
+                },
+                status_code=404
+            )
+        except ValueError as e:
+            # Step not found in flow
+            return JSONResponse(
+                {
+                    "error": f"Invalid step: {str(e)}",
+                    "hint": "Verify step_id matches a step in the specified flow",
+                },
+                status_code=400
+            )
+        except Exception as e:
+            logger.exception("Failed to compile station spec preview")
+            return JSONResponse(
+                {"error": f"Compilation failed: {str(e)}"},
+                status_code=500
+            )
 
     # Mount static files (CSS, JS, static assets) from the flow_studio_ui directory
     ui_dir = Path(__file__).parent / "flow_studio_ui"

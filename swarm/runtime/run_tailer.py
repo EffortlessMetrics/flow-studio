@@ -31,7 +31,7 @@ import asyncio
 import json
 import logging
 from pathlib import Path
-from typing import AsyncIterator, Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, AsyncIterator, Dict, List, Optional
 
 if TYPE_CHECKING:
     from .db import StatsDB

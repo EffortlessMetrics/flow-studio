@@ -85,7 +85,7 @@ http://localhost:5000/?run=demo-health-check&mode=operator
 
 **Verify checklist**:
 
-- [ ] Left sidebar shows 6 flows (Signal, Plan, Build, Gate, Deploy, Wisdom)
+- [ ] Left sidebar shows 7 flows (Signal, Plan, Build, Review, Gate, Deploy, Wisdom)
 - [ ] SDLC bar at top shows all flows with status
 - [ ] Clicking "Build" in sidebar loads the flow graph
 - [ ] Clicking an agent node opens the details panel
@@ -120,7 +120,7 @@ If you want to validate stepwise execution specifically:
 make stepwise-sdlc-stub
 ```
 
-**Verify**: Output shows run creation and 6 flows complete.
+**Verify**: Output shows run creation and 7 flows complete.
 
 Then open Flow Studio with the stepwise run:
 
@@ -146,7 +146,7 @@ All of these must be true:
 2. `make demo-run` creates `swarm/runs/demo-health-check/`
 3. Flow Studio starts on port 5000
 4. Browser can load `/?run=demo-health-check&mode=operator`
-5. SDLC bar shows 6 flows
+5. SDLC bar shows 7 flows
 6. Validation tab loads without errors
 7. `/api/health` returns healthy status
 

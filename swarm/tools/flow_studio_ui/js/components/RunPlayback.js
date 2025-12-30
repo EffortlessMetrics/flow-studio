@@ -241,6 +241,7 @@ export class RunPlayback {
             toStep: payload.to_step || "",
             reason: payload.reason || "",
             loopIteration: payload.loop_iteration,
+            decisionType: (payload.decision_type || payload.decision || "advance"),
         };
         this.routingDecisions.push(decision);
         this.renderRoutingDecision(decision);
@@ -416,6 +417,66 @@ export class RunPlayback {
         container.scrollTop = container.scrollHeight;
     }
     /**
+     * Get icon for routing decision type
+     */
+    getDecisionTypeIcon(decisionType) {
+        switch (decisionType) {
+            case "advance":
+                return "\u27A1\uFE0F"; // Right arrow emoji
+            case "loop":
+                return "\uD83D\uDD04"; // Counterclockwise arrows emoji
+            case "terminate":
+                return "\u23F9\uFE0F"; // Stop button emoji
+            case "branch":
+                return "\uD83D\uDD00"; // Shuffle tracks emoji (fork/branch)
+            case "bounce":
+                return "\u21A9\uFE0F"; // Left hook arrow emoji
+            case "skip":
+                return "\u23ED\uFE0F"; // Next track emoji
+            default:
+                return "\u27A1\uFE0F"; // Default to right arrow
+        }
+    }
+    /**
+     * Get CSS class modifier for routing decision type
+     */
+    getDecisionTypeClass(decisionType) {
+        return decisionType ? `playback-routing--${decisionType}` : "";
+    }
+    /**
+     * Format timestamp for display
+     */
+    formatTimestamp(timestamp) {
+        try {
+            const date = new Date(timestamp);
+            return date.toLocaleTimeString(undefined, {
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+            });
+        }
+        catch {
+            return timestamp;
+        }
+    }
+    /**
+     * Truncate text with ellipsis
+     */
+    truncateText(text, maxLength) {
+        if (text.length <= maxLength) {
+            return { truncated: text, isTruncated: false };
+        }
+        return { truncated: text.substring(0, maxLength) + "...", isTruncated: true };
+    }
+    /**
+     * Escape HTML to prevent XSS
+     */
+    escapeHtml(text) {
+        const div = document.createElement("div");
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    /**
      * Render a routing decision to the routing container
      */
     renderRoutingDecision(decision) {
@@ -423,23 +484,147 @@ export class RunPlayback {
         if (!container)
             return;
         const item = document.createElement("div");
-        item.className = "playback-routing";
+        const decisionTypeClass = this.getDecisionTypeClass(decision.decisionType);
+        item.className = `playback-routing ${decisionTypeClass}`;
+        // Get decision type icon and label
+        const icon = this.getDecisionTypeIcon(decision.decisionType);
+        const typeLabel = decision.decisionType || "advance";
+        // Format timestamp
+        const timeDisplay = this.formatTimestamp(decision.timestamp);
+        // Build iteration text
         let iterationText = "";
         if (decision.loopIteration !== undefined) {
             iterationText = `<span class="playback-routing__iteration">Loop #${decision.loopIteration}</span>`;
         }
+        // Truncate reason text (max 100 chars for display)
+        const { truncated: truncatedReason, isTruncated } = this.truncateText(decision.reason, 100);
+        const escapedTruncatedReason = this.escapeHtml(truncatedReason);
+        const escapedFullReason = this.escapeHtml(decision.reason);
+        // Build reason element with expand capability
+        const reasonClass = isTruncated ? "playback-routing__reason playback-routing__reason--truncated" : "playback-routing__reason";
         item.innerHTML = `
       <div class="playback-routing__header">
-        <span class="playback-routing__from">${decision.fromStep}</span>
+        <span class="playback-routing__icon" title="${typeLabel}">${icon}</span>
+        <span class="playback-routing__type">${typeLabel}</span>
+        <span class="playback-routing__timestamp">${timeDisplay}</span>
+      </div>
+      <div class="playback-routing__path">
+        <span class="playback-routing__from">${this.escapeHtml(decision.fromStep)}</span>
         <span class="playback-routing__arrow">\u2192</span>
-        <span class="playback-routing__to">${decision.toStep}</span>
+        <span class="playback-routing__to">${this.escapeHtml(decision.toStep || "(end)")}</span>
         ${iterationText}
       </div>
-      <div class="playback-routing__reason">${decision.reason}</div>
+      <div class="${reasonClass}" data-full-reason="${escapedFullReason}" data-truncated-reason="${escapedTruncatedReason}">
+        ${escapedTruncatedReason}
+      </div>
     `;
+        // Add click handler to expand/collapse truncated reason
+        if (isTruncated) {
+            const reasonElement = item.querySelector(".playback-routing__reason");
+            if (reasonElement) {
+                reasonElement.addEventListener("click", () => {
+                    const isExpanded = reasonElement.classList.contains("playback-routing__reason--expanded");
+                    if (isExpanded) {
+                        reasonElement.textContent = reasonElement.getAttribute("data-truncated-reason") || "";
+                        reasonElement.classList.remove("playback-routing__reason--expanded");
+                        reasonElement.classList.add("playback-routing__reason--truncated");
+                    }
+                    else {
+                        reasonElement.textContent = reasonElement.getAttribute("data-full-reason") || "";
+                        reasonElement.classList.add("playback-routing__reason--expanded");
+                        reasonElement.classList.remove("playback-routing__reason--truncated");
+                    }
+                });
+            }
+        }
         container.appendChild(item);
         // Auto-scroll to bottom
         container.scrollTop = container.scrollHeight;
+    }
+    /**
+     * Render all routing decisions as a timeline
+     */
+    renderRoutingHistory() {
+        const container = this.options.routingContainer;
+        if (!container)
+            return;
+        // Clear existing content
+        container.innerHTML = "";
+        // Add timeline wrapper
+        const timeline = document.createElement("div");
+        timeline.className = "playback-routing-timeline";
+        if (this.routingDecisions.length === 0) {
+            const emptyMessage = document.createElement("div");
+            emptyMessage.className = "playback-routing-timeline__empty";
+            emptyMessage.textContent = "No routing decisions recorded";
+            timeline.appendChild(emptyMessage);
+        }
+        else {
+            // Render each decision
+            for (const decision of this.routingDecisions) {
+                const entry = this.createRoutingTimelineEntry(decision);
+                timeline.appendChild(entry);
+            }
+        }
+        container.appendChild(timeline);
+    }
+    /**
+     * Create a timeline entry element for a routing decision
+     */
+    createRoutingTimelineEntry(decision) {
+        const entry = document.createElement("div");
+        const decisionTypeClass = this.getDecisionTypeClass(decision.decisionType);
+        entry.className = `playback-routing-timeline__entry ${decisionTypeClass}`;
+        const icon = this.getDecisionTypeIcon(decision.decisionType);
+        const typeLabel = decision.decisionType || "advance";
+        const timeDisplay = this.formatTimestamp(decision.timestamp);
+        const { truncated: truncatedReason, isTruncated } = this.truncateText(decision.reason, 80);
+        // Build iteration badge
+        let iterationBadge = "";
+        if (decision.loopIteration !== undefined) {
+            iterationBadge = `<span class="playback-routing-timeline__iteration">#${decision.loopIteration}</span>`;
+        }
+        entry.innerHTML = `
+      <div class="playback-routing-timeline__marker">
+        <span class="playback-routing-timeline__icon">${icon}</span>
+        <span class="playback-routing-timeline__line"></span>
+      </div>
+      <div class="playback-routing-timeline__content">
+        <div class="playback-routing-timeline__header">
+          <span class="playback-routing-timeline__type">${typeLabel}</span>
+          ${iterationBadge}
+          <span class="playback-routing-timeline__time">${timeDisplay}</span>
+        </div>
+        <div class="playback-routing-timeline__path">
+          ${this.escapeHtml(decision.fromStep)} \u2192 ${this.escapeHtml(decision.toStep || "(end)")}
+        </div>
+        <div class="playback-routing-timeline__reason ${isTruncated ? "playback-routing-timeline__reason--truncated" : ""}"
+             data-full="${this.escapeHtml(decision.reason)}"
+             data-truncated="${this.escapeHtml(truncatedReason)}">
+          ${this.escapeHtml(truncatedReason)}
+        </div>
+      </div>
+    `;
+        // Add click handler for truncated reason
+        if (isTruncated) {
+            const reasonElement = entry.querySelector(".playback-routing-timeline__reason");
+            if (reasonElement) {
+                reasonElement.addEventListener("click", () => {
+                    const isExpanded = reasonElement.classList.contains("playback-routing-timeline__reason--expanded");
+                    if (isExpanded) {
+                        reasonElement.textContent = reasonElement.getAttribute("data-truncated") || "";
+                        reasonElement.classList.remove("playback-routing-timeline__reason--expanded");
+                        reasonElement.classList.add("playback-routing-timeline__reason--truncated");
+                    }
+                    else {
+                        reasonElement.textContent = reasonElement.getAttribute("data-full") || "";
+                        reasonElement.classList.add("playback-routing-timeline__reason--expanded");
+                        reasonElement.classList.remove("playback-routing-timeline__reason--truncated");
+                    }
+                });
+            }
+        }
+        return entry;
     }
     /**
      * Clear all output displays
@@ -490,12 +675,130 @@ export function createRunPlayback(options) {
  * - .playback-output__agent - Agent key
  * - .playback-output__duration - Duration text
  *
- * Routing display:
+ * Routing display (single decision):
  * - .playback-routing - Routing item container
- * - .playback-routing__header - Header with from/to/arrow
+ * - .playback-routing--advance - Advance decision type modifier
+ * - .playback-routing--loop - Loop decision type modifier
+ * - .playback-routing--terminate - Terminate decision type modifier
+ * - .playback-routing--branch - Branch decision type modifier
+ * - .playback-routing--bounce - Bounce decision type modifier
+ * - .playback-routing--skip - Skip decision type modifier
+ * - .playback-routing__header - Header with icon, type, timestamp
+ * - .playback-routing__icon - Decision type icon
+ * - .playback-routing__type - Decision type label
+ * - .playback-routing__timestamp - Timestamp display
+ * - .playback-routing__path - Path with from/to/arrow
  * - .playback-routing__from - Source step
  * - .playback-routing__arrow - Arrow indicator
  * - .playback-routing__to - Target step
  * - .playback-routing__iteration - Loop iteration badge
- * - .playback-routing__reason - Decision reason
+ * - .playback-routing__reason - Decision reason text
+ * - .playback-routing__reason--truncated - Truncated reason (clickable to expand)
+ * - .playback-routing__reason--expanded - Expanded reason
+ *
+ * Routing timeline (history view):
+ * - .playback-routing-timeline - Timeline container
+ * - .playback-routing-timeline__empty - Empty state message
+ * - .playback-routing-timeline__entry - Single timeline entry
+ * - .playback-routing-timeline__marker - Visual marker (icon + line)
+ * - .playback-routing-timeline__icon - Entry icon
+ * - .playback-routing-timeline__line - Vertical connector line
+ * - .playback-routing-timeline__content - Entry content wrapper
+ * - .playback-routing-timeline__header - Entry header
+ * - .playback-routing-timeline__type - Decision type label
+ * - .playback-routing-timeline__iteration - Iteration badge (#N)
+ * - .playback-routing-timeline__time - Timestamp
+ * - .playback-routing-timeline__path - From -> To path text
+ * - .playback-routing-timeline__reason - Reason text
+ * - .playback-routing-timeline__reason--truncated - Truncated reason (clickable)
+ * - .playback-routing-timeline__reason--expanded - Expanded reason
+ *
+ * Recommended CSS for routing components:
+ *
+ * .playback-routing {
+ *   padding: 8px 12px;
+ *   margin-bottom: 8px;
+ *   border-radius: 6px;
+ *   background: var(--bg-secondary, #1e293b);
+ *   border-left: 3px solid var(--border-color, #475569);
+ * }
+ *
+ * .playback-routing--advance { border-left-color: #22c55e; }
+ * .playback-routing--loop { border-left-color: #3b82f6; }
+ * .playback-routing--terminate { border-left-color: #ef4444; }
+ * .playback-routing--branch { border-left-color: #f59e0b; }
+ * .playback-routing--bounce { border-left-color: #8b5cf6; }
+ * .playback-routing--skip { border-left-color: #6b7280; }
+ *
+ * .playback-routing__header {
+ *   display: flex;
+ *   align-items: center;
+ *   gap: 8px;
+ *   margin-bottom: 4px;
+ * }
+ *
+ * .playback-routing__icon { font-size: 1.1em; }
+ * .playback-routing__type { font-weight: 600; text-transform: capitalize; }
+ * .playback-routing__timestamp { color: var(--text-muted, #94a3b8); font-size: 0.85em; margin-left: auto; }
+ *
+ * .playback-routing__path {
+ *   display: flex;
+ *   align-items: center;
+ *   gap: 6px;
+ *   font-family: monospace;
+ *   font-size: 0.9em;
+ *   margin-bottom: 4px;
+ * }
+ *
+ * .playback-routing__iteration {
+ *   background: var(--badge-bg, #334155);
+ *   padding: 2px 6px;
+ *   border-radius: 4px;
+ *   font-size: 0.8em;
+ * }
+ *
+ * .playback-routing__reason {
+ *   color: var(--text-secondary, #cbd5e1);
+ *   font-size: 0.9em;
+ *   line-height: 1.4;
+ * }
+ *
+ * .playback-routing__reason--truncated {
+ *   cursor: pointer;
+ * }
+ *
+ * .playback-routing__reason--truncated:hover {
+ *   text-decoration: underline;
+ *   text-decoration-style: dotted;
+ * }
+ *
+ * .playback-routing-timeline {
+ *   display: flex;
+ *   flex-direction: column;
+ *   gap: 0;
+ * }
+ *
+ * .playback-routing-timeline__entry {
+ *   display: flex;
+ *   gap: 12px;
+ * }
+ *
+ * .playback-routing-timeline__marker {
+ *   display: flex;
+ *   flex-direction: column;
+ *   align-items: center;
+ *   width: 24px;
+ * }
+ *
+ * .playback-routing-timeline__line {
+ *   flex: 1;
+ *   width: 2px;
+ *   background: var(--border-color, #475569);
+ *   margin-top: 4px;
+ * }
+ *
+ * .playback-routing-timeline__content {
+ *   flex: 1;
+ *   padding-bottom: 16px;
+ * }
  */

@@ -137,13 +137,13 @@ Track missing inputs in `missing_required` but keep going unless you cannot writ
 
 7. **Set control-plane routing**
 
-   * If any `CRITICAL` `NON-COMPLIANT` → usually `BOUNCE` (Plan context → Flow 2; Gate context → Flow 3) with blockers
+   * If all applicable items are `COMPLIANT` (or justified `NOT_APPLICABLE`) → `VERIFIED`, `CONTINUE`
+   * If only `UNKNOWN` items remain for applicable requirements → `UNVERIFIED`, `CONTINUE` with blockers documented
    * If `NON-COMPLIANT` and fix is clear + in-scope:
 
-     * Plan context → `BOUNCE` to Flow 2, `route_to_agent: interface-designer` (or `adr-author`)
-     * Gate context → `BOUNCE` to Flow 3, `route_to_agent: code-implementer` (or `test-author`)
-   * If only `UNKNOWN` items remain for applicable requirements → `UNVERIFIED`, usually `PROCEED` with blockers
-   * If all applicable items are `COMPLIANT` (or justified `NOT_APPLICABLE`) → `VERIFIED`, `PROCEED`
+     * Plan context → `DETOUR` to interface-designer (or adr-author) for contract/design fixes
+     * Gate context → `DETOUR` to code-implementer (or test-author) for implementation fixes
+   * If any `CRITICAL` `NON-COMPLIANT` → `INJECT_FLOW` to restart relevant flow (Plan context → plan flow; Gate context → build flow) with blockers
 
 ## Output format (write exactly)
 
@@ -216,19 +216,19 @@ Your handoff should tell the orchestrator what compliance state was found and wh
 
 **When all applicable policies are compliant:**
 - "Reviewed 3 policy documents (security, data-retention, API-design), mapped 12 requirements to plan artifacts. All applicable requirements show compliant evidence. No waivers needed."
-- Next step: Proceed
+- Next step: CONTINUE
 
 **When violations require fixes:**
 - "Found 2 CRITICAL non-compliant items: POL-002 (PII encryption missing from schema.md) and POL-005 (auth enforcement missing from API contracts). Both require interface-designer updates."
-- Next step: Route to interface-designer to add required controls
+- Next step: DETOUR to interface-designer to add required controls
 
 **When waivers are needed:**
 - "POL-007 requires VP approval for new API endpoints — this is a governance waiver, not a technical fix. Documented in waivers section."
-- Next step: Proceed (human approval required, out of pack scope)
+- Next step: CONTINUE (human approval required, out of pack scope)
 
 **When policies aren't found:**
 - "No policy documents found in configured roots (policies/, docs/policies/). Cannot verify compliance without policy corpus."
-- Next step: Proceed with documented uncertainty (user must confirm policy location)
+- Next step: CONTINUE with documented uncertainty (user must confirm policy location)
 
 ## Philosophy
 

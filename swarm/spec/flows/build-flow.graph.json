@@ -1,0 +1,519 @@
+{
+  "$schema": "../schemas/flow_graph.schema.json",
+  "id": "build-flow",
+  "version": 1,
+  "title": "Flow 3 - Build",
+  "flow_number": 3,
+  "description": "Transform design artifacts into working code via adversarial microloops. Tests pass. Diff is honest.",
+  "charter": {
+    "goal": "Produce verified, codebase-aligned implementation that satisfies all acceptance criteria",
+    "question": "Does the implementation match the design and pass all tests?",
+    "exit_criteria": [
+      "All in-scope ACs have passing tests",
+      "Code matches ADR and contract specifications",
+      "No CRITICAL security or quality issues",
+      "Build receipt generated with honest status"
+    ],
+    "non_goals": [
+      "Comprehensive PR review (defer to Flow 4)",
+      "Architecture redesign (bounce to Flow 2)",
+      "Full test coverage optimization (defer to Flow 4)"
+    ],
+    "prime_directive": "Maximize passing tests. Minimize changes. Only detach from Golden Path if build is blocked."
+  },
+  "nodes": [
+    {
+      "node_id": "run_prep",
+      "template_id": "run-prep",
+      "params": {
+        "objective": "Establish run directory and infrastructure"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Run Prep",
+        "position": {"x": 100, "y": 50},
+        "color": "#94a3b8"
+      }
+    },
+    {
+      "node_id": "repo_operator_init",
+      "template_id": "repo-operator",
+      "params": {
+        "objective": "Ensure run branch exists"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Git Init",
+        "position": {"x": 100, "y": 120}
+      }
+    },
+    {
+      "node_id": "context_loader",
+      "template_id": "context-loader",
+      "params": {
+        "objective": "Assemble working set for implementation"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Load Context",
+        "position": {"x": 100, "y": 190},
+        "teaching": {
+          "highlight": true,
+          "note": "Heavy context loading: surface all relevant code and specs"
+        }
+      }
+    },
+    {
+      "node_id": "clarifier",
+      "template_id": "clarifier",
+      "params": {
+        "objective": "Document ambiguities (non-blocking)"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Clarify",
+        "position": {"x": 100, "y": 260}
+      }
+    },
+    {
+      "node_id": "test_author",
+      "template_id": "test-author",
+      "params": {
+        "objective": "Write tests for current AC"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Write Tests",
+        "position": {"x": 100, "y": 350},
+        "color": "#22c55e"
+      },
+      "suggested_sidequests": [
+        {
+          "station_id": "clarifier",
+          "typical_trigger": "When BDD scenarios have ambiguous acceptance criteria",
+          "routing_type": "DETOUR",
+          "priority": 60
+        }
+      ]
+    },
+    {
+      "node_id": "test_critic",
+      "template_id": "test-critic",
+      "params": {
+        "objective": "Verify tests are solid"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Critique Tests",
+        "position": {"x": 100, "y": 420},
+        "color": "#ef4444"
+      }
+    },
+    {
+      "node_id": "code_implementer",
+      "template_id": "code-implementer",
+      "params": {
+        "objective": "Implement code to pass tests"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Implement",
+        "position": {"x": 100, "y": 510},
+        "color": "#22c55e"
+      },
+      "suggested_sidequests": [
+        {
+          "station_id": "design-optioneer",
+          "typical_trigger": "When implementation contradicts ADR constraints",
+          "routing_type": "DETOUR",
+          "priority": 80
+        },
+        {
+          "station_id": "impact-analyzer",
+          "typical_trigger": "When changes affect multiple modules",
+          "routing_type": "DETOUR",
+          "priority": 50
+        }
+      ]
+    },
+    {
+      "node_id": "code_critic",
+      "template_id": "code-critic",
+      "params": {
+        "objective": "Verify implementation matches spec"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Critique Code",
+        "position": {"x": 100, "y": 580},
+        "color": "#ef4444"
+      }
+    },
+    {
+      "node_id": "test_executor",
+      "template_id": "test-executor",
+      "params": {
+        "objective": "Run tests and report AC status"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Execute Tests",
+        "position": {"x": 100, "y": 650},
+        "color": "#3b82f6"
+      }
+    },
+    {
+      "node_id": "standards_enforcer",
+      "template_id": "standards-enforcer",
+      "params": {
+        "objective": "Format, lint, and check for suspicious changes"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Standards",
+        "position": {"x": 100, "y": 750}
+      }
+    },
+    {
+      "node_id": "mutation_auditor",
+      "template_id": "mutation-auditor",
+      "params": {
+        "objective": "Mutation testing on changed files"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Mutation",
+        "position": {"x": 100, "y": 820}
+      }
+    },
+    {
+      "node_id": "fixer",
+      "template_id": "fixer",
+      "params": {
+        "objective": "Apply targeted fixes from critiques"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Fix",
+        "position": {"x": 100, "y": 890},
+        "color": "#22c55e"
+      }
+    },
+    {
+      "node_id": "doc_writer",
+      "template_id": "doc-writer",
+      "params": {
+        "objective": "Update documentation"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Write Docs",
+        "position": {"x": 100, "y": 960}
+      }
+    },
+    {
+      "node_id": "self_reviewer",
+      "template_id": "self-reviewer",
+      "params": {
+        "objective": "Final consistency check"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Self Review",
+        "position": {"x": 100, "y": 1030}
+      }
+    },
+    {
+      "node_id": "build_cleanup",
+      "template_id": "build-cleanup",
+      "params": {
+        "objective": "Write receipt and update index"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Cleanup",
+        "position": {"x": 100, "y": 1100},
+        "color": "#94a3b8"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "edge_id": "e01-prep-to-git",
+      "from": "run_prep",
+      "to": "repo_operator_init",
+      "type": "sequence"
+    },
+    {
+      "edge_id": "e02-git-to-context",
+      "from": "repo_operator_init",
+      "to": "context_loader",
+      "type": "sequence"
+    },
+    {
+      "edge_id": "e03-context-to-clarify",
+      "from": "context_loader",
+      "to": "clarifier",
+      "type": "sequence"
+    },
+    {
+      "edge_id": "e04-clarify-to-tests",
+      "from": "clarifier",
+      "to": "test_author",
+      "type": "sequence"
+    },
+    {
+      "edge_id": "e05-tests-to-critique",
+      "from": "test_author",
+      "to": "test_critic",
+      "type": "sequence"
+    },
+    {
+      "edge_id": "e06-test-loop",
+      "from": "test_critic",
+      "to": "test_author",
+      "type": "loop",
+      "priority": 60,
+      "condition": {
+        "field": "status",
+        "operator": "equals",
+        "value": "UNVERIFIED"
+      },
+      "ui": {
+        "style": "dashed",
+        "label": "UNVERIFIED",
+        "color": "#f59e0b"
+      }
+    },
+    {
+      "edge_id": "e07-tests-to-impl",
+      "from": "test_critic",
+      "to": "code_implementer",
+      "type": "sequence",
+      "priority": 40,
+      "condition": {
+        "field": "status",
+        "operator": "in",
+        "value": ["VERIFIED", "UNVERIFIED"]
+      }
+    },
+    {
+      "edge_id": "e08-impl-to-critique",
+      "from": "code_implementer",
+      "to": "code_critic",
+      "type": "sequence"
+    },
+    {
+      "edge_id": "e09-code-loop",
+      "from": "code_critic",
+      "to": "code_implementer",
+      "type": "loop",
+      "priority": 60,
+      "condition": {
+        "field": "can_further_iteration_help",
+        "operator": "equals",
+        "value": "yes"
+      },
+      "ui": {
+        "style": "dashed",
+        "label": "iterate",
+        "color": "#f59e0b"
+      }
+    },
+    {
+      "edge_id": "e10-critique-to-execute",
+      "from": "code_critic",
+      "to": "test_executor",
+      "type": "sequence",
+      "priority": 40
+    },
+    {
+      "edge_id": "e11-execute-to-standards",
+      "from": "test_executor",
+      "to": "standards_enforcer",
+      "type": "sequence"
+    },
+    {
+      "edge_id": "e12-standards-to-mutation",
+      "from": "standards_enforcer",
+      "to": "mutation_auditor",
+      "type": "sequence"
+    },
+    {
+      "edge_id": "e13-mutation-to-fixer",
+      "from": "mutation_auditor",
+      "to": "fixer",
+      "type": "sequence",
+      "condition": {
+        "field": "survivors_count",
+        "operator": "gt",
+        "value": 0
+      }
+    },
+    {
+      "edge_id": "e14-mutation-to-docs",
+      "from": "mutation_auditor",
+      "to": "doc_writer",
+      "type": "sequence",
+      "priority": 30,
+      "condition": {
+        "field": "survivors_count",
+        "operator": "equals",
+        "value": 0
+      }
+    },
+    {
+      "edge_id": "e15-fixer-to-docs",
+      "from": "fixer",
+      "to": "doc_writer",
+      "type": "sequence"
+    },
+    {
+      "edge_id": "e16-docs-to-review",
+      "from": "doc_writer",
+      "to": "self_reviewer",
+      "type": "sequence"
+    },
+    {
+      "edge_id": "e17-review-to-cleanup",
+      "from": "self_reviewer",
+      "to": "build_cleanup",
+      "type": "sequence"
+    }
+  ],
+  "subflows": [
+    {
+      "subflow_id": "test-microloop",
+      "title": "Test Microloop",
+      "description": "Author/critic loop for test quality",
+      "entry_node": "test_author",
+      "exit_nodes": ["test_critic"],
+      "contained_nodes": ["test_author", "test_critic"],
+      "ui": {
+        "color": "#fef3c7",
+        "collapsed_by_default": false
+      }
+    },
+    {
+      "subflow_id": "code-microloop",
+      "title": "Code Microloop",
+      "description": "Implementer/critic loop for code quality",
+      "entry_node": "code_implementer",
+      "exit_nodes": ["code_critic"],
+      "contained_nodes": ["code_implementer", "code_critic"],
+      "ui": {
+        "color": "#dbeafe",
+        "collapsed_by_default": false
+      }
+    },
+    {
+      "subflow_id": "hardening-phase",
+      "title": "Hardening Phase",
+      "description": "Standards, mutation testing, and fixes",
+      "entry_node": "standards_enforcer",
+      "exit_nodes": ["fixer", "doc_writer"],
+      "contained_nodes": ["standards_enforcer", "mutation_auditor", "fixer"],
+      "ui": {
+        "color": "#fce7f3",
+        "collapsed_by_default": true
+      }
+    }
+  ],
+  "policy": {
+    "max_loop_iterations": 5,
+    "max_depth": 3,
+    "escalation": {
+      "on_blocked": "continue_with_concerns",
+      "max_unverified_streak": 3,
+      "escalate_on_unverified_streak": "continue"
+    },
+    "suggested_detours": [
+      {
+        "from_nodes": ["code_implementer", "test_author"],
+        "to_station": "clarifier",
+        "condition": {
+          "field": "blockers",
+          "operator": "contains",
+          "value": "ambiguous"
+        },
+        "return_to": "source",
+        "priority": 70
+      },
+      {
+        "from_nodes": ["code_implementer"],
+        "to_station": "design-optioneer",
+        "condition": {
+          "field": "blockers",
+          "operator": "contains",
+          "value": "ADR"
+        },
+        "return_to": "source",
+        "priority": 80
+      }
+    ],
+    "suggested_injections": [
+      {
+        "station_id": "flakiness-detector",
+        "inject_after": ["test_executor"],
+        "condition": {
+          "field": "tests_failed",
+          "operator": "gt",
+          "value": 0
+        },
+        "one_shot": true,
+        "priority": 60
+      },
+      {
+        "station_id": "fuzz-triager",
+        "inject_after": ["mutation_auditor"],
+        "one_shot": true,
+        "priority": 40
+      }
+    ],
+    "routing_decisions": {
+      "default_decision": "CONTINUE",
+      "signal_interpretation": {
+        "on_verified": "CONTINUE",
+        "on_unverified_can_iterate": "CONTINUE",
+        "on_unverified_cannot_iterate": "CONTINUE",
+        "on_blocked": "DETOUR",
+        "on_concerns": "CONTINUE"
+      }
+    },
+    "invariants": [
+      "Tests must pass before proceeding past test_executor",
+      "Critics never fix - only produce reports",
+      "No git operations except through repo-operator"
+    ]
+  },
+  "defaults": {
+    "context_pack": {
+      "include_upstream_artifacts": true,
+      "include_previous_envelopes": true,
+      "max_envelopes": 12,
+      "include_scent_trail": true
+    },
+    "sdk": {
+      "model": "inherit",
+      "max_turns": 20
+    }
+  },
+  "on_complete": {
+    "next_flow": "4-review",
+    "reason": "Build complete; proceed to PR review",
+    "pass_artifacts": [
+      "build/build_receipt.json",
+      "build/impl_changes_summary.md",
+      "build/test_changes_summary.md"
+    ]
+  },
+  "on_failure": {
+    "next_flow": "2-plan",
+    "reason": "Implementation issues may require design changes"
+  },
+  "metadata": {
+    "author": "flow-studio-swarm",
+    "tags": ["build", "implementation", "microloop", "adversarial"],
+    "cross_cutting_stations": ["clarifier", "risk-analyst", "design-optioneer"]
+  }
+}

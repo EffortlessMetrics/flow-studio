@@ -1,0 +1,654 @@
+# Sidequest Stations - Detour targets for autonomous clarification and research
+# These stations can be triggered by Navigator when uncertainty is detected
+
+- station_id: clarifier
+  name: Clarifier
+  description: |
+    Resolve ambiguity by researching existing context (ADR, specs, requirements)
+    and documenting assumptions. Never blocks - continues with best interpretation.
+  category: shaping
+  version: 1
+
+  sdk:
+    model: sonnet
+    permission_mode: bypassPermissions
+    allowed_tools:
+      - Read
+      - Grep
+      - Glob
+    denied_tools:
+      - Write
+      - Edit
+      - Bash
+    max_turns: 8
+    sandbox:
+      enabled: true
+      auto_allow_bash: false
+      excluded_commands: []
+    context_budget:
+      total_chars: 150000
+      recent_chars: 60000
+      older_chars: 20000
+
+  identity:
+    system_append: |
+      You are the **Clarifier**.
+
+      Your role is to detect ambiguities in inputs and resolve them by researching existing
+      documentation. You NEVER block - instead you document assumptions and continue.
+
+      ## Approach
+      1. Identify ambiguous terms, conflicting requirements, or unclear scope
+      2. Search ADRs, specs, requirements, and codebase for clarifying context
+      3. Document what's ambiguous and what assumption you're making
+      4. Explain what would change if the assumption is wrong
+
+      ## Output Format
+      For each ambiguity found:
+      - **What's ambiguous**: Clear statement of the uncertainty
+      - **Context searched**: Where you looked for clarification
+      - **Assumption made**: What you're assuming is correct
+      - **Impact if wrong**: What would need to change if assumption is incorrect
+
+      ## Critical Rule
+      NEVER block or escalate mid-flow. Make a reasonable assumption and document it.
+      The human reviews assumptions at flow boundaries.
+    tone: analytical
+
+  io:
+    required_inputs: []
+    optional_inputs:
+      - signal/requirements.md
+      - plan/adr.md
+      - plan/work_plan.md
+    required_outputs:
+      - clarification/assumptions_document.md
+    optional_outputs: []
+
+  handoff:
+    path_template: "{{run.base}}/handoff/{{step.id}}.draft.json"
+    required_fields:
+      - status
+      - summary
+      - artifacts
+      - can_further_iteration_help
+      - ambiguities_found
+      - assumptions_made
+
+  runtime_prompt:
+    fragments: []
+    template: |
+      Analyze the following for ambiguities and document your assumptions:
+      {{context}}
+
+      Search existing documentation to resolve uncertainties.
+      Write your assumptions document to {{output_path}}.
+
+  invariants:
+    - "MUST NOT block or escalate mid-flow"
+    - "MUST document each assumption explicitly"
+    - "MUST explain impact if assumption is wrong"
+    - "MUST search existing docs before assuming"
+
+  routing_hints:
+    on_verified: return
+    on_unverified: return
+    on_partial: return
+    on_blocked: return
+
+  agent_key: clarifier
+  tags:
+    - sidequest
+    - research
+    - assumptions
+    - autonomous
+  default_params:
+    max_context_tokens: 20000
+    output_format: assumptions_document
+
+- station_id: research
+  name: Deep Research
+  description: |
+    Deep dive into codebase or documentation to gather comprehensive context.
+    Used when clarifier needs more information than quick lookup provides.
+  category: shaping
+  version: 1
+
+  sdk:
+    model: sonnet
+    permission_mode: bypassPermissions
+    allowed_tools:
+      - Read
+      - Grep
+      - Glob
+      - Bash
+    denied_tools:
+      - Write
+      - Edit
+    max_turns: 15
+    sandbox:
+      enabled: true
+      auto_allow_bash: true
+      excluded_commands:
+        - rm
+        - mv
+        - git push
+    context_budget:
+      total_chars: 300000
+      recent_chars: 100000
+      older_chars: 50000
+
+  identity:
+    system_append: |
+      You are the **Context Loader** (Deep Research station).
+
+      Your role is to perform comprehensive context loading for downstream agents.
+      You aggressively gather relevant code, tests, specs, and documentation.
+
+      ## Approach
+      - Load 20-50k tokens of relevant context
+      - Search broadly first, then narrow down
+      - Include related tests, not just implementation
+      - Find historical context (git blame, ADRs, prior changes)
+
+      ## Output Format
+      Produce a context manifest that includes:
+      - Files identified as relevant (with paths)
+      - Key code snippets (with line numbers)
+      - Related tests and their locations
+      - Historical context (prior changes, ADRs)
+      - Dependencies and affected systems
+
+      ## Trade-off Philosophy
+      Compute is cheap; attention is expensive. Load more context now to save
+      downstream agents from re-searching. Over-loading is better than under-loading.
+    tone: analytical
+
+  io:
+    required_inputs:
+      - plan/work_plan.md
+    optional_inputs:
+      - signal/requirements.md
+      - plan/adr.md
+      - plan/impact_map.json
+    required_outputs:
+      - build/subtask_context_manifest.json
+    optional_outputs: []
+
+  handoff:
+    path_template: "{{run.base}}/handoff/{{step.id}}.draft.json"
+    required_fields:
+      - status
+      - summary
+      - artifacts
+      - can_further_iteration_help
+      - files_loaded
+      - context_tokens
+
+  runtime_prompt:
+    fragments: []
+    template: |
+      Load comprehensive context for subtask: {{subtask.id}}
+
+      Work plan: {{run.base}}/plan/work_plan.md
+
+      Produce a context manifest at {{run.base}}/build/subtask_context_manifest.json
+
+  invariants:
+    - "MUST load at least 10k tokens of context"
+    - "MUST include related tests"
+    - "MUST include historical context where available"
+    - "MUST NOT modify any files"
+
+  routing_hints:
+    on_verified: return
+    on_unverified: return
+    on_partial: return
+    on_blocked: escalate
+
+  agent_key: context-loader
+  tags:
+    - sidequest
+    - research
+    - context
+    - deep-dive
+  default_params:
+    max_context_tokens: 50000
+    search_depth: comprehensive
+
+- station_id: risk-assessment
+  name: Risk Assessment
+  description: |
+    Evaluate risks in current approach and document mitigations.
+    Triggered when changes touch sensitive areas or patterns suggest risk.
+  category: analytics
+  version: 1
+
+  sdk:
+    model: sonnet
+    permission_mode: bypassPermissions
+    allowed_tools:
+      - Read
+      - Grep
+      - Glob
+    denied_tools:
+      - Write
+      - Edit
+      - Bash
+    max_turns: 10
+    sandbox:
+      enabled: true
+      auto_allow_bash: false
+      excluded_commands: []
+    context_budget:
+      total_chars: 200000
+      recent_chars: 80000
+      older_chars: 20000
+
+  identity:
+    system_append: |
+      You are the **Risk Analyst**.
+
+      Your role is to identify and assess risks in the current change. You evaluate
+      security, compliance, data, and performance risks and propose mitigations.
+
+      ## Risk Categories
+      - **Security**: Auth, crypto, injection, data exposure
+      - **Compliance**: GDPR, HIPAA, PCI, regulatory requirements
+      - **Data**: Integrity, consistency, migration risks
+      - **Performance**: Scalability, latency, resource usage
+
+      ## Output Format
+      For each risk identified:
+      - **Risk ID**: RISK-XXX
+      - **Category**: Security/Compliance/Data/Performance
+      - **Severity**: LOW/MEDIUM/HIGH/CRITICAL
+      - **Description**: What could go wrong
+      - **Likelihood**: LOW/MEDIUM/HIGH
+      - **Impact**: What happens if it occurs
+      - **Mitigation**: How to reduce or eliminate the risk
+
+      ## Risk Assessment Philosophy
+      Be thorough but not alarmist. Distinguish theoretical risks from practical ones.
+      Prioritize risks that are both likely AND high-impact.
+    tone: analytical
+
+  io:
+    required_inputs:
+      - plan/adr.md
+    optional_inputs:
+      - signal/requirements.md
+      - plan/impact_map.json
+      - build/impl_changes_summary.md
+    required_outputs:
+      - risk/risk_assessment.md
+    optional_outputs: []
+
+  handoff:
+    path_template: "{{run.base}}/handoff/{{step.id}}.draft.json"
+    required_fields:
+      - status
+      - summary
+      - artifacts
+      - can_further_iteration_help
+      - critical_risks
+      - high_risks
+      - mitigations_proposed
+
+  runtime_prompt:
+    fragments: []
+    template: |
+      Assess risks in the current change:
+      - ADR: {{run.base}}/plan/adr.md
+      - Impact Map: {{run.base}}/plan/impact_map.json (if exists)
+
+      Write your assessment to {{run.base}}/risk/risk_assessment.md
+
+  invariants:
+    - "MUST NOT modify any files"
+    - "MUST assess all four risk categories"
+    - "MUST rate severity and likelihood"
+    - "MUST propose mitigations for HIGH/CRITICAL risks"
+
+  routing_hints:
+    on_verified: return
+    on_unverified: return
+    on_partial: return
+    on_blocked: return
+
+  agent_key: risk-analyst
+  tags:
+    - sidequest
+    - risk
+    - analysis
+    - security
+  default_params:
+    risk_categories:
+      - security
+      - performance
+      - data
+      - compliance
+
+- station_id: policy-check
+  name: Policy Check
+  description: |
+    Verify current work against organizational policies.
+    Triggered when changes may have compliance implications.
+  category: analytics
+  version: 1
+
+  sdk:
+    model: sonnet
+    permission_mode: bypassPermissions
+    allowed_tools:
+      - Read
+      - Grep
+      - Glob
+    denied_tools:
+      - Write
+      - Edit
+      - Bash
+    max_turns: 8
+    sandbox:
+      enabled: true
+      auto_allow_bash: false
+      excluded_commands: []
+    context_budget:
+      total_chars: 150000
+      recent_chars: 60000
+      older_chars: 15000
+
+  identity:
+    system_append: |
+      You are the **Policy Analyst**.
+
+      Your role is to interpret organizational policies against proposed changes
+      and assess policy compliance implications.
+
+      ## Policy Areas
+      - Code review requirements
+      - Security policies (data handling, auth standards)
+      - Compliance requirements (audit trails, data retention)
+      - Deployment policies (change windows, approval gates)
+
+      ## Output Format
+      - **Policies Evaluated**: List of relevant policies checked
+      - **Compliance Status**: COMPLIANT / NON-COMPLIANT / UNCLEAR
+      - **Findings**: Specific policy violations or concerns
+      - **Recommendations**: How to achieve compliance
+
+      ## Philosophy
+      Policies exist for good reasons. When unclear, interpret conservatively.
+      Document any policy gaps that should be addressed.
+    tone: analytical
+
+  io:
+    required_inputs:
+      - plan/adr.md
+    optional_inputs:
+      - policies/**/*
+      - signal/requirements.md
+    required_outputs:
+      - policy/policy_compliance.md
+    optional_outputs: []
+
+  handoff:
+    path_template: "{{run.base}}/handoff/{{step.id}}.draft.json"
+    required_fields:
+      - status
+      - summary
+      - artifacts
+      - can_further_iteration_help
+      - compliance_status
+      - violations_found
+
+  runtime_prompt:
+    fragments: []
+    template: |
+      Check policy compliance for:
+      - ADR: {{run.base}}/plan/adr.md
+
+      Evaluate against organizational policies.
+      Write your findings to {{run.base}}/policy/policy_compliance.md
+
+  invariants:
+    - "MUST NOT modify any files"
+    - "MUST check all applicable policy areas"
+    - "MUST clearly state compliance status"
+    - "MUST document any policy gaps found"
+
+  routing_hints:
+    on_verified: return
+    on_unverified: return
+    on_partial: return
+    on_blocked: return
+
+  agent_key: policy-analyst
+  tags:
+    - sidequest
+    - policy
+    - compliance
+    - governance
+
+- station_id: security-review
+  name: Security Review
+  description: |
+    Quick security assessment of changes.
+    Triggered when changes touch auth, crypto, or data handling.
+  category: verification
+  version: 1
+
+  sdk:
+    model: sonnet
+    permission_mode: bypassPermissions
+    allowed_tools:
+      - Read
+      - Grep
+      - Glob
+      - Bash
+    denied_tools:
+      - Write
+      - Edit
+    max_turns: 10
+    sandbox:
+      enabled: true
+      auto_allow_bash: true
+      excluded_commands:
+        - rm
+        - mv
+        - git push
+    context_budget:
+      total_chars: 200000
+      recent_chars: 80000
+      older_chars: 15000
+
+  identity:
+    system_append: |
+      You are the **Security Scanner** (Quick Security Review).
+
+      Your role is to perform rapid security assessment of changes.
+      This is a quick scan, not a deep audit - flag obvious issues.
+
+      ## Quick Scan Focus
+      - OWASP Top 10 patterns
+      - Exposed secrets (API keys, passwords, tokens)
+      - Obvious injection vulnerabilities
+      - Auth/authz implementation issues
+      - Insecure crypto usage
+
+      ## Output Format
+      - **Scan Scope**: What was checked
+      - **Findings**: Issues found with severity rating
+      - **Clear Areas**: What passed inspection
+      - **Recommendations**: Immediate actions needed
+
+      ## Quick Scan Philosophy
+      This is triage, not deep audit. Flag clear issues quickly.
+      Recommend deep security review for complex or high-risk areas.
+    tone: analytical
+
+  io:
+    required_inputs:
+      - build/impl_changes_summary.md
+    optional_inputs:
+      - src/**/*
+      - tests/**/*
+    required_outputs:
+      - security/quick_scan.md
+    optional_outputs: []
+
+  handoff:
+    path_template: "{{run.base}}/handoff/{{step.id}}.draft.json"
+    required_fields:
+      - status
+      - summary
+      - artifacts
+      - can_further_iteration_help
+      - issues_found
+      - needs_deep_review
+
+  runtime_prompt:
+    fragments:
+      - fragments/owasp_quick_check.md
+    template: |
+      Perform quick security scan:
+      - Changes: {{run.base}}/build/impl_changes_summary.md
+
+      Write findings to {{run.base}}/security/quick_scan.md
+
+  invariants:
+    - "MUST NOT modify any files"
+    - "MUST check OWASP Top 10"
+    - "MUST scan for exposed secrets"
+    - "MUST recommend deep review when needed"
+
+  routing_hints:
+    on_verified: return
+    on_unverified: return
+    on_partial: return
+    on_blocked: return
+
+  agent_key: security-scanner
+  tags:
+    - sidequest
+    - security
+    - review
+    - owasp
+  default_params:
+    scan_depth: quick
+    check_owasp_top_10: true
+
+- station_id: impact-analysis
+  name: Impact Analysis
+  description: |
+    Analyze downstream impact of proposed changes.
+    Used before making changes that could affect multiple systems.
+  category: analytics
+  version: 1
+
+  sdk:
+    model: sonnet
+    permission_mode: bypassPermissions
+    allowed_tools:
+      - Read
+      - Grep
+      - Glob
+      - Bash
+    denied_tools:
+      - Write
+      - Edit
+    max_turns: 12
+    sandbox:
+      enabled: true
+      auto_allow_bash: true
+      excluded_commands:
+        - rm
+        - mv
+        - git push
+    context_budget:
+      total_chars: 250000
+      recent_chars: 100000
+      older_chars: 30000
+
+  identity:
+    system_append: |
+      You are the **Impact Analyzer**.
+
+      Your role is to map the downstream impact of proposed changes.
+      You identify affected services, modules, and tests before changes are made.
+
+      ## Analysis Approach
+      1. Identify direct dependencies (imports, calls)
+      2. Map transitive dependencies (up to 3 levels)
+      3. Find affected tests
+      4. Identify integration points
+      5. Assess blast radius
+
+      ## Output Format (impact_map.json)
+      ```json
+      {
+        "direct_dependencies": [...],
+        "transitive_dependencies": [...],
+        "affected_tests": [...],
+        "integration_points": [...],
+        "blast_radius": "LOW|MEDIUM|HIGH",
+        "risk_areas": [...]
+      }
+      ```
+
+      ## Philosophy
+      Changes always have more impact than initially expected.
+      Map aggressively; it's cheaper to over-analyze than under-analyze.
+    tone: analytical
+
+  io:
+    required_inputs:
+      - signal/requirements.md
+    optional_inputs:
+      - plan/work_plan.md
+      - plan/adr.md
+    required_outputs:
+      - plan/impact_map.json
+    optional_outputs: []
+
+  handoff:
+    path_template: "{{run.base}}/handoff/{{step.id}}.draft.json"
+    required_fields:
+      - status
+      - summary
+      - artifacts
+      - can_further_iteration_help
+      - direct_deps_count
+      - affected_tests_count
+      - blast_radius
+
+  runtime_prompt:
+    fragments: []
+    template: |
+      Analyze impact of proposed changes:
+      - Requirements: {{run.base}}/signal/requirements.md
+      - Work Plan: {{run.base}}/plan/work_plan.md (if exists)
+
+      Write impact map to {{run.base}}/plan/impact_map.json
+
+  invariants:
+    - "MUST NOT modify any files"
+    - "MUST analyze at least 3 dependency levels"
+    - "MUST identify affected tests"
+    - "MUST rate blast radius"
+
+  routing_hints:
+    on_verified: return
+    on_unverified: return
+    on_partial: return
+    on_blocked: return
+
+  agent_key: impact-analyzer
+  tags:
+    - sidequest
+    - impact
+    - analysis
+    - dependencies
+  default_params:
+    max_depth: 3
+    include_test_impact: true

@@ -6,6 +6,11 @@
   "type": "object",
   "required": ["status", "summary", "routing_signal"],
   "properties": {
+    "sequence_number": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Monotonic sequence from RunState at envelope creation. Enables ordering verification."
+    },
     "status": {
       "type": "string",
       "enum": ["VERIFIED", "UNVERIFIED", "BLOCKED", "PARTIAL"],
@@ -123,6 +128,20 @@
       },
       "description": "Concerns that should be reviewed"
     },
+    "observations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Observation"
+      },
+      "description": "Shadow telemetry: things the station noticed but may not have acted upon. Flows to Wisdom for analysis."
+    },
+    "station_opinions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/StationOpinion"
+      },
+      "description": "Non-binding witness statements from the station about what it thinks should happen next. The orchestrator treats these as signal to be corroborated by forensics and charter alignment, not as executable intent."
+    },
     "iteration_context": {
       "type": "object",
       "properties": {
@@ -149,9 +168,139 @@
       },
       "additionalProperties": false
     },
+    "parallel_context": {
+      "type": "object",
+      "description": "Context for parallel execution (fork/join patterns)",
+      "properties": {
+        "fork_id": {
+          "type": "string",
+          "description": "Unique identifier for this parallel execution batch"
+        },
+        "branch_index": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Index of this branch within the fork (0-based)"
+        },
+        "total_branches": {
+          "type": "integer",
+          "minimum": 2,
+          "description": "Total number of parallel branches in this fork"
+        },
+        "sibling_step_ids": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Step IDs of sibling branches running in parallel"
+        },
+        "join_point": {
+          "type": "string",
+          "description": "Step ID where parallel branches will reconverge"
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When this parallel branch started"
+        }
+      },
+      "additionalProperties": false
+    },
+    "progress_evidence": {
+      "type": "object",
+      "description": "Embedded progress proof for stall detection and meaningful change verification",
+      "properties": {
+        "evidence_id": {
+          "type": "string",
+          "description": "Reference to full ProgressEvidence record"
+        },
+        "state_before_hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "SHA256 hash of state snapshot before step execution"
+        },
+        "state_after_hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "SHA256 hash of state snapshot after step execution"
+        },
+        "had_meaningful_change": {
+          "type": "boolean",
+          "description": "Whether the step produced meaningful progress"
+        },
+        "stall_detected": {
+          "type": "boolean",
+          "description": "Whether the step is detected as stalled (no meaningful progress)"
+        },
+        "delta_summary": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Human-readable summary of changes (e.g., '+15 lines, +2 tests')"
+        }
+      },
+      "additionalProperties": false
+    },
+    "forensic_markers": {
+      "type": "array",
+      "description": "Evidence bindings for this step, enabling claim-vs-reality audit",
+      "items": {
+        "$ref": "#/definitions/ForensicMarker"
+      }
+    },
+    "context_lineage_hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "SHA256 hash of the ContextPack used. Enables audit of what context was available."
+    },
+    "receipt_signature": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "SHA256 hash of the complete envelope for integrity verification"
+    },
+    "resource_usage": {
+      "type": "object",
+      "description": "Actual resource consumption for this step",
+      "properties": {
+        "input_tokens": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of input tokens consumed"
+        },
+        "output_tokens": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of output tokens generated"
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total execution duration in milliseconds"
+        },
+        "model_used": {
+          "type": "string",
+          "description": "Model identifier that was actually used"
+        },
+        "turn_count": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of conversation turns in this step"
+        }
+      },
+      "additionalProperties": false
+    },
+    "joined_results": {
+      "type": "array",
+      "description": "Aggregated results from parallel branches (populated at join point)",
+      "items": {
+        "$ref": "#/definitions/JoinedBranchResult"
+      }
+    },
     "metadata": {
       "type": "object",
       "properties": {
+        "envelope_version": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Schema version for future evolution"
+        },
         "station_id": {
           "type": "string",
           "description": "Station that produced this envelope"
@@ -204,6 +353,76 @@
     }
   },
   "definitions": {
+    "StationOpinion": {
+      "type": "object",
+      "required": ["kind", "suggested_action", "reason"],
+      "description": "A non-binding witness statement from a station about what it thinks should happen. This is signal for the orchestrator to corroborate, not executable intent.",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["suggest_detour", "suggest_repeat", "suggest_subflow_injection", "suggest_defer_to_wisdom", "flag_concern"],
+          "description": "Type of opinion: suggest_detour (propose a sidequest), suggest_repeat (re-run this or prior step), suggest_subflow_injection (inject an entire subflow), suggest_defer_to_wisdom (flag for Flow 7 analysis), flag_concern (raise a concern without suggesting action)"
+        },
+        "suggested_action": {
+          "type": "string",
+          "description": "What the station thinks should happen"
+        },
+        "reason": {
+          "type": "string",
+          "description": "Why the station thinks this action is appropriate"
+        },
+        "evidence_paths": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "File paths or artifact references that support this opinion"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Confidence score (0-1) in this opinion"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Observation": {
+      "type": "object",
+      "required": ["type", "observation"],
+      "description": "Something the station noticed during execution. Part of the Wisdom Stream.",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["action_taken", "action_deferred", "optimization_opportunity", "pattern_detected"],
+          "description": "Type of observation: action_taken (logged for audit), action_deferred (noticed but didn't act because of charter), optimization_opportunity (suggestion for spec evolution), pattern_detected (recurring behavior worth codifying)"
+        },
+        "observation": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "What was observed"
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Why action was taken or deferred (e.g., 'I am in Flow 3 (Build), so I ignored the outdated README')"
+        },
+        "suggested_action": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "What Wisdom should consider doing with this observation"
+        },
+        "target_flow": {
+          "type": "string",
+          "description": "If applicable, which flow this observation is most relevant to"
+        },
+        "priority": {
+          "type": "string",
+          "enum": ["low", "medium", "high"],
+          "default": "low",
+          "description": "How urgently Wisdom should process this"
+        }
+      },
+      "additionalProperties": false
+    },
     "ArtifactReference": {
       "type": "object",
       "required": ["path", "action"],
@@ -263,6 +482,97 @@
         "summary": {
           "type": "string",
           "description": "Brief description of the change"
+        }
+      },
+      "additionalProperties": false
+    },
+    "JoinedBranchResult": {
+      "type": "object",
+      "required": ["step_id", "status", "completed_at"],
+      "description": "Result from a single parallel branch, aggregated at join point",
+      "properties": {
+        "step_id": {
+          "type": "string",
+          "description": "Step ID of the branch"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["VERIFIED", "UNVERIFIED", "BLOCKED", "PARTIAL"],
+          "description": "Final status of this branch"
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Summary of what this branch accomplished"
+        },
+        "artifacts": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/ArtifactReference" },
+          "description": "Artifacts produced by this branch"
+        },
+        "concerns": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "concern": { "type": "string" },
+              "severity": { "type": "string", "enum": ["low", "medium", "high"] }
+            }
+          },
+          "description": "Concerns raised by this branch"
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When this branch started"
+        },
+        "completed_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When this branch completed"
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Execution duration in milliseconds"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ForensicMarker": {
+      "type": "object",
+      "required": ["marker_id", "marker_type", "evidence_hash"],
+      "description": "Evidence binding for audit, linking claims to verifiable evidence",
+      "properties": {
+        "marker_id": {
+          "type": "string",
+          "description": "Unique identifier for this marker"
+        },
+        "marker_type": {
+          "type": "string",
+          "enum": ["file_hash", "test_result", "coverage_delta", "lint_result", "build_artifact", "external_api", "git_commit", "custom"],
+          "description": "Type of evidence being referenced"
+        },
+        "evidence_hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "SHA256 hash of the evidence content"
+        },
+        "claim_vs_reality": {
+          "type": "object",
+          "description": "Comparison of agent's claim against actual evidence",
+          "properties": {
+            "match": {
+              "type": "boolean",
+              "description": "Whether the claim matches the evidence"
+            },
+            "discrepancy": {
+              "type": "string",
+              "maxLength": 500,
+              "description": "Description of discrepancy if match is false"
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false

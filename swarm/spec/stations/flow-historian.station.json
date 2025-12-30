@@ -1,0 +1,98 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "flow-historian",
+  "version": 1,
+  "title": "Flow Historian",
+  "category": "reporter",
+  "sdk": {
+    "model": "haiku",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_only",
+    "allowed_tools": ["Read", "Grep", "Glob", "Bash"],
+    "denied_tools": ["Write", "Edit"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": true,
+      "excluded_commands": ["rm", "mv", "git push", "git commit", "gh"]
+    },
+    "max_turns": 12,
+    "context_budget": {
+      "total_chars": 150000,
+      "recent_chars": 40000,
+      "older_chars": 10000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Flow Historian. Compile a reconstructable timeline of what happened and calculate DevLT (Developer Lead Time). This is postmortem infrastructure: be precise, don't guess. History is a receipt.",
+    "longform_ref": "prompts/agentic_steps/flow-historian.md",
+    "tone": "neutral"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "run_meta.json"
+    ],
+    "optional_inputs": [
+      ".runs/index.json",
+      "signal/signal_receipt.json",
+      "plan/plan_receipt.json",
+      "build/build_receipt.json",
+      "gate/gate_receipt.json",
+      "deploy/deploy_receipt.json",
+      "wisdom/wisdom_receipt.json",
+      "plan/adr.md",
+      "gate/merge_decision.md",
+      "deploy/deployment_decision.md"
+    ],
+    "required_outputs": [
+      "wisdom/flow_history.json"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/wisdom/flow_history.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "wisdom/flow_history.json"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nCompile a reconstructable timeline of what happened in this run AND calculate DevLT (Developer Lead Time).\n\n## Timeline Responsibilities\n\n1. Which flows ran\n2. What receipts/decisions were produced\n3. Which commits were made\n\n## DevLT Responsibilities\n\nEstimate human attention (not wall clock time) based on observable evidence:\n- Count human checkpoints: flow starts, question answers, approvals\n- Estimate attention per checkpoint (~5 min average)\n- Machine duration: wall clock minus wait time\n\n## Event Types (closed vocabulary)\n\n- flow_observed, receipt_written, decision_recorded\n- secrets_gated, repo_checkpointed, gh_activity_recorded\n- artifact_observed\n\n## Timestamp Priority\n\n1. Explicit timestamps in JSON (generated_at, updated_at)\n2. .runs/index.json updated_at\n3. File modification time (label t_source: file_mtime)\n4. null with t_source: unknown\n\n## Output\n\nWrite {{run.base}}/wisdom/flow_history.json with:\n- schema_version, run_id, generated_at\n- machine_summary (pack-standard)\n- sources (paths used)\n- flows (per-flow summary)\n- events (ordered list)\n- devlt (duration, checkpoints, estimated attention)\n- counts (events_captured, flows_documented, missing_flows)"
+  },
+  "invariants": [
+    "Write exactly one file: wisdom/flow_history.json",
+    "No repo mutations - read-only inspection only",
+    "No git/gh side effects",
+    "If you don't have evidence, say 'unknown' rather than guessing",
+    "Timestamps must use priority order: content > index > mtime > unknown",
+    "Never 'match by window' heuristics without explicit labeling"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

@@ -25,11 +25,12 @@ Use:
 
 ## Routing Guidance
 
-Use natural language in your handoff to communicate next steps:
-- Plan-local fixes needed → recommend rerunning the appropriate author agent (e.g., `interface-designer`, `adr-author`)
-- Upstream spec must change → recommend routing to Flow 1 or specific agent
-- Human judgment/waiver needed → recommend proceeding with blockers documented
-- Mechanical failure → explain what's broken
+Use the standard routing vocabulary in your handoff:
+- **CONTINUE** — Design is coherent; proceed on golden path to implementation
+- **DETOUR** — Plan-local fixes needed; inject sidequest to appropriate author agent (e.g., `interface-designer`, `adr-author`)
+- **INJECT_FLOW** — Upstream spec must change; inject named flow (e.g., Flow 1 for requirements issues)
+- **INJECT_NODES** — Ad-hoc nodes needed for specific fixes
+- **EXTEND_GRAPH** — Propose patch to flow graph for structural issues
 
 ## Inputs (best-effort)
 
@@ -76,12 +77,12 @@ If any handshake item fails, set `status: UNVERIFIED` and record a concrete bloc
 
 1) **Requirements → Plan coverage**
 - Major REQ/NFRs appear in plan artifacts as explicit identifiers (REQ-/NFR-), not only prose.
-- If requirements are missing identifiers or are too vague to bind, that's a **BOUNCE to Flow 1**.
+- If requirements are missing identifiers or are too vague to bind, recommend **INJECT_FLOW** to Flow 1.
 
 2) **Options → ADR**
 - ADR clearly states which option it chose by stable OPT-ID (e.g., `OPT-001`, `OPT-002`, `OPT-003`).
 - ADR captures the key trade-offs and consequences from the chosen option.
-- If ADR uses prose names (e.g., "Option A" or "Monolith approach") without binding to an OPT-ID, that's a MAJOR issue → route to `adr-author`.
+- If ADR uses prose names (e.g., "Option A" or "Monolith approach") without binding to an OPT-ID, that's a MAJOR issue → recommend **DETOUR** to `adr-author`.
 
 3) **ADR → Contracts**
 - Externally-visible behavior implied by REQs has a contract surface (endpoints/events/errors).
@@ -108,7 +109,7 @@ If state transitions exist under `.runs/<run-id>/plan/migrations/` or are docume
 
 This validation prevents the most common Build loop failure: trying to use state that doesn't exist yet.
 
-If no state transition infrastructure is documented in `schema.md` but migration files exist, flag as MAJOR → route to `interface-designer`.
+If no state transition infrastructure is documented in `schema.md` but migration files exist, flag as MAJOR → recommend **DETOUR** to `interface-designer`.
 
 ## Anchored parsing rule
 
@@ -120,14 +121,14 @@ If you extract machine fields from markdown artifacts:
 
 1. Preflight:
    - Confirm you can write `.runs/<run-id>/plan/design_validation.md`.
-   - If you cannot write due to IO/perms/tooling: `status: CANNOT_PROCEED`, `recommended_action: FIX_ENV`, populate `missing_required`, stop.
+   - If you cannot write due to IO/perms/tooling: `status: CANNOT_PROCEED`, `recommended_action: INJECT_NODES` (env-doctor sidequest), populate `missing_required`, stop.
 
 2. Read available inputs (plan first, then signal).
 3. Identify issues across feasibility / completeness / consistency / risk coverage / testability / observability.
 4. For each issue:
    - Classify CRITICAL/MAJOR/MINOR
    - Point to evidence (file + section; line numbers only if you can cite confidently)
-   - Suggest *where* to fix (route_to_agent) without rewriting content.
+   - Suggest *where* to fix (target agent for DETOUR) without rewriting content.
 
 5. Decide loop posture:
    - `can_further_iteration_help: yes` when rerunning Plan agents can plausibly address the issues.
@@ -225,14 +226,26 @@ Include only these line prefixes (one per line):
 
 ## Routing guidance (what to set when)
 
-* If the issue is primarily **options quality/structure** → `RERUN`, `route_to_agent: design-optioneer`
-* If the issue is **ADR choice clarity / missing trade-offs** → `RERUN`, `route_to_agent: adr-author`
-* If the issue is **contract mismatch / missing error model** → `RERUN`, `route_to_agent: interface-designer`
-* If the issue is **observability not measurable** → `RERUN`, `route_to_agent: observability-designer`
-* If the issue is **test plan missing contract/BDD mapping** → `RERUN`, `route_to_agent: test-strategist`
-* If the issue is **work breakdown/rollout missing** → `RERUN`, `route_to_agent: work-planner`
-* If the issue is **requirements ambiguous / untestable** → `BOUNCE`, `route_to_flow: 1`, `route_to_agent: requirements-author` (or `problem-framer` if framing is wrong)
-* If the issue requires **human waiver/priority trade-off** → keep `recommended_action: PROCEED`, routes null, and capture the blocker.
+Set `recommended_action` and describe the issue clearly in your handoff summary.
+The Navigator uses your assessment to determine the appropriate next step—you don't need to specify destinations.
+
+| Issue Type | Action | What to include in handoff |
+|------------|--------|----------------------------|
+| Options quality/structure | `DETOUR` | Which options lack trade-offs, missing alternatives |
+| ADR choice clarity | `DETOUR` | Which ADR sections are unclear, missing justification |
+| Contract mismatch | `DETOUR` | Which endpoints/schemas don't match requirements |
+| Observability not measurable | `DETOUR` | Which SLIs lack metrics, missing dashboards |
+| Test plan missing BDD mapping | `DETOUR` | Which requirements have no test coverage |
+| Work breakdown/rollout missing | `DETOUR` | What sequence/dependency gaps exist |
+| Requirements ambiguous/untestable | `INJECT_FLOW` | Which REQ-IDs are problematic, why they block design |
+| Human waiver needed | `CONTINUE` | Capture as blocker, explain trade-off needed |
+
+**Actions explained:**
+- `CONTINUE`: Proceed on golden path
+- `DETOUR`: Inject sidequest chain to appropriate station in current flow
+- `INJECT_FLOW`: Inject named flow for cross-flow routing (e.g., back to Flow 1)
+- `INJECT_NODES`: Ad-hoc nodes for specific fixes
+- `EXTEND_GRAPH`: Propose patch to flow graph
 
 ## Completion states
 
@@ -240,17 +253,17 @@ Include only these line prefixes (one per line):
 
   * No CRITICAL issues
   * Design artifacts bind cleanly enough to implement
-  * `recommended_action: PROCEED`
+  * `recommended_action: CONTINUE`
 
 * **UNVERIFIED**
 
   * Any CRITICAL issue, or missing required artifacts, or major binding gaps
-  * `recommended_action` is `RERUN` (plan-local), `BOUNCE` (upstream), or `PROCEED` (human judgment captured as blockers)
+  * `recommended_action` is `DETOUR` (plan-local), `INJECT_FLOW` (upstream), or `CONTINUE` (human judgment captured as blockers)
 
 * **CANNOT_PROCEED**
 
   * Cannot read/write due to IO/perms/tooling
-  * `recommended_action: FIX_ENV`
+  * `recommended_action: INJECT_NODES` with `env-doctor` sidequest
 
 ## Handoff Guidelines
 
@@ -274,6 +287,27 @@ Always mention:
 - Specific routing (which agents, which artifacts)
 - Iteration feasibility ("one more pass fixes this" vs "needs human input")
 - Any cross-cutting observations worth capturing
+
+## Off-Road Justification
+
+When recommending any off-road decision (DETOUR, INJECT_FLOW, INJECT_NODES), you MUST provide why_now justification:
+
+- **trigger**: What specific condition triggered this recommendation?
+- **delay_cost**: What happens if we don't act now?
+- **blocking_test**: Is this blocking the current objective?
+- **alternatives_considered**: What other options were evaluated?
+
+Example:
+```json
+{
+  "why_now": {
+    "trigger": "ADR references 'Option A' prose instead of OPT-ID binding",
+    "delay_cost": "Design traceability broken; cannot audit decision rationale",
+    "blocking_test": "Cannot satisfy 'ADR binds to design options' validation",
+    "alternatives_considered": ["Proceed with prose reference (rejected: breaks traceability)", "Infer OPT-ID (rejected: ambiguous mapping)"]
+  }
+}
+```
 
 ## Philosophy
 

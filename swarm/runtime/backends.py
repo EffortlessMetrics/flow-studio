@@ -166,11 +166,14 @@ class ClaudeHarnessBackend(RunBackend):
         now = datetime.now(timezone.utc)
 
         # Update status to running
-        storage.update_summary(run_id, {
-            "status": RunStatus.RUNNING.value,
-            "started_at": now.isoformat(),
-            "updated_at": now.isoformat(),
-        })
+        storage.update_summary(
+            run_id,
+            {
+                "status": RunStatus.RUNNING.value,
+                "started_at": now.isoformat(),
+                "updated_at": now.isoformat(),
+            },
+        )
 
         storage.append_event(
             run_id,
@@ -266,13 +269,16 @@ class ClaudeHarnessBackend(RunBackend):
 
         # Update final status
         completed_at = datetime.now(timezone.utc)
-        storage.update_summary(run_id, {
-            "status": final_status.value,
-            "sdlc_status": sdlc_status.value,
-            "completed_at": completed_at.isoformat(),
-            "updated_at": completed_at.isoformat(),
-            "error": error_msg,
-        })
+        storage.update_summary(
+            run_id,
+            {
+                "status": final_status.value,
+                "sdlc_status": sdlc_status.value,
+                "completed_at": completed_at.isoformat(),
+                "updated_at": completed_at.isoformat(),
+                "error": error_msg,
+            },
+        )
 
         storage.append_event(
             run_id,
@@ -340,11 +346,14 @@ class ClaudeHarnessBackend(RunBackend):
 
                 # Update status
                 now = datetime.now(timezone.utc)
-                storage.update_summary(run_id, {
-                    "status": RunStatus.CANCELED.value,
-                    "completed_at": now.isoformat(),
-                    "updated_at": now.isoformat(),
-                })
+                storage.update_summary(
+                    run_id,
+                    {
+                        "status": RunStatus.CANCELED.value,
+                        "completed_at": now.isoformat(),
+                        "updated_at": now.isoformat(),
+                    },
+                )
                 storage.append_event(
                     run_id,
                     RunEvent(
@@ -491,11 +500,14 @@ class GeminiCliBackend(RunBackend):
         now = datetime.now(timezone.utc)
 
         # Update status to running
-        storage.update_summary(run_id, {
-            "status": RunStatus.RUNNING.value,
-            "started_at": now.isoformat(),
-            "updated_at": now.isoformat(),
-        })
+        storage.update_summary(
+            run_id,
+            {
+                "status": RunStatus.RUNNING.value,
+                "started_at": now.isoformat(),
+                "updated_at": now.isoformat(),
+            },
+        )
 
         storage.append_event(
             run_id,
@@ -568,9 +580,7 @@ class GeminiCliBackend(RunBackend):
                             continue
                         try:
                             gemini_event = json.loads(line)
-                            mapped_event = self._map_gemini_event(
-                                run_id, flow_key, gemini_event
-                            )
+                            mapped_event = self._map_gemini_event(run_id, flow_key, gemini_event)
                             if mapped_event:
                                 storage.append_event(run_id, mapped_event)
                         except json.JSONDecodeError:
@@ -625,9 +635,7 @@ class GeminiCliBackend(RunBackend):
                             kind="flow_end",
                             flow_key=flow_key,
                             payload={
-                                "duration_ms": int(
-                                    (flow_end - flow_start).total_seconds() * 1000
-                                ),
+                                "duration_ms": int((flow_end - flow_start).total_seconds() * 1000),
                             },
                         ),
                     )
@@ -640,13 +648,16 @@ class GeminiCliBackend(RunBackend):
 
         # Update final status
         completed_at = datetime.now(timezone.utc)
-        storage.update_summary(run_id, {
-            "status": final_status.value,
-            "sdlc_status": sdlc_status.value,
-            "completed_at": completed_at.isoformat(),
-            "updated_at": completed_at.isoformat(),
-            "error": error_msg,
-        })
+        storage.update_summary(
+            run_id,
+            {
+                "status": final_status.value,
+                "sdlc_status": sdlc_status.value,
+                "completed_at": completed_at.isoformat(),
+                "updated_at": completed_at.isoformat(),
+                "error": error_msg,
+            },
+        )
 
         storage.append_event(
             run_id,
@@ -704,7 +715,7 @@ class GeminiCliBackend(RunBackend):
         """
         title = spec.params.get("title", flow_key)
 
-        return f'''You are the Gemini CLI backend executing a Swarm flow step.
+        return f"""You are the Gemini CLI backend executing a Swarm flow step.
 
 Flow: {flow_key}
 Run ID: {run_id}
@@ -716,7 +727,7 @@ Instructions:
 3. Write outputs to swarm/runs/{run_id}/{flow_key}/ following RUN_BASE conventions
 4. Stream your progress as structured events
 
-Be concise and focused on the task.'''
+Be concise and focused on the task."""
 
     def _build_stub_command(self, flow_key: str, run_id: RunId, spec: RunSpec) -> str:
         """Build a stub command that simulates Gemini JSONL output for testing.
@@ -766,8 +777,10 @@ Be concise and focused on the task.'''
 
         args = [
             self.gemini_cmd,
-            "--output-format", "stream-json",
-            "--prompt", prompt,
+            "--output-format",
+            "stream-json",
+            "--prompt",
+            prompt,
         ]
 
         # Use shell quoting since we run with shell=True
@@ -840,9 +853,7 @@ Be concise and focused on the task.'''
             # Be conservative: default to False if success field is missing
             success = gemini_event.get("success")
             if success is None:
-                logger.warning(
-                    "Gemini tool_result missing 'success' field: %r", gemini_event
-                )
+                logger.warning("Gemini tool_result missing 'success' field: %r", gemini_event)
                 success = False
             payload = {
                 "tool": gemini_event.get("tool") or gemini_event.get("name"),
@@ -899,11 +910,14 @@ Be concise and focused on the task.'''
 
                 # Update status
                 now = datetime.now(timezone.utc)
-                storage.update_summary(run_id, {
-                    "status": RunStatus.CANCELED.value,
-                    "completed_at": now.isoformat(),
-                    "updated_at": now.isoformat(),
-                })
+                storage.update_summary(
+                    run_id,
+                    {
+                        "status": RunStatus.CANCELED.value,
+                        "completed_at": now.isoformat(),
+                        "updated_at": now.isoformat(),
+                    },
+                )
                 storage.append_event(
                     run_id,
                     RunEvent(
@@ -951,6 +965,7 @@ class GeminiStepwiseBackend(RunBackend):
                 if self._orchestrator is None:
                     # Lazy import to avoid circular dependency
                     from .orchestrator import get_orchestrator
+
                     self._orchestrator = get_orchestrator(repo_root=self._repo_root)
         return self._orchestrator
 
@@ -1068,14 +1083,29 @@ class GeminiStepwiseBackend(RunBackend):
                 )
                 # Update summary with error
                 now = datetime.now(timezone.utc)
-                storage.update_summary(run_id, {
-                    "status": RunStatus.FAILED.value,
-                    "sdlc_status": SDLCStatus.ERROR.value,
-                    "completed_at": now.isoformat(),
-                    "updated_at": now.isoformat(),
-                    "error": str(e),
-                })
-                break
+                storage.update_summary(
+                    run_id,
+                    {
+                        "status": RunStatus.FAILED.value,
+                        "sdlc_status": SDLCStatus.ERROR.value,
+                        "completed_at": now.isoformat(),
+                        "updated_at": now.isoformat(),
+                        "error": str(e),
+                    },
+                )
+                return  # Exit on error
+
+        # All flows completed successfully - update status
+        now = datetime.now(timezone.utc)
+        storage.update_summary(
+            run_id,
+            {
+                "status": RunStatus.SUCCEEDED.value,
+                "sdlc_status": SDLCStatus.OK.value,
+                "completed_at": now.isoformat(),
+                "updated_at": now.isoformat(),
+            },
+        )
 
     def get_summary(self, run_id: RunId) -> Optional[RunSummary]:
         """Get summary from disk."""
@@ -1144,6 +1174,7 @@ class ClaudeStepwiseBackend(RunBackend):
                     # Lazy import to avoid circular dependency
                     from .engines import ClaudeStepEngine
                     from .orchestrator import get_orchestrator
+
                     self._orchestrator = get_orchestrator(
                         engine=ClaudeStepEngine(self._repo_root),
                         repo_root=self._repo_root,
@@ -1268,14 +1299,29 @@ class ClaudeStepwiseBackend(RunBackend):
                 )
                 # Update summary with error
                 now = datetime.now(timezone.utc)
-                storage.update_summary(run_id, {
-                    "status": RunStatus.FAILED.value,
-                    "sdlc_status": SDLCStatus.ERROR.value,
-                    "completed_at": now.isoformat(),
-                    "updated_at": now.isoformat(),
-                    "error": str(e),
-                })
-                break
+                storage.update_summary(
+                    run_id,
+                    {
+                        "status": RunStatus.FAILED.value,
+                        "sdlc_status": SDLCStatus.ERROR.value,
+                        "completed_at": now.isoformat(),
+                        "updated_at": now.isoformat(),
+                        "error": str(e),
+                    },
+                )
+                return  # Exit on error
+
+        # All flows completed successfully - update status
+        now = datetime.now(timezone.utc)
+        storage.update_summary(
+            run_id,
+            {
+                "status": RunStatus.SUCCEEDED.value,
+                "sdlc_status": SDLCStatus.OK.value,
+                "completed_at": now.isoformat(),
+                "updated_at": now.isoformat(),
+            },
+        )
 
     def get_summary(self, run_id: RunId) -> Optional[RunSummary]:
         """Get summary from disk."""

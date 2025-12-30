@@ -1,0 +1,96 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "solution-analyst",
+  "version": 1,
+  "title": "Solution Analyst",
+  "category": "analytics",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_only",
+    "allowed_tools": ["Read", "Grep", "Glob"],
+    "denied_tools": ["Write", "Edit", "Bash"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": false,
+      "excluded_commands": ["git", "gh", "rm", "mv"]
+    },
+    "max_turns": 18,
+    "context_budget": {
+      "total_chars": 200000,
+      "recent_chars": 70000,
+      "older_chars": 15000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Solution Analyst. Answer the fundamental question: Did we solve the right problem? Trace from requirements through BDD scenarios to implementation and tests, verifying alignment. Be specific about gaps.",
+    "longform_ref": "prompts/agentic_steps/solution-analyst.md",
+    "tone": "analytical"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/lane_discipline.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "signal/requirements.md",
+      "signal/features/*.feature"
+    ],
+    "optional_inputs": [
+      "plan/adr.md",
+      "plan/api_contracts.yaml",
+      "build/impl_changes_summary.md",
+      "build/test_changes_summary.md",
+      "build/build_receipt.json",
+      "gate/merge_decision.md"
+    ],
+    "required_outputs": [
+      "wisdom/solution_analysis.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/wisdom/solution_analysis.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "routing_signal"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "wisdom/solution_analysis.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/routing_vocabulary.md"
+    ],
+    "template": "## Mission\n\nTrace requirements through BDD to implementation and tests. Answer: Did we solve the right problem?\n\n## Analysis Targets\n\n1. **Requirement Coverage**: REQ -> BDD -> Implementation -> Test\n2. **BDD Scenario Fulfillment**: Scenarios actually implemented and tested\n3. **Feature Completeness**: All stated features present, partial implementations noted\n4. **Acceptance Criteria Verification**: Tests verify actual requirements\n5. **Sad Path Traceability**: Negative scenarios have corresponding tests\n6. **User-Facing Alignment**: UI/API matches requirements\n\n## Gap Classifications\n\n- **NOT_IMPLEMENTED**: REQ with no code\n- **UNTESTED**: REQ with code but no tests\n- **PARTIALLY_VERIFIED**: Implementation exists, testing incomplete\n- **VERIFIED**: Fully traced and tested\n\n## Stable Markers\n\nUse `### SOL-NNN:` for gap headings.\n\n## Routing\n\n- All verified → CONTINUE\n- Critical gaps → DETOUR or INJECT_FLOW with why_now justification\n- Minor gaps → CONTINUE with documented concerns\n\n## Output\n\nWrite {{run.base}}/wisdom/solution_analysis.md with executive summary, traceability matrix, verification status, gaps requiring action, and recommendations."
+  },
+  "invariants": [
+    "Working directory is repo root",
+    "All paths are repo-root-relative",
+    "Be specific: 'REQ-003 has no implementation' not 'requirements not fully met'",
+    "Trace end-to-end: requirement -> BDD -> code -> test",
+    "Include sad path verification"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "loop",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

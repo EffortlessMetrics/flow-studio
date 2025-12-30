@@ -35,6 +35,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class TeachingNotes:
     """Teaching notes for a step (mirrors flow_registry.TeachingNotes)."""
+
     inputs: Tuple[str, ...] = ()
     outputs: Tuple[str, ...] = ()
     emphasizes: Tuple[str, ...] = ()
@@ -44,6 +45,7 @@ class TeachingNotes:
 @dataclass
 class StepRouting:
     """Step routing configuration (mirrors flow_registry.StepRouting)."""
+
     kind: str = "linear"
     next: Optional[str] = None
     loop_to: Optional[str] = None
@@ -55,6 +57,7 @@ class StepRouting:
 @dataclass
 class EngineProfile:
     """Engine profile for step execution."""
+
     engine_id: Optional[str] = None
     mode: Optional[str] = None
     model: Optional[str] = None
@@ -66,6 +69,7 @@ class GraphStepDefinition:
 
     Compatible with flow_registry.StepDefinition but sourced from JSON.
     """
+
     id: str
     index: int  # 1-based within flow
     agents: Tuple[str, ...]
@@ -86,6 +90,7 @@ class GraphFlowDefinition:
 
     Compatible with flow_registry.FlowDefinition but sourced from JSON.
     """
+
     key: str
     index: int
     title: str
@@ -154,6 +159,7 @@ class SpecBridge:
 
         try:
             import json
+
             with open(flow_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
 
@@ -231,10 +237,7 @@ class SpecBridge:
         )
 
     def _convert_node_to_step(
-        self,
-        node: Dict[str, Any],
-        index: int,
-        edges: List[Dict[str, Any]]
+        self, node: Dict[str, Any], index: int, edges: List[Dict[str, Any]]
     ) -> GraphStepDefinition:
         """Convert a FlowGraph node to a step definition.
 
@@ -277,9 +280,7 @@ class SpecBridge:
         )
 
     def _build_routing_from_edges(
-        self,
-        node_id: str,
-        edges: List[Dict[str, Any]]
+        self, node_id: str, edges: List[Dict[str, Any]]
     ) -> Optional[StepRouting]:
         """Build step routing from outgoing edges.
 
@@ -323,9 +324,7 @@ class SpecBridge:
         return StepRouting(kind="terminal")
 
     def _topological_sort(
-        self,
-        nodes: List[Dict[str, Any]],
-        edges: List[Dict[str, Any]]
+        self, nodes: List[Dict[str, Any]], edges: List[Dict[str, Any]]
     ) -> List[str]:
         """Topologically sort nodes based on edges.
 

@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
 from swarm.config.flow_registry import get_flow_spec_id
 from swarm.spec.compiler import SpecCompiler
@@ -26,7 +26,6 @@ from swarm.spec.loader import list_flows, list_stations
 from swarm.spec.types import PromptPlan
 
 if TYPE_CHECKING:
-    from swarm.runtime.context_pack import ContextPack
     from swarm.runtime.engines.models import StepContext
 
 logger = logging.getLogger(__name__)
@@ -189,9 +188,7 @@ class SpecAdapter:
             "model": plan.model,
         }
 
-    def build_prompt_from_plan(
-        self, plan: PromptPlan
-    ) -> Tuple[str, Optional[str]]:
+    def build_prompt_from_plan(self, plan: PromptPlan) -> Tuple[str, Optional[str]]:
         """Build prompt tuple from PromptPlan.
 
         Returns (user_prompt, system_append) suitable for engine use.

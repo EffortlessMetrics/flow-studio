@@ -21,6 +21,7 @@ import type {
   StepTranscriptResponse,
   StepReceiptResponse,
   WisdomSummary,
+  BoundaryReviewResponse,
 } from "./domain.js";
 
 /**
@@ -274,6 +275,38 @@ export const Api = {
   getRunWisdom(runId: string): Promise<WisdomSummary> {
     return fetchJSON<WisdomSummary>(
       `/api/runs/${encodeURIComponent(runId)}/wisdom/summary`
+    );
+  },
+
+  // ============================================================================
+  // Boundary Review
+  // ============================================================================
+
+  /**
+   * Get boundary review summary for a run.
+   * Aggregates assumptions, decisions, detours, and verification results
+   * for operator review at flow boundaries.
+   *
+   * @param runId - The run ID to get boundary review for
+   * @param options - Optional parameters
+   * @param options.scope - "flow" for current flow only, "run" for entire run (default "flow")
+   * @param options.flowKey - Optional flow key to filter (when scope="flow")
+   * @returns BoundaryReviewResponse with comprehensive boundary review data
+   */
+  getBoundaryReview(runId: string, options?: {
+    scope?: "flow" | "run";
+    flowKey?: FlowKey;
+  }): Promise<BoundaryReviewResponse> {
+    const params = new URLSearchParams();
+    if (options?.scope) {
+      params.set("scope", options.scope);
+    }
+    if (options?.flowKey) {
+      params.set("flow_key", options.flowKey);
+    }
+    const queryString = params.toString();
+    return fetchJSON<BoundaryReviewResponse>(
+      `/api/runs/${encodeURIComponent(runId)}/boundary-review${queryString ? `?${queryString}` : ""}`
     );
   },
 

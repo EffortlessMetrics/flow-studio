@@ -1,0 +1,76 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://swarm.dev/schemas/assumption_record.schema.json",
+  "title": "AssumptionRecord",
+  "description": "A structured record of an assumption made during flow execution. Assumptions are made when agents face ambiguity and need to proceed with their best interpretation.",
+  "type": "object",
+  "required": [
+    "assumption_id",
+    "flow_introduced",
+    "step_introduced",
+    "agent",
+    "statement",
+    "rationale",
+    "impact_if_wrong"
+  ],
+  "properties": {
+    "assumption_id": {
+      "type": "string",
+      "description": "Unique identifier for this assumption."
+    },
+    "flow_introduced": {
+      "type": "string",
+      "description": "Flow key where this assumption was first made (e.g., 'signal', 'plan', 'build')."
+    },
+    "step_introduced": {
+      "type": "string",
+      "description": "Step ID where this assumption was first made."
+    },
+    "agent": {
+      "type": "string",
+      "description": "Agent key that made this assumption."
+    },
+    "statement": {
+      "type": "string",
+      "description": "The assumption statement itself."
+    },
+    "rationale": {
+      "type": "string",
+      "description": "Why this assumption was made (evidence, context)."
+    },
+    "impact_if_wrong": {
+      "type": "string",
+      "description": "What would need to change if assumption is incorrect."
+    },
+    "confidence": {
+      "type": "string",
+      "enum": ["high", "medium", "low"],
+      "default": "medium",
+      "description": "Confidence level in this assumption."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["active", "resolved", "invalidated"],
+      "default": "active",
+      "description": "Current status of the assumption. Active means still in effect, resolved means confirmed or clarified, invalidated means proven wrong."
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "Optional categorization tags (e.g., 'architecture', 'requirements', 'security')."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when this assumption was recorded."
+    },
+    "resolution_note": {
+      "type": ["string", "null"],
+      "description": "Explanation when status changes to resolved or invalidated."
+    }
+  },
+  "additionalProperties": false
+}

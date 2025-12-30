@@ -31,6 +31,9 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 
+from swarm.config.model_registry import resolve_station_model
+from swarm.config.tool_profiles import resolve_tool_profile
+
 from .loader import load_flow, load_fragment, load_fragments, load_station
 from .types import (
     FlowSpec,
@@ -844,9 +847,23 @@ class SpecCompiler:
         ).hexdigest()[:16]
 
         # Merge SDK settings (station + step overrides)
-        model = step.sdk_overrides.get("model", station.sdk.model)
+        # Resolve model: "inherit" -> category default, tier -> full ID
+        raw_model = step.sdk_overrides.get("model", station.sdk.model)
+        model = resolve_station_model(raw_model, category=station.category.value)
+
         permission_mode = step.sdk_overrides.get("permission_mode", station.sdk.permission_mode)
-        allowed_tools = tuple(step.sdk_overrides.get("allowed_tools", station.sdk.allowed_tools))
+
+        # Resolve tool profile if using profile system, otherwise use explicit tools
+        raw_allowed_tools = step.sdk_overrides.get("allowed_tools", station.sdk.allowed_tools)
+        if isinstance(raw_allowed_tools, str):
+            # Tool profile name - resolve it
+            allowed_tools = resolve_tool_profile(raw_allowed_tools, category=station.category.value)
+        elif raw_allowed_tools:
+            allowed_tools = tuple(raw_allowed_tools)
+        else:
+            # Fallback to profile-based resolution using category
+            allowed_tools = resolve_tool_profile("inherit", category=station.category.value)
+
         max_turns = step.sdk_overrides.get("max_turns", station.sdk.max_turns)
         sandbox_enabled = step.sdk_overrides.get("sandbox_enabled", station.sdk.sandbox.enabled)
 
@@ -1394,13 +1411,30 @@ class SpecCompiler:
         station: StationSpec,
         node: FlowNode,
     ) -> Dict[str, Any]:
-        """Merge SDK options from station with node overrides."""
+        """Merge SDK options from station with node overrides.
+
+        Resolves model and tool profiles using the registry functions.
+        """
         sdk = station.sdk
+        category = station.category.value
+
+        # Resolve model: "inherit" -> category default, tier -> full ID
+        raw_model = node.overrides.get("model", sdk.model)
+        resolved_model = resolve_station_model(raw_model, category=category)
+
+        # Resolve tool profile if using profile system
+        raw_allowed_tools = node.overrides.get("allowed_tools", sdk.allowed_tools)
+        if isinstance(raw_allowed_tools, str):
+            resolved_tools = resolve_tool_profile(raw_allowed_tools, category=category)
+        elif raw_allowed_tools:
+            resolved_tools = tuple(raw_allowed_tools)
+        else:
+            resolved_tools = resolve_tool_profile("inherit", category=category)
 
         return {
-            "model": node.overrides.get("model", sdk.model),
+            "model": resolved_model,
             "permission_mode": node.overrides.get("permission_mode", sdk.permission_mode),
-            "allowed_tools": tuple(node.overrides.get("allowed_tools", sdk.allowed_tools)),
+            "allowed_tools": resolved_tools,
             "max_turns": node.overrides.get("max_turns", sdk.max_turns),
             "sandbox_enabled": node.overrides.get("sandbox_enabled", sdk.sandbox.enabled),
         }
@@ -1630,10 +1664,21 @@ class SpecCompiler:
             station, step, context.run_base, variables
         )
 
-        # SDK options
-        model = step.sdk_overrides.get("model", station.sdk.model)
+        # SDK options - resolve model and tool profiles
+        category = station.category.value
+        raw_model = step.sdk_overrides.get("model", station.sdk.model)
+        model = resolve_station_model(raw_model, category=category)
+
         permission_mode = step.sdk_overrides.get("permission_mode", station.sdk.permission_mode)
-        allowed_tools = tuple(step.sdk_overrides.get("allowed_tools", station.sdk.allowed_tools))
+
+        raw_allowed_tools = step.sdk_overrides.get("allowed_tools", station.sdk.allowed_tools)
+        if isinstance(raw_allowed_tools, str):
+            allowed_tools = resolve_tool_profile(raw_allowed_tools, category=category)
+        elif raw_allowed_tools:
+            allowed_tools = tuple(raw_allowed_tools)
+        else:
+            allowed_tools = resolve_tool_profile("inherit", category=category)
+
         max_turns = step.sdk_overrides.get("max_turns", station.sdk.max_turns)
         sandbox_enabled = step.sdk_overrides.get("sandbox_enabled", station.sdk.sandbox.enabled)
 
@@ -1648,7 +1693,7 @@ class SpecCompiler:
             output_schema=output_schema,
             prompt_hash=prompt_hash,
             model=model,
-            model_tier=model,
+            model_tier=raw_model,  # Preserve original tier for UI display
             sandbox_enabled=sandbox_enabled,
             cwd=str(context.repo_root) if context.repo_root else "",
             station_version=station.version,

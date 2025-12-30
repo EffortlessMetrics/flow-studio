@@ -63,82 +63,90 @@ class HistoryPriority(IntEnum):
 # =============================================================================
 
 # P1 - CRITICAL: Gating decisions, critics, core implementation
-CRITICAL_AGENT_PATTERNS = frozenset({
-    # Final decision makers
-    "merge-decider",
-    "deploy-decider",
-    # Critics (harsh reviews that shape quality)
-    "requirements-critic",
-    "design-critic",
-    "test-critic",
-    "code-critic",
-    "ux-critic",
-    # Core implementation agents
-    "code-implementer",
-    "test-author",
-    # Self-review (completion proof)
-    "self-reviewer",
-})
+CRITICAL_AGENT_PATTERNS = frozenset(
+    {
+        # Final decision makers
+        "merge-decider",
+        "deploy-decider",
+        # Critics (harsh reviews that shape quality)
+        "requirements-critic",
+        "design-critic",
+        "test-critic",
+        "code-critic",
+        "ux-critic",
+        # Core implementation agents
+        "code-implementer",
+        "test-author",
+        # Self-review (completion proof)
+        "self-reviewer",
+    }
+)
 
 # P2 - HIGH: Foundation specs, verification, design
-HIGH_AGENT_PATTERNS = frozenset({
-    # Requirements foundation
-    "requirements-author",
-    "bdd-author",
-    # Design and architecture
-    "adr-author",
-    "interface-designer",
-    "observability-designer",
-    "design-optioneer",
-    "work-planner",
-    "test-strategist",
-    # Gate verification
-    "receipt-checker",
-    "contract-enforcer",
-    "security-scanner",
-    "coverage-enforcer",
-    "gate-fixer",
-    # Deployment verification
-    "smoke-verifier",
-    "deploy-monitor",
-})
+HIGH_AGENT_PATTERNS = frozenset(
+    {
+        # Requirements foundation
+        "requirements-author",
+        "bdd-author",
+        # Design and architecture
+        "adr-author",
+        "interface-designer",
+        "observability-designer",
+        "design-optioneer",
+        "work-planner",
+        "test-strategist",
+        # Gate verification
+        "receipt-checker",
+        "contract-enforcer",
+        "security-scanner",
+        "coverage-enforcer",
+        "gate-fixer",
+        # Deployment verification
+        "smoke-verifier",
+        "deploy-monitor",
+    }
+)
 
 # P3 - MEDIUM: Cross-cutting analysis, context, risk
-MEDIUM_AGENT_PATTERNS = frozenset({
-    # Cross-cutting agents
-    "clarifier",
-    "risk-analyst",
-    "policy-analyst",
-    # Analysis and context
-    "impact-analyzer",
-    "context-loader",
-    # Fixers (important but not decision-making)
-    "fixer",
-    "mutator",
-})
+MEDIUM_AGENT_PATTERNS = frozenset(
+    {
+        # Cross-cutting agents
+        "clarifier",
+        "risk-analyst",
+        "policy-analyst",
+        # Analysis and context
+        "impact-analyzer",
+        "context-loader",
+        # Fixers (important but not decision-making)
+        "fixer",
+        "mutator",
+    }
+)
 
 # P4 - LOW: Preprocessing, communication, utility, post-flight
-LOW_AGENT_PATTERNS = frozenset({
-    # Early preprocessing
-    "signal-normalizer",
-    "problem-framer",
-    "scope-assessor",
-    # Communication
-    "gh-reporter",
-    # Documentation (supplementary)
-    "doc-writer",
-    # Post-flight analysis
-    "flow-historian",
-    "artifact-auditor",
-    "regression-analyst",
-    "learning-synthesizer",
-    "feedback-applier",
-    # Utility
-    "swarm-ops",
-    "ux-implementer",
-    # Git operations (mechanical)
-    "repo-operator",
-})
+LOW_AGENT_PATTERNS = frozenset(
+    {
+        # Early preprocessing
+        "signal-normalizer",
+        "problem-framer",
+        "scope-assessor",
+        # Communication
+        "gh-reporter",
+        # Documentation (supplementary)
+        "doc-writer",
+        # Post-flight analysis
+        "flow-historian",
+        "artifact-auditor",
+        "regression-analyst",
+        "learning-synthesizer",
+        "feedback-applier",
+        # Utility
+        "swarm-ops",
+        "ux-implementer",
+        # Git operations (mechanical)
+        "repo-operator",
+    }
+)
 
 
 # =============================================================================
@@ -146,24 +154,28 @@ LOW_AGENT_PATTERNS = frozenset({
 # =============================================================================
 
 # High-value artifact patterns (boost priority)
-HIGH_VALUE_ARTIFACTS = frozenset({
-    "decision",
-    "critique",
-    "requirements",
-    "adr",
-    "contracts",
-    "receipt",
-    "build_receipt",
-})
+HIGH_VALUE_ARTIFACTS = frozenset(
+    {
+        "decision",
+        "critique",
+        "requirements",
+        "adr",
+        "contracts",
+        "receipt",
+        "build_receipt",
+    }
+)
 
 # Low-value artifact patterns (reduce priority)
-LOW_VALUE_ARTIFACTS = frozenset({
-    "summary",
-    "history",
-    "learnings",
-    "feedback",
-    "audit",
-})
+LOW_VALUE_ARTIFACTS = frozenset(
+    {
+        "summary",
+        "history",
+        "learnings",
+        "feedback",
+        "audit",
+    }
+)
 
 
 def classify_history_item(item: Dict[str, Any]) -> HistoryPriority:
@@ -245,10 +257,7 @@ def prioritize_history(
         List of (priority, original_index, item) tuples, sorted for optimal inclusion.
         Iterate from start to include highest-priority items first.
     """
-    decorated = [
-        (classify_history_item(item), idx, item)
-        for idx, item in enumerate(history)
-    ]
+    decorated = [(classify_history_item(item), idx, item) for idx, item in enumerate(history)]
 
     # Sort by:
     # 1. Priority descending (CRITICAL=3 first, LOW=0 last)

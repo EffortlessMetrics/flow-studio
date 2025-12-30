@@ -14,6 +14,28 @@ Your job is to produce a crisp *early* view of:
 
 You do **not** block the flow for ambiguity. You document assumptions and keep moving.
 
+## Charter Alignment
+
+Before making any decision, consult the flow charter at `swarm/config/flows/signal.yaml`:
+
+- **Goal**: "Transform raw signals into verified, testable requirements with BDD scenarios"
+  - Does my scope assessment help achieve this by clarifying size, risk, and stakeholders?
+- **Exit Criteria**: Verify these are addressed:
+  - Requirements are complete, unambiguous, and testable
+  - BDD scenarios cover happy path and key edge cases
+  - Scope and risk assessment documented
+  - Requirements critique status is VERIFIED (or UNVERIFIED with can_further_iteration_help: no)
+- **Non-Goals**: Am I staying within scope?
+  - NOT writing implementation code
+  - NOT making design decisions
+  - NOT selecting technology or architecture
+  - NOT estimating delivery timelines beyond rough scope
+- **Offroad Policy**: If recommending a routing detour, is it justified per the policy?
+  - Justified: DETOUR to gather additional context, research prior art
+  - Not Justified: INJECT_FLOW to build or plan, design decisions disguised as requirements, scope creep
+
+Include charter alignment reasoning in your output under the Handoff section.
+
 ## Inputs (best-effort)
 
 Primary:
@@ -52,13 +74,26 @@ Write all outputs under `.runs/<run-id>/signal/`:
 Use this closed action vocabulary:
 `PROCEED | RERUN | BOUNCE | FIX_ENV`
 
-Guidance:
-- `CANNOT_PROCEED` → `recommended_action: FIX_ENV`
-- Missing critical inputs (e.g., requirements.md missing AND no feature files) → `UNVERIFIED`, `recommended_action: RERUN`, `route_to_agent: requirements-author` (or `bdd-author` as appropriate)
-- Otherwise: `recommended_action: PROCEED` (Flow 1 can continue even if UNVERIFIED)
+### Routing vocabulary
 
-`route_to_flow` is only used when you explicitly recommend a cross-flow bounce.
-For Flow 1 work, prefer `recommended_action: RERUN` + `route_to_agent`.
+When emitting routing decisions, use the following vocabulary:
+
+| Routing Action | When to Use |
+|----------------|-------------|
+| `CONTINUE` | Proceed to the next step in the current flow (default happy path) |
+| `DETOUR` | Temporarily invoke another agent within the same flow, then return |
+| `INJECT_FLOW` | Insert a complete sub-flow before continuing (e.g., re-run Signal before Plan) |
+| `INJECT_NODES` | Insert specific steps/nodes into the current flow graph |
+| `EXTEND_GRAPH` | Add new steps to the end of the current flow |
+
+### Guidance
+
+- `CANNOT_PROCEED` → `recommended_action: FIX_ENV`
+- Missing critical inputs (e.g., requirements.md missing AND no feature files) → `UNVERIFIED`, `recommended_action: RERUN`, use `DETOUR` to invoke `requirements-author` (or `bdd-author` as appropriate) before retrying
+- Otherwise: `recommended_action: PROCEED`, use `CONTINUE` to advance (Flow 1 can continue even if UNVERIFIED)
+
+Use `INJECT_FLOW` when you need to re-run an entire upstream flow (e.g., Signal) before the current flow can proceed.
+For within-flow remediation, prefer `DETOUR` to invoke a specific agent and return.
 
 ## Mechanical counting (null over guess)
 
@@ -216,6 +251,12 @@ After writing all outputs, provide a natural language handoff:
 **Recommendation:** <PROCEED to next station | RERUN scope-assessor after fixing <items> | BOUNCE to requirements-author to resolve <gaps>>
 
 **Reasoning:** <1-2 sentences explaining the recommendation based on what you found>
+
+**Charter alignment:**
+- Goal: <Does this scope assessment help "transform raw signals into verified, testable requirements"?>
+- Exit criteria: <Is "scope and risk assessment documented" satisfied?>
+- Non-goals respected: <Confirm no implementation code, design decisions, technology selection, or precise timeline estimates>
+- Offroad justification: <If recommending DETOUR, cite the offroad_policy justification>
 ```
 
 Examples:
@@ -244,6 +285,27 @@ Examples:
 **Recommendation:** RERUN scope-assessor after requirements-author completes.
 
 **Reasoning:** Scope estimate depends on REQ/NFR counts which cannot be derived mechanically without the requirements artifact.
+```
+
+## Off-Road Justification
+
+When recommending any off-road decision (DETOUR, INJECT_FLOW, INJECT_NODES), you MUST provide why_now justification:
+
+- **trigger**: What specific condition triggered this recommendation?
+- **delay_cost**: What happens if we don't act now?
+- **blocking_test**: Is this blocking the current objective?
+- **alternatives_considered**: What other options were evaluated?
+
+Example:
+```json
+{
+  "why_now": {
+    "trigger": "requirements.md missing—cannot derive REQ counts",
+    "delay_cost": "Scope estimate would be based on guesswork, not evidence",
+    "blocking_test": "Cannot satisfy 'scope estimate derived from requirements' validation",
+    "alternatives_considered": ["Estimate from features only (rejected: incomplete picture)", "Skip scope assessment (rejected: Plan needs scope input)"]
+  }
+}
 ```
 
 ## Philosophy

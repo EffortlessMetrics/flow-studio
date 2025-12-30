@@ -22,7 +22,7 @@ Welcome! You're 10 minutes away from understanding how Flow Studio works. This g
 
 **Choose your lane:**
 
-- **Lane A: SDLC Demo** — See the six flows in action with Flow Studio
+- **Lane A: SDLC Demo** — See the seven flows in action with Flow Studio
 - **Lane B: Governance Demo** — Understand how the selftest validates the swarm
 
 Both paths take about 10 minutes. You can do both.
@@ -46,7 +46,7 @@ Both paths take about 10 minutes. You can do both.
 
 ## Lane A: SDLC Demo
 
-**What you'll learn:** How the six flows (Signal → Plan → Build → Gate → Deploy → Wisdom) work together to automate the SDLC.
+**What you'll learn:** How the seven flows (Signal → Plan → Build → Review → Gate → Deploy → Wisdom) work together to automate the SDLC.
 
 **Time:** 10 minutes
 
@@ -65,7 +65,7 @@ If `make dev-check` is green, skip ahead. If it fails, run `make selftest-doctor
 make demo-run
 ```
 
-This copies the example health-check scenario to `swarm/runs/demo-health-check/`, complete with all 6 flow artifacts.
+This copies the example health-check scenario to `swarm/runs/demo-health-check/`, complete with all 7 flow artifacts.
 
 ### Step 3: Launch Flow Studio (1 min)
 
@@ -81,20 +81,20 @@ http://localhost:5000/?run=demo-health-check&mode=operator
 
 You should see:
 
-- **Left sidebar**: 6 flows (Signal, Plan, Build, Gate, Deploy, Wisdom)
-- **Center graph**: Steps and agents for the selected flow
+- **Left sidebar**: 7 flows (Signal, Plan, Build, Review, Gate, Deploy, Wisdom)
+- **Center graph**: Steps and stations for the selected flow
 - **SDLC bar at top**: Progress across all flows (all green for demo-health-check)
 - **Right panel**: Details for the selected step/agent
 
 ### Step 4: Explore (5 min)
 
 1. Click each flow in the left sidebar to see its structure
-2. Notice Build (Flow 3) is the heaviest — most steps, most agents
+2. Notice Build (Flow 3) is the heaviest — most steps, most stations
 3. Click agent nodes (colored dots) to see their role and model
 4. Click the **Artifacts** tab to see what each flow produced
 5. Click the **Validation** tab to see governance status
 
-**Key insight**: The graph *is* the spec. Each flow has steps, each step has agents. The shape tells you the story.
+**Key insight**: The graph *is* the spec. Each flow has steps, each step executes a station. The shape tells you the story.
 
 ### What You've Seen
 
@@ -257,6 +257,7 @@ If it says a different address, use that instead.
 - **Learn validation**: Read `docs/VALIDATION_WALKTHROUGH.md` (realistic scenario)
 - **Explore governance**: Read `docs/SELFTEST_SYSTEM.md` (16-step breakdown)
 - **Full reference**: Read `CLAUDE.md` (complete guide for Claude Code)
+- **Learn the vocabulary**: Read `docs/LEXICON.md` (canonical terms like station, step, navigator)
 - **Understand the ideas**: Read `docs/WHY_DEMO_SWARM.md` (three core ideas)
 - **Use it**: See `docs/INDEX.md` for reading order and key patterns
 
@@ -266,7 +267,7 @@ If it says a different address, use that instead.
 
 | Path | Purpose |
 |------|---------|
-| `swarm/runs/demo-health-check/` | Demo run artifacts (all 6 flows) |
+| `swarm/runs/demo-health-check/` | Demo run artifacts (all 7 flows) |
 | `swarm/flows/flow-*.md` | Flow specs (what should happen) |
 | `.claude/agents/*.md` | Agent definitions (who does it) |
 | `docs/FLOW_STUDIO.md` | Flow Studio reference |

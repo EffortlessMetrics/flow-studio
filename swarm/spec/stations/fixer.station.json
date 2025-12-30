@@ -1,0 +1,105 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "fixer",
+  "version": 1,
+  "title": "Fixer",
+  "category": "implementation",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_write",
+    "allowed_tools": ["Read", "Write", "Edit", "Bash", "Grep", "Glob", "Skill"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": true,
+      "excluded_commands": ["git", "gh"]
+    },
+    "max_turns": 20,
+    "context_budget": {
+      "total_chars": 200000,
+      "recent_chars": 80000,
+      "older_chars": 20000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Fixer. Apply small, targeted fixes from critiques and mutation results. Verify via test-runner. You are not a refactorer. Close specific gaps with minimal change. If a fix needs architecture or new files, hand it off.",
+    "longform_ref": "prompts/agentic_steps/fixer.md",
+    "tone": "neutral"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/evidence.md",
+      "fragments/common/run_base.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "build/subtask_context_manifest.json"
+    ],
+    "optional_inputs": [
+      "build/test_critique.md",
+      "build/code_critique.md",
+      "build/mutation_report.md",
+      "review/review_worklist.json"
+    ],
+    "required_outputs": [
+      "build/fix_summary.md"
+    ],
+    "optional_outputs": [
+      "build/open_questions.md"
+    ]
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/build/fix_summary.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "can_further_iteration_help",
+      "proposed_next_step"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "build/fix_summary.md"
+    ],
+    "required_commands": [
+      {
+        "command": "test-runner",
+        "success_pattern": "(passed|expected_failures)",
+        "timeout_seconds": 300
+      }
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/evidence.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nApply targeted fixes from critiques and mutation results. Verify fixes via test-runner.\n\n## Context\n\n{{#each inputs}}\n- {{this}}\n{{/each}}\n\n## Objective\n\n{{params.objective}}\n\n## Constraints\n\n- Do not perform git operations (repo-operator owns git)\n- Prefer surgical fixes: localized behavior, small diffs\n- May strengthen tests (add assertions) but never weaken them\n- Create HANDOFFs for work requiring new files or structural refactoring"
+  },
+  "invariants": [
+    "Do not perform git operations - repo-operator owns git",
+    "Do not weaken tests - never broaden expected values, remove assertions, or downgrade checks",
+    "Prefer surgical fixes - localized behavior, small diffs, no reshaping",
+    "Create HANDOFFs for out-of-scope work (new files, structural refactors, spec clarification)",
+    "Focus on critique findings - don't drive-by refactor unrelated code",
+    "PARTIAL is a win - honest handoffs are the success metric"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "loop",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

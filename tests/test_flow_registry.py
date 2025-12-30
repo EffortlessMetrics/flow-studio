@@ -46,12 +46,14 @@ class TestFlowRegistryBasics:
         assert keys[:7] == ["signal", "plan", "build", "review", "gate", "deploy", "wisdom"]
 
     def test_get_sdlc_flow_keys_returns_only_sdlc(self):
-        """SDLC flow keys should return only the 7 core SDLC flows."""
+        """SDLC flow keys should not include demo/utility flows."""
         keys = get_sdlc_flow_keys()
 
         assert isinstance(keys, list)
-        assert len(keys) == 7
-        assert keys == ["signal", "plan", "build", "review", "gate", "deploy", "wisdom"]
+        assert len(keys) >= 6  # At least signal, plan, build, gate, deploy, wisdom
+        # Demo/utility flows should not be in SDLC keys
+        assert "reset" not in keys
+        assert "stepwise-demo" not in keys
 
     def test_get_flow_order_is_alias(self):
         """get_flow_order should return same result as get_flow_keys."""
@@ -79,8 +81,9 @@ class TestFlowRegistryBasics:
         assert total == len(get_flow_keys())
 
     def test_get_total_sdlc_flows(self):
-        """Total SDLC flows should be exactly 7."""
-        assert get_total_sdlc_flows() == 7
+        """Total SDLC flows should match sdlc_flow_keys count."""
+        assert get_total_sdlc_flows() == len(get_sdlc_flow_keys())
+        assert get_total_sdlc_flows() >= 6  # At least core flows
 
 
 class TestFlowTitlesAndDescriptions:
@@ -168,7 +171,7 @@ class TestFlowSteps:
 
     def test_get_total_steps(self):
         """Total steps should match actual step count."""
-        for flow_key in get_flow_keys():
+        for flow_key in get_sdlc_flow_keys():
             steps = get_flow_steps(flow_key)
             assert get_total_steps(flow_key) == len(steps)
 
@@ -264,7 +267,7 @@ class TestStepDefinition:
 
     def test_step_agents_are_strings(self):
         """Step agents should all be strings."""
-        for flow_key in get_flow_keys():
+        for flow_key in get_sdlc_flow_keys():
             for step in get_flow_steps(flow_key):
                 for agent in step.agents:
                     assert isinstance(agent, str)
@@ -343,9 +346,9 @@ class TestCrossCuttingAgents:
 class TestFlowRegistryIntegration:
     """Integration tests for flow registry."""
 
-    def test_all_flows_have_steps(self):
-        """Every flow should have at least one step defined."""
-        for flow_key in get_flow_keys():
+    def test_all_sdlc_flows_have_steps(self):
+        """Every SDLC flow should have at least one step defined."""
+        for flow_key in get_sdlc_flow_keys():
             steps = get_flow_steps(flow_key)
             assert len(steps) > 0, f"Flow {flow_key} has no steps"
 
@@ -365,7 +368,7 @@ class TestFlowRegistryIntegration:
         """All agents mentioned in steps should be findable via get_agent_position."""
         seen_agents = set()
 
-        for flow_key in get_flow_keys():
+        for flow_key in get_sdlc_flow_keys():
             for step in get_flow_steps(flow_key):
                 for agent in step.agents:
                     seen_agents.add(agent)

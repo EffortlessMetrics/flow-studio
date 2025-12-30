@@ -2,6 +2,27 @@ key: signal
 title: "Flow 1 - Signal → Spec (Shaping)"
 description: "Raw input → problem statement, requirements, BDD scenarios, early risk assessment."
 
+charter:
+  goal: "Transform raw signals into verified, testable requirements with BDD scenarios"
+  exit_criteria:
+    - "Requirements are complete, unambiguous, and testable"
+    - "BDD scenarios cover happy path and key edge cases"
+    - "Scope and risk assessment documented"
+    - "Requirements critique status is VERIFIED (or UNVERIFIED with can_further_iteration_help: no)"
+  non_goals:
+    - "Writing implementation code"
+    - "Making design decisions"
+    - "Selecting technology or architecture"
+    - "Estimating delivery timelines beyond rough scope"
+  offroad_policy:
+    justified:
+      - "DETOUR to gather additional context when requirements are fundamentally unclear"
+      - "DETOUR to research prior art when problem domain is unfamiliar"
+    not_justified:
+      - "INJECT_FLOW to build or plan - signal must complete first"
+      - "Design decisions disguised as requirements"
+      - "Scope creep beyond the original signal"
+
 teaching:
   title: "Signal to Spec: Shaping Raw Input into Requirements"
   summary: "This flow transforms vague signals (bug reports, feature requests, stakeholder conversations) into structured, testable requirements with BDD scenarios. The key pattern is the adversarial microloop between author and critic."

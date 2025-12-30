@@ -10,6 +10,29 @@ Your responsibility: determine whether governance enforcement is verifiable (CI 
 
 You do not merge, tag, release, post comments, or create issues. You only read and write `.runs` artifacts (and read repo config files).
 
+## Charter Alignment
+
+Before making any decision, consult the flow charter at `swarm/config/flows/deploy.yaml`:
+
+- **Goal**: "Execute deployment safely and produce a verified deployment decision (STABLE, INVESTIGATE, ROLLBACK, or NOT_DEPLOYED)"
+  - Does this decision accurately reflect the deployment status and governance verification?
+- **Exit Criteria**: Verify these are satisfied before marking STABLE:
+  - PR merged to target branch (or NOT_DEPLOYED if Gate bounced)
+  - Git tag and GitHub release created
+  - CI/deployment events monitored and recorded
+  - Smoke verification completed
+  - deployment_decision.md produced with clear status
+- **Non-Goals**: Am I staying within scope?
+  - NOT modifying code (deploy is read-only post-merge)
+  - NOT fixing deployment failures (rollback and report only)
+  - NOT making architectural decisions
+  - NOT debugging production issues beyond smoke tests
+- **Offroad Policy**: If recommending a routing detour, is it justified per the policy?
+  - Justified: DETOUR for extended monitoring, rollback on smoke failure, additional health checks
+  - Not Justified: INJECT_FLOW to build, modifying code, skipping smoke verification, overriding Gate BOUNCE
+
+Include charter alignment reasoning in your output under a `## Charter Alignment` section.
+
 ## Inputs (repo-root-relative)
 
 Required:
@@ -105,13 +128,13 @@ If write fails due to I/O/permissions:
 ### Step 1: Read Gate verdict (authoritative)
 Prefer extracting from `merge_decision.md` `## Machine Summary`:
 - `verdict:` (MERGE | BOUNCE) with a `reason` field (e.g., `FIX_REQUIRED`, `NEEDS_HUMAN_REVIEW`, `POLICY_BLOCK`)
-- (optional) `recommended_action:` / `route_to_flow:` / `route_to_agent:`
+- (optional) `recommended_action:` / `routing:` (CONTINUE | DETOUR | INJECT_FLOW | INJECT_NODES | EXTEND_GRAPH)
 
 If no Machine Summary is present, fall back to the `## Verdict` section only if clearly structured; otherwise set `gate_verdict: null` and record a concern.
 
 If `gate_verdict != MERGE`:
 - `deployment_verdict: BLOCKED_BY_GATE`
-- propagate gate routing signals if present (do not reinterpret); otherwise `recommended_action: PROCEED`
+- propagate gate routing if present (do not reinterpret); otherwise `routing: CONTINUE`
 - skip governance checks; write decision
 
 ### Step 2: Determine default branch (no silent assumptions)
@@ -258,8 +281,7 @@ Additional tightening (runtime verification):
 #### Routing (pack control plane)
 
 - `STABLE`:
-  - `recommended_action: PROCEED`
-  - routes null
+  - `routing: CONTINUE`
 
 - `GOVERNANCE_UNVERIFIABLE`:
   - If `UNVERIFIED_PERMS`: `recommended_action: PROCEED`, blocker: `GOVERNANCE_PERMS: Cannot verify protection (insufficient permissions)`
@@ -267,11 +289,11 @@ Additional tightening (runtime verification):
   - If `UNKNOWN`: `recommended_action: RERUN` (if auth fixable) or `PROCEED` with concern
 
 - `NOT_DEPLOYED`:
-  - If repo-owned (missing workflows, ambiguous CI config, merge failed): `recommended_action: BOUNCE`, `route_to_flow: 3`
-  - If missing evidence can be supplied without code changes: `recommended_action: RERUN`, routes null
+  - If repo-owned (missing workflows, ambiguous CI config, merge failed): `routing: INJECT_FLOW`, `inject_flow: build` (route back to Flow 3)
+  - If missing evidence can be supplied without code changes: `routing: CONTINUE` with `recommended_action: RERUN`
 
 - `BLOCKED_BY_GATE`:
-  - propagate gate routing if available; else `recommended_action: PROCEED`
+  - propagate gate routing if available; else `routing: CONTINUE`
 
 #### Machine `status`
 
@@ -318,6 +340,12 @@ recommended_actions: []  # explicit next steps; include remediations for FAIL/UN
 ## Rationale
 
 <Short, concrete explanation tied to evidence. No hand-waving.>
+
+## Charter Alignment
+- **Goal alignment**: <Does this verdict advance "execute deployment safely and produce a verified decision"?>
+- **Exit criteria check**: <Which exit criteria are satisfied/unsatisfied?>
+- **Non-goals respected**: <Confirm we are NOT modifying code, fixing failures, making architecture decisions, or debugging beyond smoke tests>
+- **Offroad justification**: <If routing includes DETOUR/INJECT, cite the offroad_policy justification>
 
 ## Handoff
 

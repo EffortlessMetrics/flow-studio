@@ -85,7 +85,7 @@ export interface CompiledFlow {
 /**
  * Run control state
  */
-export type RunState = "pending" | "running" | "paused" | "completed" | "failed";
+export type RunState = "pending" | "running" | "paused" | "completed" | "failed" | "stopped";
 
 /**
  * Run information
@@ -194,6 +194,9 @@ export type SSEEventType =
   | "step_end"
   | "routing_decision"
   | "artifact_created"
+  | "facts_updated"
+  | "flow_completed"
+  | "plan_completed"
   | "error"
   | "complete";
 
@@ -695,6 +698,7 @@ export class FlowStudioAPI {
       "run:failed", "run:canceled", "run:interrupted",
       "step:started", "step:progress", "step:completed", "step:failed", "step:skipped",
       "artifact:created", "artifact:updated",
+      "flow:completed", "plan:completed",
       "llm:started", "llm:token", "llm:completed",
       "error",
     ];

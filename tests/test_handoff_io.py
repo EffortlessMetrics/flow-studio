@@ -18,6 +18,7 @@ from swarm.runtime.handoff_io import (
     validate_envelope,
     is_strict_validation_enabled,
     EnvelopeValidationError,
+    FILE_CHANGES_EXTRACTION_THRESHOLD,
 )
 
 
@@ -295,3 +296,215 @@ class TestStrictValidation:
                 assert is_strict_validation_enabled(), f"'{value}' should enable strict mode"
             finally:
                 os.environ.pop("SWARM_STRICT_ENVELOPE_VALIDATION", None)
+
+
+class TestFileChangesExtraction:
+    """Tests for file_changes out-of-line extraction and hydration.
+
+    When file_changes data exceeds FILE_CHANGES_EXTRACTION_THRESHOLD bytes,
+    it should be extracted to a separate file in the forensics directory
+    to reduce ledger bloat.
+    """
+
+    def test_small_file_changes_remain_inline(self, run_base: Path):
+        """Verify small file_changes are kept inline in the envelope."""
+        small_file_changes = [
+            {"path": "src/main.py", "change_type": "modified", "lines_added": 5}
+        ]
+        envelope_data = {
+            "step_id": "test_step",
+            "status": "VERIFIED",
+            "summary": "Test",
+            "routing_signal": {"decision": "advance", "reason": "done", "confidence": 0.9, "needs_human": False},
+            "file_changes": small_file_changes,
+        }
+
+        result = write_handoff_envelope(
+            run_base=run_base,
+            step_id="test_step",
+            envelope_data=envelope_data,
+            validate=False,
+        )
+
+        # file_changes should remain inline
+        assert result.get("file_changes") == small_file_changes
+        assert "file_changes_path" not in result
+
+        # Forensics directory should not be created
+        assert not (run_base / "forensics").exists()
+
+    def test_large_file_changes_extracted_to_forensics(self, run_base: Path):
+        """Verify large file_changes are extracted to forensics directory."""
+        # Create file_changes that exceeds the threshold
+        large_file_changes = [
+            {
+                "path": f"src/file_{i}.py",
+                "change_type": "modified",
+                "lines_added": 100,
+                "lines_removed": 50,
+                "summary": f"Updated file {i} with significant changes to the module structure and implementation details",
+            }
+            for i in range(50)  # 50 entries should exceed 1000 bytes
+        ]
+
+        # Verify this exceeds threshold
+        assert len(json.dumps(large_file_changes)) > FILE_CHANGES_EXTRACTION_THRESHOLD
+
+        envelope_data = {
+            "step_id": "test_step",
+            "status": "VERIFIED",
+            "summary": "Test",
+            "routing_signal": {"decision": "advance", "reason": "done", "confidence": 0.9, "needs_human": False},
+            "file_changes": large_file_changes,
+        }
+
+        result = write_handoff_envelope(
+            run_base=run_base,
+            step_id="test_step",
+            envelope_data=envelope_data,
+            validate=False,
+        )
+
+        # file_changes should be replaced with None and path reference
+        assert result.get("file_changes") is None
+        assert "file_changes_path" in result
+        assert result["file_changes_path"] == "forensics/file_changes_test_step.json"
+
+        # Forensics file should exist with the data
+        forensics_path = run_base / "forensics" / "file_changes_test_step.json"
+        assert forensics_path.exists()
+
+        extracted_data = json.loads(forensics_path.read_text())
+        assert extracted_data == large_file_changes
+
+    def test_read_hydrates_extracted_file_changes(self, run_base: Path):
+        """Verify reading an envelope hydrates file_changes from external file."""
+        large_file_changes = [
+            {
+                "path": f"src/file_{i}.py",
+                "change_type": "modified",
+                "lines_added": 100,
+                "summary": f"Big change {i}",
+            }
+            for i in range(50)
+        ]
+
+        envelope_data = {
+            "step_id": "test_step",
+            "status": "VERIFIED",
+            "summary": "Test",
+            "routing_signal": {"decision": "advance", "reason": "done", "confidence": 0.9, "needs_human": False},
+            "file_changes": large_file_changes,
+        }
+
+        # Write (should extract)
+        write_handoff_envelope(
+            run_base=run_base,
+            step_id="test_step",
+            envelope_data=envelope_data,
+            validate=False,
+        )
+
+        # Read back (should hydrate)
+        result = read_handoff_envelope(run_base, "test_step")
+
+        assert result is not None
+        assert result.get("file_changes") == large_file_changes
+        # The path reference should still be there
+        assert result.get("file_changes_path") == "forensics/file_changes_test_step.json"
+
+    def test_read_without_hydration(self, run_base: Path):
+        """Verify hydration can be disabled when reading."""
+        large_file_changes = [
+            {"path": f"src/file_{i}.py", "change_type": "added", "lines_added": 10}
+            for i in range(100)
+        ]
+
+        envelope_data = {
+            "step_id": "test_step",
+            "status": "VERIFIED",
+            "summary": "Test",
+            "routing_signal": {"decision": "advance", "reason": "done", "confidence": 0.9, "needs_human": False},
+            "file_changes": large_file_changes,
+        }
+
+        write_handoff_envelope(
+            run_base=run_base,
+            step_id="test_step",
+            envelope_data=envelope_data,
+            validate=False,
+        )
+
+        # Read without hydration
+        result = read_handoff_envelope(run_base, "test_step", hydrate_file_changes=False)
+
+        assert result is not None
+        assert result.get("file_changes") is None
+        assert result.get("file_changes_path") == "forensics/file_changes_test_step.json"
+
+    def test_hydration_handles_missing_forensics_file(self, run_base: Path, caplog):
+        """Verify graceful handling when forensics file is missing."""
+        # Manually create an envelope with a path reference but no actual file
+        (run_base / "handoff").mkdir(parents=True)
+        envelope_data = {
+            "step_id": "test_step",
+            "status": "VERIFIED",
+            "summary": "Test",
+            "routing_signal": {"decision": "advance", "reason": "done"},
+            "file_changes": None,
+            "file_changes_path": "forensics/file_changes_test_step.json",
+        }
+        (run_base / "handoff" / "test_step.json").write_text(json.dumps(envelope_data))
+
+        # Read should not raise, just warn
+        result = read_handoff_envelope(run_base, "test_step")
+
+        assert result is not None
+        assert result.get("file_changes") is None  # Not hydrated
+        assert result.get("file_changes_path") == "forensics/file_changes_test_step.json"
+
+    def test_empty_file_changes_not_extracted(self, run_base: Path):
+        """Verify empty file_changes list is not extracted."""
+        envelope_data = {
+            "step_id": "test_step",
+            "status": "VERIFIED",
+            "summary": "Test",
+            "routing_signal": {"decision": "advance", "reason": "done", "confidence": 0.9, "needs_human": False},
+            "file_changes": [],
+        }
+
+        result = write_handoff_envelope(
+            run_base=run_base,
+            step_id="test_step",
+            envelope_data=envelope_data,
+            validate=False,
+        )
+
+        # Empty list should remain inline
+        assert result.get("file_changes") == []
+        assert "file_changes_path" not in result
+        assert not (run_base / "forensics").exists()
+
+    def test_envelope_without_file_changes(self, run_base: Path):
+        """Verify envelopes without file_changes work correctly."""
+        envelope_data = {
+            "step_id": "test_step",
+            "status": "VERIFIED",
+            "summary": "Test",
+            "routing_signal": {"decision": "advance", "reason": "done", "confidence": 0.9, "needs_human": False},
+        }
+
+        result = write_handoff_envelope(
+            run_base=run_base,
+            step_id="test_step",
+            envelope_data=envelope_data,
+            validate=False,
+        )
+
+        assert "file_changes" not in result
+        assert "file_changes_path" not in result
+
+        # Read back
+        read_result = read_handoff_envelope(run_base, "test_step")
+        assert read_result is not None
+        assert "file_changes" not in read_result

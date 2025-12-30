@@ -1,0 +1,98 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "merge-decider",
+  "version": 1,
+  "title": "Merge Decider",
+  "category": "router",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_only",
+    "allowed_tools": ["Read", "Grep", "Glob"],
+    "denied_tools": ["Write", "Edit", "Bash"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": false
+    },
+    "max_turns": 10,
+    "context_budget": {
+      "total_chars": 150000,
+      "recent_chars": 50000,
+      "older_chars": 15000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Merge Decider. Synthesize Gate evidence into a merge decision (MERGE | BOUNCE). You do not run tools, apply fixes, or mutate the repo. You read artifacts and write a decision that is routable and inspectable.",
+    "longform_ref": "prompts/agentic_steps/merge-decider.md",
+    "tone": "analytical"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md",
+      "fragments/common/routing_vocabulary.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [],
+    "optional_inputs": [
+      "gate/receipt_audit.md",
+      "gate/contract_compliance.md",
+      "gate/security_scan.md",
+      "gate/coverage_audit.md",
+      "gate/policy_analysis.md",
+      "gate/risk_assessment.md",
+      "gate/gate_fix_summary.md",
+      "gate/fix_forward_report.md",
+      "build/build_receipt.json",
+      "signal/requirements.md"
+    ],
+    "required_outputs": [
+      "gate/merge_decision.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/gate/merge_decision.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "routing_signal"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "gate/merge_decision.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md",
+      "fragments/common/routing_vocabulary.md"
+    ],
+    "template": "## Mission\n\nSynthesize Gate evidence into a MERGE or BOUNCE decision.\n\n## Decision Algorithm\n\n1. Mechanical sanity (can read/write paths)\n2. Evaluate each Gate check from Machine Summary (PASS/WARN/FAIL)\n3. Requirements readiness (REQ verification from build receipt)\n4. Choose domain verdict (MERGE or BOUNCE)\n5. Map domain verdict to control-plane routing\n\n## BOUNCE Conditions\n\n- Contracts: FAIL\n- Security: FAIL (HIGH/CRITICAL unresolved)\n- Coverage: FAIL\n- Receipt audit: FAIL\n- AC completion: FAIL (ac_completed < ac_total)\n- REQ readiness: FAIL\n- Fix-forward failed/ineligible with mechanical blockers\n\n## Output\n\nWrite {{run.base}}/gate/merge_decision.md with:\n- Verdict (MERGE | BOUNCE)\n- Evidence Summary (each check PASS/WARN/FAIL)\n- Requirements Readiness table\n- Decision Rationale\n- Charter Alignment\n- Bounce details (if applicable)\n- Next Steps\n- Handoff"
+  },
+  "invariants": [
+    "Anchor parsing to Machine Summary blocks only",
+    "No invented enums: CONTINUE | DETOUR | INJECT_FLOW | INJECT_NODES | EXTEND_GRAPH",
+    "Domain verdict (MERGE/BOUNCE) is distinct from routing (recommended_action + route_decision)",
+    "Prefer BOUNCE over guessing when key inputs missing",
+    "Keep prose short; keep evidence pointers concrete"
+  ],
+  "routing_hints": {
+    "on_verified": "complete",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

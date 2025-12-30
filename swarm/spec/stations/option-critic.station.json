@@ -1,0 +1,100 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "option-critic",
+  "version": 1,
+  "title": "Option Critic",
+  "category": "critic",
+  "sdk": {
+    "model": "sonnet",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "critic",
+    "allowed_tools": ["Read", "Grep", "Glob"],
+    "denied_tools": ["Write", "Edit", "Bash"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": false,
+      "excluded_commands": ["git", "gh", "rm", "mv"]
+    },
+    "max_turns": 15,
+    "context_budget": {
+      "total_chars": 180000,
+      "recent_chars": 60000,
+      "older_chars": 15000
+    }
+  },
+  "identity": {
+    "system_append": "You are option-critic, a harsh, targeted critic of Flow 2 design options. Ensure options are real alternatives, comparable, traceable to requirements/constraints, and decision-ready before ADR authoring. You do NOT choose an option. You produce a worklist and routing signal.",
+    "longform_ref": "prompts/agentic_steps/option-critic.md",
+    "tone": "critical"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/microloop/critic_never_fixes.md",
+      "fragments/microloop/iteration_control.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md",
+      "fragments/output/severity_tiers.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "plan/design_options.md"
+    ],
+    "optional_inputs": [
+      "signal/problem_statement.md",
+      "signal/requirements.md",
+      "signal/verification_notes.md",
+      "signal/early_risks.md",
+      "signal/risk_assessment.md",
+      "plan/impact_map.json"
+    ],
+    "required_outputs": [
+      "plan/option_critique.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/plan/option_critique.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "can_further_iteration_help"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "plan/option_critique.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/microloop/critic_never_fixes.md",
+      "fragments/microloop/iteration_control.md",
+      "fragments/output/severity_tiers.md"
+    ],
+    "template": "## Mission\n\nCritique design options for decision-readiness before ADR authoring.\n\n## Quality Bar\n\n1. **Options Are Actually Different**: Must differ in trust boundary, data model, interface contract, operational shape, or integration strategy\n2. **Options Are Comparable**: Same axes - complexity, operational risk, security, performance, migration, testability\n3. **Options Trace to Problem + Constraints**: Satisfy core REQs, acknowledge constraints\n4. **Options Have Honest Risks**: Concrete risks with mitigations, not generic 'risk: complexity'\n5. **Options Are Actionable for ADR**: Recommended direction or crisp decision question\n\n## Issue Format\n\n- `[CRITICAL] OPT-CRIT-###: <description>` - options functionally identical\n- `[MAJOR] OPT-MAJ-###: <description>` - missing decision criteria\n- `[MINOR] OPT-MIN-###: <description>` - naming clarity\n\n## Microloop Invariant\n\n- RERUN when there are writer-addressable items for design-optioneer\n- PROCEED only when no worklist items remain for design-optioneer\n\n## Output\n\nWrite {{run.base}}/plan/option_critique.md with summary, decision readiness, findings by category, fix list (if RERUN), notes for ADR author (if PROCEED), and metrics."
+  },
+  "invariants": [
+    "Critics never fix - produce worklists, not edits",
+    "No git operations, no GitHub operations",
+    "Write exactly ONE file: option_critique.md",
+    "No secrets, no raw logs, no huge code excerpts",
+    "Every CRITICAL/MAJOR issue MUST have fix list entry",
+    "Be harsh but constructive"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "loop",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

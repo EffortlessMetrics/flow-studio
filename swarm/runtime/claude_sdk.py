@@ -76,8 +76,18 @@ ALLOW_UNSANDBOXED = os.environ.get("SWARM_ALLOW_UNSANDBOXED", "true").lower() ==
 
 # Preserved for future SDK support
 DEFAULT_SANDBOX_ALLOWED_COMMANDS = [
-    "git", "npm", "npx", "pnpm", "uv", "pip", "pytest",
-    "cargo", "rustc", "make", "python", "node",
+    "git",
+    "npm",
+    "npx",
+    "pnpm",
+    "uv",
+    "pip",
+    "pytest",
+    "cargo",
+    "rustc",
+    "make",
+    "python",
+    "node",
 ]
 
 # Warning flag to log sandbox status on first use
@@ -234,7 +244,10 @@ HANDOFF_ENVELOPE_SCHEMA = {
     "type": "object",
     "properties": {
         "step_id": {"type": "string", "description": "The step identifier"},
-        "flow_key": {"type": "string", "description": "The flow key (signal, plan, build, gate, deploy, wisdom)"},
+        "flow_key": {
+            "type": "string",
+            "description": "The flow key (signal, plan, build, gate, deploy, wisdom)",
+        },
         "run_id": {"type": "string", "description": "The run identifier"},
         "timestamp": {"type": "string", "description": "ISO 8601 timestamp"},
         "status": {
@@ -319,7 +332,13 @@ ROUTING_SIGNAL_SCHEMA = {
                             "name": {"type": "string"},
                             "impact": {
                                 "type": "string",
-                                "enum": ["strongly_favors", "favors", "neutral", "against", "strongly_against"],
+                                "enum": [
+                                    "strongly_favors",
+                                    "favors",
+                                    "neutral",
+                                    "against",
+                                    "strongly_against",
+                                ],
                             },
                             "evidence": {"type": "string"},
                             "weight": {"type": "number"},
@@ -365,6 +384,7 @@ _sdk_import_error: Optional[str] = None
 
 try:
     import claude_code_sdk
+
     _sdk_module = claude_code_sdk
     SDK_AVAILABLE = True
     logger.debug("claude_code_sdk imported successfully")
@@ -949,7 +969,13 @@ ROUTING_SIGNAL_SCHEMA: Dict[str, Any] = {
                     "name": {"type": "string", "maxLength": 50},
                     "impact": {
                         "type": "string",
-                        "enum": ["strongly_favors", "favors", "neutral", "against", "strongly_against"],
+                        "enum": [
+                            "strongly_favors",
+                            "favors",
+                            "neutral",
+                            "against",
+                            "strongly_against",
+                        ],
                     },
                     "evidence": {"type": "string", "maxLength": 100},
                     "weight": {"type": "number", "minimum": 0.0, "maximum": 1.0},
@@ -1062,9 +1088,7 @@ def create_tool_policy_hook(
     """
     blocked_path_list = blocked_paths or []
 
-    def tool_policy_hook(
-        tool_name: str, tool_input: Dict[str, Any]
-    ) -> Tuple[bool, Optional[str]]:
+    def tool_policy_hook(tool_name: str, tool_input: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
         """Tool policy hook for can_use_tool validation."""
         # Check tool-level permissions
         if tool_name in ("Write", "Edit") and not allow_write:
@@ -1115,7 +1139,9 @@ class WorkPhaseResult:
     success: bool
     output: str
     events: List[Dict[str, Any]] = field(default_factory=list)
-    token_counts: Dict[str, int] = field(default_factory=lambda: {"prompt": 0, "completion": 0, "total": 0})
+    token_counts: Dict[str, int] = field(
+        default_factory=lambda: {"prompt": 0, "completion": 0, "total": 0}
+    )
     model: str = "unknown"
     error: Optional[str] = None
     tool_calls: List[Dict[str, Any]] = field(default_factory=list)
@@ -1212,7 +1238,9 @@ class ClaudeSDKClient:
         self,
         repo_root: Optional[Path] = None,
         model: Optional[str] = None,
-        tool_policy_hook: Optional[Callable[[str, Dict[str, Any]], Tuple[bool, Optional[str]]]] = None,
+        tool_policy_hook: Optional[
+            Callable[[str, Dict[str, Any]], Tuple[bool, Optional[str]]]
+        ] = None,
         pre_tool_hooks: Optional[List[PreToolUseHook]] = None,
         post_tool_hooks: Optional[List[PostToolUseHook]] = None,
     ):
@@ -1265,7 +1293,9 @@ class ClaudeSDKClient:
         import secrets
         import string
 
-        session_id = "".join(secrets.choice(string.ascii_lowercase + string.digits) for _ in range(8))
+        session_id = "".join(
+            secrets.choice(string.ascii_lowercase + string.digits) for _ in range(8)
+        )
 
         session = StepSession(
             client=self,
@@ -1444,7 +1474,9 @@ class StepSession:
                 elif event_type == "ToolUseEvent" or hasattr(event, "tool_name"):
                     tool_name = getattr(event, "tool_name", getattr(event, "name", "unknown"))
                     tool_input = getattr(event, "input", getattr(event, "args", {}))
-                    tool_use_id = getattr(event, "id", getattr(event, "tool_use_id", str(time.time())))
+                    tool_use_id = getattr(
+                        event, "id", getattr(event, "tool_use_id", str(time.time()))
+                    )
 
                     # Initialize tool context for this call
                     tool_ctx: Dict[str, Any] = {
@@ -1457,12 +1489,10 @@ class StepSession:
 
                     # Apply tool policy hook (legacy)
                     blocked = False
-                    block_reason = None
                     if self.client.tool_policy_hook and isinstance(tool_input, dict):
                         allowed, reason = self.client.tool_policy_hook(tool_name, tool_input)
                         if not allowed:
                             blocked = True
-                            block_reason = reason
                             logger.warning(
                                 "Tool use blocked by policy: %s - %s",
                                 tool_name,
@@ -1478,7 +1508,6 @@ class StepSession:
                                 allowed, reason = hook(tool_name, tool_input, tool_ctx)
                                 if not allowed:
                                     blocked = True
-                                    block_reason = reason
                                     logger.warning(
                                         "Tool use blocked by pre-hook: %s - %s",
                                         tool_name,
@@ -1490,12 +1519,14 @@ class StepSession:
                             except Exception as hook_err:
                                 logger.debug("Pre-tool-use hook failed: %s", hook_err)
 
-                    tool_calls.append({
-                        "tool": tool_name,
-                        "input": tool_input,
-                        "timestamp": now.isoformat() + "Z",
-                        "blocked": blocked,
-                    })
+                    tool_calls.append(
+                        {
+                            "tool": tool_name,
+                            "input": tool_input,
+                            "timestamp": now.isoformat() + "Z",
+                            "blocked": blocked,
+                        }
+                    )
                     event_dict["tool"] = tool_name
 
                 elif event_type == "ToolResultEvent" or hasattr(event, "tool_result"):
@@ -1538,14 +1569,18 @@ class StepSession:
                 events.append(event_dict)
 
             # Store conversation context for subsequent phases
-            self._conversation_history.append({
-                "role": "user",
-                "content": prompt,
-            })
-            self._conversation_history.append({
-                "role": "assistant",
-                "content": "".join(full_text),
-            })
+            self._conversation_history.append(
+                {
+                    "role": "user",
+                    "content": prompt,
+                }
+            )
+            self._conversation_history.append(
+                {
+                    "role": "assistant",
+                    "content": "".join(full_text),
+                }
+            )
 
             self._work_result = WorkPhaseResult(
                 success=True,
@@ -1920,7 +1955,8 @@ Output ONLY a JSON object with: decision, next_step_id, reason, confidence, need
         duration_ms = int((end_time - self._start_time).total_seconds() * 1000)
 
         return StepSessionResult(
-            work=self._work_result or WorkPhaseResult(success=False, output="", error="Work not completed"),
+            work=self._work_result
+            or WorkPhaseResult(success=False, output="", error="Work not completed"),
             finalize=self._finalize_result,
             route=self._route_result,
             duration_ms=duration_ms,
@@ -2041,6 +2077,7 @@ def create_telemetry_hook() -> Tuple[PreToolUseHook, PostToolUseHook]:
         ...     post_tool_hooks=[post_hook],
         ... )
     """
+
     def pre_hook(
         tool_name: str,
         tool_input: Dict[str, Any],
@@ -2090,6 +2127,7 @@ def create_file_access_audit_hook(
         >>> for entry in audit_log:
         ...     print(f"{entry['tool']}: {entry['path']}")
     """
+
     def hook(
         tool_name: str,
         tool_input: Dict[str, Any],

@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://swarm.dev/schemas/handoff_envelope.schema.json",
   "title": "HandoffEnvelope",
-  "description": "Durable per-step handoff artifact for cross-step communication. Contains routing signal, artifact pointers, and a compressed summary.",
+  "description": "Durable per-step handoff artifact for cross-step communication. Contains routing signal, artifact pointers, compressed summary, and structured assumption/decision logs.",
   "type": "object",
   "required": ["step_id", "flow_key", "run_id", "routing_signal", "summary"],
   "properties": {
@@ -56,6 +56,47 @@
       "type": "string",
       "format": "date-time",
       "description": "ISO 8601 timestamp when this envelope was created."
+    },
+    "station_id": {
+      "type": ["string", "null"],
+      "description": "Station identifier for spec traceability."
+    },
+    "station_version": {
+      "type": ["integer", "null"],
+      "description": "Version of the station spec used."
+    },
+    "prompt_hash": {
+      "type": ["string", "null"],
+      "description": "Hash of the prompt template for reproducibility."
+    },
+    "verification_passed": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether spec verification passed for this step."
+    },
+    "verification_details": {
+      "type": "object",
+      "description": "Detailed verification results and diagnostics."
+    },
+    "routing_audit": {
+      "type": ["object", "null"],
+      "description": "Routing audit trail when routing includes explanation."
+    },
+    "assumptions_made": {
+      "type": "array",
+      "items": {
+        "$ref": "https://swarm.dev/schemas/assumption_record.schema.json"
+      },
+      "default": [],
+      "description": "List of assumptions made during this step's execution. Enables structured JSONL logging of agent assumptions."
+    },
+    "decisions_made": {
+      "type": "array",
+      "items": {
+        "$ref": "https://swarm.dev/schemas/decision_record.schema.json"
+      },
+      "default": [],
+      "description": "List of decisions logged during this step's execution. Enables structured JSONL logging of agent decisions."
     }
   },
   "additionalProperties": false

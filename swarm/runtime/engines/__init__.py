@@ -28,7 +28,10 @@ Usage:
     >>> result, events = engine.run_step(ctx)
 """
 
-from .base import StepEngine, LifecycleCapableEngine
+from .base import LifecycleCapableEngine, StepEngine
+from .claude import ClaudeStepEngine
+from .factory import get_step_engine, list_available_engines
+from .gemini import GeminiStepEngine
 from .models import (
     FinalizationResult,
     HistoryTruncationInfo,
@@ -36,9 +39,6 @@ from .models import (
     StepContext,
     StepResult,
 )
-from .factory import get_step_engine, list_available_engines
-from .gemini import GeminiStepEngine
-from .claude import ClaudeStepEngine
 
 __all__ = [
     # Interfaces

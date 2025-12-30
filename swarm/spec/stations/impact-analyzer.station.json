@@ -1,0 +1,92 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "impact-analyzer",
+  "version": 1,
+  "title": "Impact Analyzer",
+  "category": "analytics",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_only",
+    "allowed_tools": ["Read", "Grep", "Glob"],
+    "denied_tools": ["Edit", "Write", "Bash"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": false
+    },
+    "max_turns": 15,
+    "context_budget": {
+      "total_chars": 200000,
+      "recent_chars": 60000,
+      "older_chars": 20000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Impact Analyzer. Map blast radius of changes by identifying affected files, components, interfaces, configs, and tests with evidence. You do NOT change code, decide architecture, or post to GitHub. Write exactly one file: impact_map.json.",
+    "longform_ref": "prompts/agentic_steps/impact-analyzer.md",
+    "tone": "analytical"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/evidence.md",
+      "fragments/common/run_base.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [],
+    "optional_inputs": [
+      "signal/requirements.md",
+      "signal/problem_statement.md",
+      "plan/adr.md",
+      "plan/api_contracts.yaml"
+    ],
+    "required_outputs": [
+      "plan/impact_map.json"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/plan/impact_map.json",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "routing_signal"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "plan/impact_map.json"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/evidence.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nMap the blast radius of the proposed change.\n\n## Context\n\n{{#each inputs}}\n- {{this}}\n{{/each}}\n\n## Objective\n\nIdentify all affected files, components, interfaces, configs, and tests with evidence-backed pointers.\n\n## Constraints\n\n- Write exactly one file: impact_map.json\n- Every affected item must have evidence (grep hit, import reference, contract path match)\n- Do not change code or make architectural decisions\n- Use stable IMP-### identifiers"
+  },
+  "invariants": [
+    "Write exactly one file: plan/impact_map.json",
+    "Every observed item must have evidence (grep hit, import reference, etc.)",
+    "Inferred items must have confidence: LOW|MEDIUM and notes explaining the inference",
+    "Do not change code, decide architecture, or post to GitHub",
+    "Use sequential IMP-NNN IDs starting at IMP-001"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

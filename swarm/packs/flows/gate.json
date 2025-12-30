@@ -1,0 +1,50 @@
+{
+  "id": "gate",
+  "name": "Draft → Verify",
+  "description": "Pre-merge gate - audit receipts, check contracts, recommend merge/bounce",
+  "version": 1,
+  "nodes": [
+    {
+      "node_id": "receipt-checker",
+      "template_id": "receipt-checker",
+      "params": {}
+    },
+    {
+      "node_id": "contract-enforcer",
+      "template_id": "contract-enforcer",
+      "params": {}
+    },
+    {
+      "node_id": "security-scanner",
+      "template_id": "security-scanner",
+      "params": {"scan_depth": "thorough"}
+    },
+    {
+      "node_id": "coverage-enforcer",
+      "template_id": "coverage-enforcer",
+      "params": {"min_coverage": 80}
+    },
+    {
+      "node_id": "gate-fixer",
+      "template_id": "gate-fixer",
+      "params": {}
+    },
+    {
+      "node_id": "merge-decider",
+      "template_id": "merge-decider",
+      "params": {}
+    }
+  ],
+  "edges": [
+    {"edge_id": "e1", "from": "receipt-checker", "to": "contract-enforcer", "type": "sequence", "priority": 50},
+    {"edge_id": "e2", "from": "contract-enforcer", "to": "security-scanner", "type": "sequence", "priority": 50},
+    {"edge_id": "e3", "from": "security-scanner", "to": "coverage-enforcer", "type": "sequence", "priority": 50},
+    {"edge_id": "e4", "from": "coverage-enforcer", "to": "gate-fixer", "type": "sequence", "priority": 50, "condition": {"expression": "has_mechanical_issues == true"}},
+    {"edge_id": "e4-skip", "from": "coverage-enforcer", "to": "merge-decider", "type": "sequence", "priority": 60, "condition": {"expression": "has_mechanical_issues == false"}},
+    {"edge_id": "e5", "from": "gate-fixer", "to": "merge-decider", "type": "sequence", "priority": 50}
+  ],
+  "policy": {
+    "max_loop_iterations": 50,
+    "suggested_sidequests": ["security-review", "policy-check"]
+  }
+}

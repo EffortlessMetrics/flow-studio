@@ -195,35 +195,35 @@ def check_freshness(verbose: bool = False) -> Dict[str, any]:
 def print_plain_text_summary(result: Dict[str, any], verbose: bool = False):
     """Print human-readable summary."""
     if result["status"] == "PASS":
-        print("✓ AC Matrix Freshness Check")
+        print("[PASS] AC Matrix Freshness Check")
         print(f"  {result['total_acs']} ACs OK (all layers aligned)")
         print(f"  Gherkin: {result['counts']['gherkin']}, Matrix: {result['counts']['matrix']}, Config: {result['counts']['config']}")
     else:
-        print("✗ AC Matrix Freshness Check FAILED")
+        print("[FAIL] AC Matrix Freshness Check FAILED")
         print()
 
-        # Report Gherkin → Matrix issues
+        # Report Gherkin -> Matrix issues
         gherkin_check = result["checks"]["gherkin_to_matrix"]
         if not gherkin_check["pass"]:
-            print(f"  ✗ Gherkin → Matrix: {len(gherkin_check['missing'])} missing")
+            print(f"  [FAIL] Gherkin -> Matrix: {len(gherkin_check['missing'])} missing")
             for ac in gherkin_check["missing"]:
                 print(f"    - {ac}")
             print(f"  Fix: Add these ACs as '### <AC-ID>' headers in {MATRIX_FILE}")
             print()
 
-        # Report Matrix → Config issues
+        # Report Matrix -> Config issues
         matrix_check = result["checks"]["matrix_to_config"]
         if not matrix_check["pass"]:
-            print(f"  ✗ Matrix → Config: {len(matrix_check['missing'])} missing")
+            print(f"  [FAIL] Matrix -> Config: {len(matrix_check['missing'])} missing")
             for ac in matrix_check["missing"]:
                 print(f"    - {ac}")
             print(f"  Fix: Add these ACs to appropriate step 'ac_ids' lists in {CONFIG_FILE}")
             print()
 
-        # Report Config → Matrix issues (orphans)
+        # Report Config -> Matrix issues (orphans)
         config_check = result["checks"]["config_to_matrix"]
         if not config_check["pass"]:
-            print(f"  ✗ Config → Matrix: {len(config_check['orphaned'])} orphaned")
+            print(f"  [FAIL] Config -> Matrix: {len(config_check['orphaned'])} orphaned")
             for ac in config_check["orphaned"]:
                 print(f"    - {ac}")
             print(f"  Fix: Add documentation for these ACs in {MATRIX_FILE} or remove from {CONFIG_FILE}")
@@ -234,7 +234,7 @@ def print_plain_text_summary(result: Dict[str, any], verbose: bool = False):
         print("Detailed AC Status:")
         print()
         for ac_info in result["acs"]:
-            status_symbol = "✓" if ac_info["status"] in ["OK", "OK_NO_GHERKIN"] else "✗"
+            status_symbol = "[PASS]" if ac_info["status"] in ["OK", "OK_NO_GHERKIN"] else "[FAIL]"
             sources = ", ".join(ac_info["sources"])
             print(f"  {status_symbol} {ac_info['id']:<30} [{ac_info['status']:<20}] ({sources})")
 

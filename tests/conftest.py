@@ -328,7 +328,7 @@ def parse_errors(stderr: str) -> List[Dict[str, str]]:
     """
     Parse error messages from validator stderr output.
 
-    Format: ✗ TYPE: location problem
+    Format: [FAIL] TYPE: location problem
             Fix: action
 
     Args:
@@ -343,16 +343,16 @@ def parse_errors(stderr: str) -> List[Dict[str, str]]:
     current_error = None
     for line in lines:
         line = line.strip()
-        if line.startswith("✗") or line.startswith("⚠"):
+        if line.startswith("[FAIL]") or line.startswith("[WARN]"):
             # New error or warning
             if current_error:
                 errors.append(current_error)
 
-            # Parse error line: ✗ TYPE: location problem
+            # Parse error line: [FAIL] TYPE: location problem
             # Split only on first colon to get TYPE
             first_colon = line.find(":")
             if first_colon > 0:
-                error_type = line[1:first_colon].strip()  # Skip ✗ or ⚠
+                error_type = line[6:first_colon].strip()  # Skip [FAIL] or [WARN]
                 rest = line[first_colon+1:].strip()
 
                 # Rest contains "location problem"
@@ -483,7 +483,7 @@ def assert_error_contains(stderr: str, expected_text: str):
 
 def assert_error_type(stderr: str, error_type: str):
     """Assert that stderr contains error of specific type."""
-    assert f"✗ {error_type}:" in stderr, f"Expected error type {error_type} in stderr. Got: {stderr}"
+    assert f"[FAIL] {error_type}:" in stderr, f"Expected error type {error_type} in stderr. Got: {stderr}"
 
 
 # ============================================================================

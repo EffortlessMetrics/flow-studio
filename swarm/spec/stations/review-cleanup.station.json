@@ -1,0 +1,97 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "review-cleanup",
+  "version": 1,
+  "title": "Review Cleanup",
+  "category": "infra",
+  "sdk": {
+    "model": "haiku",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_write",
+    "allowed_tools": ["Read", "Write", "Bash", "Grep", "Glob", "Skill"],
+    "denied_tools": ["Edit"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": true,
+      "excluded_commands": ["git", "gh", "rm"]
+    },
+    "max_turns": 15,
+    "context_budget": {
+      "total_chars": 100000,
+      "recent_chars": 40000,
+      "older_chars": 10000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Review Cleanup Agent - the Forensic Auditor for Flow 4. Verify worklist claims match evidence, then seal the envelope. The receipt captures worklist progress and PR status - it is a log, not a gatekeeper. Report Forensic Mismatches honestly.",
+    "longform_ref": "prompts/agentic_steps/review-cleanup.md",
+    "tone": "neutral"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [],
+    "optional_inputs": [
+      "review/review_worklist.md",
+      "review/review_worklist.json",
+      "review/pr_feedback.md",
+      "review/review_actions.md",
+      "build/build_receipt.json"
+    ],
+    "required_outputs": [
+      "review/review_receipt.json",
+      "review/cleanup_report.md"
+    ],
+    "optional_outputs": [
+      "review/github_report.md"
+    ]
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/review/review_receipt.json",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "routing_signal"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "review/review_receipt.json",
+      "review/cleanup_report.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nFinalize Flow 4 (Review) by verifying artifacts, mechanically deriving counts, writing review_receipt.json, and updating .runs/index.json.\n\n## Steps\n\n1. Preflight: Verify read/write access\n2. Artifact existence: Required (review_worklist.md OR .json), recommended, optional\n3. Mechanical counts: Worklist totals, resolved, pending, critical items\n4. Worklist completion status: all_resolved, has_critical_pending\n5. Forensic cross-check: Claims vs evidence\n6. Derive receipt status + routing\n7. Write review_receipt.json\n8. Update .runs/index.json\n9. Write cleanup_report.md + github_report.md\n\n## Status Model\n\n- VERIFIED: All critical/major items resolved, worklist complete\n- PARTIAL: Some items resolved but worklist incomplete (enables incremental progress)\n- UNVERIFIED: Critical items pending, contradictions, or missing core outputs\n\n## Output\n\n- {{run.base}}/review/review_receipt.json\n- {{run.base}}/review/cleanup_report.md\n- {{run.base}}/review/github_report.md"
+  },
+  "invariants": [
+    "Mechanical counts only - never estimate",
+    "Null over guess - explain every null",
+    "Always write receipt + cleanup report unless IO prevents it",
+    "Idempotent (timestamps aside)",
+    "Do not reorder .runs/index.json",
+    "PARTIAL is a feature not failure - enables incremental progress",
+    "Forensic Mismatch means UNVERIFIED"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "loop",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

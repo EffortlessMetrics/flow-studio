@@ -39,8 +39,8 @@ Use:
 
 Also populate:
 - `recommended_action`: `PROCEED | RERUN | BOUNCE | FIX_ENV`
-- `route_to_agent`: `<agent-name | null>`
-- `route_to_flow`: `<1|2|3|4|5|6|null>`
+- `routing_action`: `CONTINUE | DETOUR | INJECT_FLOW | INJECT_NODES | EXTEND_GRAPH`
+- `routing_target`: `<agent-name, flow-key, or node-spec | null>`
 - `blockers`: list of must-fix items
 - `missing_required`: list of missing/unreadable paths (use paths, not vibes)
 - `notes`: short operational notes (sanitization, truncation, assumptions)
@@ -97,8 +97,8 @@ Use this structure:
 ## Machine Summary
 status: VERIFIED | UNVERIFIED | CANNOT_PROCEED
 recommended_action: PROCEED | RERUN | BOUNCE | FIX_ENV
-route_to_agent: problem-framer
-route_to_flow: 1
+routing_action: CONTINUE
+routing_target: problem-framer
 blockers: []
 missing_required: []
 notes:
@@ -147,8 +147,8 @@ Use this structure:
 ## Machine Summary
 status: VERIFIED | UNVERIFIED | CANNOT_PROCEED
 recommended_action: PROCEED | RERUN | BOUNCE | FIX_ENV
-route_to_agent: problem-framer
-route_to_flow: 1
+routing_action: CONTINUE
+routing_target: problem-framer
 blockers: []
 missing_required: []
 notes:

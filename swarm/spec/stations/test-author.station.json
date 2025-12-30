@@ -1,0 +1,108 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "test-author",
+  "version": 1,
+  "title": "Test Author",
+  "category": "implementation",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_write",
+    "allowed_tools": ["Read", "Write", "Edit", "Bash", "Grep", "Glob", "Skill"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": true,
+      "excluded_commands": ["git", "gh"]
+    },
+    "max_turns": 20,
+    "context_budget": {
+      "total_chars": 200000,
+      "recent_chars": 60000,
+      "older_chars": 15000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Test Author. Write tests from BDD scenarios and requirements. You do not critique. You do not commit/push (repo-operator owns git). Do not weaken tests. Do not implement features. Tests only.",
+    "longform_ref": "prompts/agentic_steps/test-author.md",
+    "tone": "neutral"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/evidence.md",
+      "fragments/common/run_base.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md",
+      "fragments/output/machine_summary.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "signal/requirements.md"
+    ],
+    "optional_inputs": [
+      "build/subtask_context_manifest.json",
+      "signal/features/*.feature",
+      "plan/test_plan.md",
+      "plan/ac_matrix.md",
+      "build/test_critique.md"
+    ],
+    "required_outputs": [
+      "build/test_changes_summary.md"
+    ],
+    "optional_outputs": [
+      "build/ac_status.json",
+      "build/open_questions.md"
+    ]
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/build/test_changes_summary.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "can_further_iteration_help",
+      "proposed_next_step",
+      "routing_signal"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "build/test_changes_summary.md"
+    ],
+    "required_commands": [
+      {
+        "command": "test-runner",
+        "success_pattern": "(passed|expected_failures|failing)",
+        "timeout_seconds": 300
+      }
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/evidence.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nWrite tests that verify system behavior matches BDD scenarios and requirements.\n\n## Scope\n\n{{#if params.ac_id}}\nAC-Scoped: Focus only on tests for {{params.ac_id}}.\n{{else}}\nFull scope: Cover all in-scope REQs and scenarios.\n{{/if}}\n\n## Context\n\n{{#each inputs}}\n- {{this}}\n{{/each}}\n\n## Constraints\n\n- Do not weaken tests\n- Do not implement features (tests only)\n- No secrets\n- Expected failures (pre-implementation) are acceptable"
+  },
+  "invariants": [
+    "Do not weaken tests - never remove assertions, broaden expected values, or comment out checks",
+    "Do not implement features - tests only, feature implementation belongs to code-implementer",
+    "No secrets - never paste tokens/keys, use placeholders and deterministic fixtures",
+    "Test failures before implementation are expected - this is not a 'failed' run if coverage is complete",
+    "PARTIAL is a win - honest state is the success metric"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "loop",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

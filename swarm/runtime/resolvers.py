@@ -51,6 +51,7 @@ from swarm.config.flow_registry import (
 )
 from swarm.runtime.types import (
     HandoffEnvelope,
+    RoutingCandidate,
     RoutingDecision,
     RoutingSignal,
     routing_signal_from_dict,
@@ -60,8 +61,12 @@ from swarm.runtime.types import (
 logger = logging.getLogger(__name__)
 
 # Default resolver template paths
-_ROUTING_SIGNAL_TEMPLATE = Path(__file__).parent.parent / "prompts" / "resolvers" / "routing_signal.md"
-_ENVELOPE_WRITER_TEMPLATE = Path(__file__).parent.parent / "prompts" / "resolvers" / "envelope_writer.md"
+_ROUTING_SIGNAL_TEMPLATE = (
+    Path(__file__).parent.parent / "prompts" / "resolvers" / "routing_signal.md"
+)
+_ENVELOPE_WRITER_TEMPLATE = (
+    Path(__file__).parent.parent / "prompts" / "resolvers" / "envelope_writer.md"
+)
 
 
 # =============================================================================
@@ -210,7 +215,9 @@ def build_finalization_prompt(
     routing_data: Dict[str, Any] = {}
     if routing_signal:
         routing_data = {
-            "decision": routing_signal.decision.value if isinstance(routing_signal.decision, RoutingDecision) else routing_signal.decision,
+            "decision": routing_signal.decision.value
+            if isinstance(routing_signal.decision, RoutingDecision)
+            else routing_signal.decision,
             "next_step_id": routing_signal.next_step_id,
             "route": routing_signal.route,
             "reason": routing_signal.reason,
@@ -235,8 +242,8 @@ def build_finalization_prompt(
 
 - Kind: {routing_config.kind}
 - Next step: {routing_config.next or "None (flow end)"}
-- Loop target: {getattr(routing_config, 'loop_target', None) or "N/A"}
-- Max iterations: {getattr(routing_config, 'max_iterations', 5)}
+- Loop target: {getattr(routing_config, "loop_target", None) or "N/A"}
+- Max iterations: {getattr(routing_config, "max_iterations", 5)}
 """
 
     # Truncate step output to avoid prompt bloat (max 4000 chars for summary)
@@ -245,7 +252,11 @@ def build_finalization_prompt(
         truncated_output += "\n... (output truncated)"
 
     # Format artifacts list
-    artifacts_formatted = "\n".join(f"- {path}" for path in artifacts_changed) if artifacts_changed else "No artifacts recorded."
+    artifacts_formatted = (
+        "\n".join(f"- {path}" for path in artifacts_changed)
+        if artifacts_changed
+        else "No artifacts recorded."
+    )
 
     # Build the prompt
     prompt = f"""## Step Execution Results
@@ -350,10 +361,24 @@ def parse_envelope_response(
             logger.debug("Failed to parse routing_signal from response: %s", e)
 
     if routing_signal is None:
+        default_reason = "Default advance routing (no routing_signal in response)"
         routing_signal = RoutingSignal(
             decision=RoutingDecision.ADVANCE,
-            reason="default_advance",
+            reason=default_reason,
             confidence=0.7,
+            routing_source="resolver_default",
+            chosen_candidate_id="resolver:advance:default",
+            routing_candidates=[
+                RoutingCandidate(
+                    candidate_id="resolver:advance:default",
+                    action="advance",
+                    target_node=None,
+                    reason=default_reason,
+                    priority=50,
+                    source="resolver_fallback",
+                    is_default=True,
+                )
+            ],
         )
 
     # Parse timestamp
@@ -413,7 +438,9 @@ def _extract_envelope_json(response: str) -> Optional[str]:
                 return content
 
     # Try to find raw JSON object
-    match = re.search(r'\{[^{}]*("step_id"|"summary"|"routing_signal")[^{}]*\}', response, re.DOTALL)
+    match = re.search(
+        r'\{[^{}]*("step_id"|"summary"|"routing_signal")[^{}]*\}', response, re.DOTALL
+    )
     if match:
         # Try to extract the full JSON object
         start = response.find("{")
@@ -460,15 +487,35 @@ def _create_fallback_envelope(
     Returns:
         HandoffEnvelope with provided or default values.
     """
+    # Create routing signal with proper audit fields for fallback path
+    if routing_signal is None:
+        fallback_reason = "Fallback envelope: parsing failed or no response"
+        fallback_routing = RoutingSignal(
+            decision=RoutingDecision.ADVANCE,
+            reason=fallback_reason,
+            confidence=0.5,
+            routing_source="resolver_fallback",
+            chosen_candidate_id="resolver:advance:fallback",
+            routing_candidates=[
+                RoutingCandidate(
+                    candidate_id="resolver:advance:fallback",
+                    action="advance",
+                    target_node=None,
+                    reason=fallback_reason,
+                    priority=10,
+                    source="resolver_fallback",
+                    is_default=True,
+                )
+            ],
+        )
+    else:
+        fallback_routing = routing_signal
+
     return HandoffEnvelope(
         step_id=step_id,
         flow_key=flow_key,
         run_id=run_id,
-        routing_signal=routing_signal or RoutingSignal(
-            decision=RoutingDecision.ADVANCE,
-            reason="fallback_advance",
-            confidence=0.5,
-        ),
+        routing_signal=fallback_routing,
         summary=summary[:2000] if summary else f"Step {step_id} completed with status {status}",
         artifacts={},
         status=status,
@@ -685,9 +732,7 @@ def load_routing_signal_prompt(repo_root: Optional[Path] = None) -> str:
         template_path = repo_root / "swarm" / "prompts" / "resolvers" / "routing_signal.md"
 
     if not template_path.exists():
-        raise FileNotFoundError(
-            f"Routing signal template not found at: {template_path}"
-        )
+        raise FileNotFoundError(f"Routing signal template not found at: {template_path}")
 
     return template_path.read_text(encoding="utf-8")
 
@@ -774,17 +819,21 @@ def _build_handoff_section(envelope: HandoffEnvelope) -> str:
     ]
 
     if envelope.error:
-        lines.extend([
-            "",
-            "### Error",
-            envelope.error,
-        ])
+        lines.extend(
+            [
+                "",
+                "### Error",
+                envelope.error,
+            ]
+        )
 
     if envelope.artifacts:
-        lines.extend([
-            "",
-            "### Artifacts",
-        ])
+        lines.extend(
+            [
+                "",
+                "### Artifacts",
+            ]
+        )
         for name, path in envelope.artifacts.items():
             lines.append(f"- {name}: {path}")
 
@@ -814,16 +863,20 @@ def _build_routing_config_section(
 
     routing = step.routing
     if routing is None:
-        lines.extend([
-            "",
-            "**Routing Kind**: linear (default)",
-            "**Next Step**: (determined by index)",
-        ])
+        lines.extend(
+            [
+                "",
+                "**Routing Kind**: linear (default)",
+                "**Next Step**: (determined by index)",
+            ]
+        )
     else:
-        lines.extend([
-            "",
-            f"**Routing Kind**: {routing.kind}",
-        ])
+        lines.extend(
+            [
+                "",
+                f"**Routing Kind**: {routing.kind}",
+            ]
+        )
 
         if routing.next:
             lines.append(f"**Next Step**: {routing.next}")
@@ -832,21 +885,25 @@ def _build_routing_config_section(
             loop_key = f"{step.id}:{routing.loop_target}" if routing.loop_target else step.id
             current_iter = loop_state.get(loop_key, 0)
 
-            lines.extend([
-                "",
-                "### Microloop Configuration",
-                f"**Loop Target**: {routing.loop_target or '(none)'}",
-                f"**Condition Field**: {routing.loop_condition_field or '(none)'}",
-                f"**Success Values**: {', '.join(routing.loop_success_values) if routing.loop_success_values else '(none)'}",
-                f"**Max Iterations**: {routing.max_iterations}",
-                f"**Current Iteration**: {current_iter}",
-            ])
+            lines.extend(
+                [
+                    "",
+                    "### Microloop Configuration",
+                    f"**Loop Target**: {routing.loop_target or '(none)'}",
+                    f"**Condition Field**: {routing.loop_condition_field or '(none)'}",
+                    f"**Success Values**: {', '.join(routing.loop_success_values) if routing.loop_success_values else '(none)'}",
+                    f"**Max Iterations**: {routing.max_iterations}",
+                    f"**Current Iteration**: {current_iter}",
+                ]
+            )
 
         if routing.kind == "branch" and routing.branches:
-            lines.extend([
-                "",
-                "### Branch Configuration",
-            ])
+            lines.extend(
+                [
+                    "",
+                    "### Branch Configuration",
+                ]
+            )
             for condition, target in routing.branches.items():
                 lines.append(f"- If `{condition}` -> `{target}`")
 

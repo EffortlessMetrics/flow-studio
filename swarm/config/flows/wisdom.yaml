@@ -1,9 +1,34 @@
-# Flow 6 - Prod → Wisdom (Analysis)
+# Flow 7 - Prod → Wisdom (Analysis)
 # Source of truth for wisdom flow ordering and agent roles
 
 key: wisdom
-title: "Flow 6 - Prod → Wisdom (Analysis)"
+title: "Flow 7 - Prod → Wisdom (Analysis)"
 description: "Analyze artifacts, detect regressions, extract learnings, close feedback loops."
+
+charter:
+  goal: "Extract actionable learnings from the SDLC run and close feedback loops"
+  exit_criteria:
+    - "Artifact audit confirms all expected outputs from Flows 1-6 exist"
+    - "Regression analysis identifies any test/coverage/production regressions"
+    - "Flow history compiled with timestamps and routing decisions"
+    - "Learnings extracted as actionable patterns"
+    - "Feedback actions created (issues, doc updates, template improvements)"
+    - "Wisdom summary posted to GitHub"
+  non_goals:
+    - "Modifying code or tests"
+    - "Fixing regressions (create issues instead)"
+    - "Making design decisions for future work"
+    - "Executing any recommended changes"
+  offroad_policy:
+    justified:
+      - "DETOUR to gather additional context when pattern detection is incomplete"
+      - "INJECT_NODES for deeper analysis if routing log shows unusual patterns"
+      - "EXTEND_GRAPH proposals for patterns that warrant permanent flow evolution"
+    not_justified:
+      - "INJECT_FLOW to any earlier flow to fix issues"
+      - "Direct modification of flow specs without human review"
+      - "Creating implementation tickets without learnings justification"
+      - "Skipping feedback loop closure to accelerate completion"
 
 teaching:
   title: "Production to Wisdom: Learning from Every Change"

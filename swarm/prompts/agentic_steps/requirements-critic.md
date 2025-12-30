@@ -34,11 +34,11 @@ Write exactly one file:
 
 ## Routing Guidance
 
-Use natural language in your handoff to communicate next steps:
-- If requirements need fixes → recommend rerunning `requirements-author` with your worklist
-- If upstream dependency is broken (e.g., problem framing) → recommend routing to `problem-framer`
-- If work is complete or issues require human judgment → recommend proceeding with blockers documented
-- If mechanical failure → explain what's broken
+Use the routing vocabulary in your handoff to communicate next steps:
+- If requirements need fixes → `DETOUR` to `requirements-author` with your worklist
+- If upstream dependency is broken (e.g., problem framing) → `INJECT_NODES` to add `problem-framer` before resuming
+- If work is complete or issues require human judgment → `CONTINUE` with blockers documented
+- If mechanical failure → `CONTINUE` with `status: BLOCKED` and explain what's broken
 
 ## Severity definitions
 
@@ -195,19 +195,19 @@ Use exactly this structure:
 
 ### Step 8: Decide status + routing
 
-- **Microloop invariant:** Use `recommended_action: RERUN` whenever there are writer-addressable items for `requirements-author` to fix in another pass. Use `recommended_action: PROCEED` only when no further `requirements-author` pass can reasonably resolve the remaining notes (informational only, or requires human decisions).
+- **Microloop invariant:** Use `routing: DETOUR` with `detour_target: requirements-author` whenever there are writer-addressable items for `requirements-author` to fix in another pass. Use `routing: CONTINUE` only when no further `requirements-author` pass can reasonably resolve the remaining notes (informational only, or requires human decisions).
 
 - `VERIFIED` when `critical: 0` and `major: 0`.
-  - `recommended_action: PROCEED`
+  - `routing: CONTINUE` (proceed to next step in flow)
   - `can_further_iteration_help: no`
 
 - `UNVERIFIED` when any CRITICAL or MAJOR exists, or critical inputs are missing.
-  - If fixable by rewriting requirements: `recommended_action: RERUN`, `route_to_agent: requirements-author`, `can_further_iteration_help: yes`
-  - If not fixable without human product/legal decisions or framing: `recommended_action: PROCEED`, `can_further_iteration_help: no` (log assumptions + questions with suggested defaults)
-  - If missing upstream framing is the blocker: `recommended_action: BOUNCE`, `route_to_agent: problem-framer` (or `clarifier`), `can_further_iteration_help: no`
+  - If fixable by rewriting requirements: `routing: DETOUR`, `detour_target: requirements-author`, `can_further_iteration_help: yes`
+  - If not fixable without human product/legal decisions or framing: `routing: CONTINUE`, `can_further_iteration_help: no` (log assumptions + questions with suggested defaults)
+  - If missing upstream framing is the blocker: `routing: INJECT_NODES`, `inject_nodes: [problem-framer]` (or `[clarifier]`), `can_further_iteration_help: no`
 
 - `CANNOT_PROCEED` only for IO/permissions failures.
-  - `recommended_action: FIX_ENV`
+  - `routing: CONTINUE` with `status: BLOCKED` (environment issue prevents execution)
 
 ## Handoff Guidelines
 

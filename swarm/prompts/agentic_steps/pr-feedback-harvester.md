@@ -215,14 +215,14 @@ Use your **judgment** to assign severity. Don't blindly follow rules — think a
 
 #### 3b. Categorize for routing
 
-| Category | Indicators | Route to |
-|----------|------------|----------|
-| CORRECTNESS | Logic bugs, wrong behavior | code-implementer |
-| TESTS | Test failures, missing tests | test-author |
-| BUILD | Build/CI setup issues | code-implementer |
-| SECURITY | Security warnings | code-implementer |
-| DOCS | Documentation issues | doc-writer |
-| STYLE | Formatting, lint | fixer |
+| Category | Indicators | Routing Decision | Target |
+|----------|------------|------------------|--------|
+| CORRECTNESS | Logic bugs, wrong behavior | INJECT_NODES | code-implementer |
+| TESTS | Test failures, missing tests | INJECT_NODES | test-author |
+| BUILD | Build/CI setup issues | INJECT_NODES | code-implementer |
+| SECURITY | Security warnings | INJECT_NODES | code-implementer |
+| DOCS | Documentation issues | INJECT_NODES | doc-writer |
+| STYLE | Formatting, lint | INJECT_NODES | fixer |
 
 #### 3c. Add your thoughts (brief)
 
@@ -281,7 +281,8 @@ Write to the flow-specific output directory (`.runs/<run-id>/build/` or `.runs/<
 - **severity:** CRITICAL
 - **source:** CI
 - **category:** TESTS
-- **route_to_agent:** code-implementer
+- **routing:** INJECT_NODES
+- **routing_target:** code-implementer
 - **evidence:** check:test → auth.test.ts:45 assertion failed
 - **thoughts:** Looks like hashPassword returns undefined for empty input. Test expects an error. Probably a code bug, not test bug.
 
@@ -289,7 +290,8 @@ Write to the flow-specific output directory (`.runs/<run-id>/build/` or `.runs/<
 - **severity:** CRITICAL
 - **source:** CODERABBIT
 - **category:** SECURITY
-- **route_to_agent:** code-implementer
+- **routing:** INJECT_NODES
+- **routing_target:** code-implementer
 - **evidence:** src/auth.ts:42
 - **thoughts:** Real security issue - md5 for passwords is broken. Should be bcrypt or argon2.
 - **context:** (glanced at code) Line 42 is `crypto.createHash('md5').update(password)`
@@ -332,7 +334,8 @@ IDs are derived from upstream identifiers for stability across reruns:
 - **severity:** CRITICAL | MAJOR | MINOR | INFO
 - **source:** CI | CODERABBIT | REVIEW | LINTER | DEPENDABOT | OTHER
 - **category:** BUILD | TESTS | SECURITY | CORRECTNESS | DOCS | STYLE
-- **route_to_agent:** code-implementer | test-author | fixer | doc-writer
+- **routing:** CONTINUE | DETOUR | INJECT_FLOW | INJECT_NODES | EXTEND_GRAPH
+- **routing_target:** <agent or flow name when applicable>
 - **evidence:** <check name | file:line | comment id/url>
 - **thoughts:** <your quick read - is this valid? outdated? same as another item?>
 - **context:** <optional - what you saw if you glanced at the code>
@@ -371,7 +374,8 @@ blockers:                            # top N blockers (cap at 10)
     severity: CRITICAL               # blockers are CRITICAL-only
     category: BUILD | TESTS | SECURITY | CORRECTNESS | DOCS | STYLE
     title: <short title>
-    route_to_agent: code-implementer | test-author | fixer | doc-writer
+    routing: CONTINUE | DETOUR | INJECT_FLOW | INJECT_NODES | EXTEND_GRAPH
+    routing_target: <agent or flow name when applicable>
     evidence: <check name | file:line | comment id>
     thoughts: <your quick read on this item>
 

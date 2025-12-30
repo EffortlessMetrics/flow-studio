@@ -32,7 +32,11 @@ from swarm.runtime.history_priority import (
 from swarm.runtime.path_helpers import (
     ensure_llm_dir,
     ensure_receipts_dir,
+)
+from swarm.runtime.path_helpers import (
     receipt_path as make_receipt_path,
+)
+from swarm.runtime.path_helpers import (
     transcript_path as make_transcript_path,
 )
 from swarm.runtime.types import RunEvent
@@ -94,9 +98,7 @@ class GeminiStepEngine(StepEngine):
         self.stub_mode = is_stub_mode("gemini")
         self.cli_available = shutil.which(self.gemini_cmd) is not None
 
-    def _get_resolved_budgets(
-        self, flow_key: Optional[str] = None, step_id: Optional[str] = None
-    ):
+    def _get_resolved_budgets(self, flow_key: Optional[str] = None, step_id: Optional[str] = None):
         """Get resolved budgets for the given flow/step context.
 
         Uses the ContextBudgetResolver to cascade through step, flow, profile,
@@ -183,9 +185,7 @@ class GeminiStepEngine(StepEngine):
 
         return result, events
 
-    def _build_prompt(
-        self, ctx: StepContext
-    ) -> Tuple[str, Optional[HistoryTruncationInfo], None]:
+    def _build_prompt(self, ctx: StepContext) -> Tuple[str, Optional[HistoryTruncationInfo], None]:
         """Build a context-aware prompt for a step.
 
         Uses context budgeting to prevent prompts from growing unboundedly.
@@ -529,9 +529,7 @@ class GeminiStepEngine(StepEngine):
 
         return output_text, events
 
-    def _write_transcript(
-        self, ctx: StepContext, raw_events: List[Dict[str, Any]]
-    ) -> Path:
+    def _write_transcript(self, ctx: StepContext, raw_events: List[Dict[str, Any]]) -> Path:
         """Write transcript JSONL to RUN_BASE/llm/<step_id>-<agent_key>-gemini.jsonl.
 
         Args:

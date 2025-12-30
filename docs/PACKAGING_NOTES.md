@@ -51,7 +51,7 @@ Code tightly coupled to this demo repo and not suitable for publishing:
 - **Flask backend** (`swarm/tools/flow_studio_flask.py`) — legacy, not extracted
 
 **Examples of demo-specific coupling**:
-- Agent definitions reference `RUN_BASE/signal/`, `RUN_BASE/build/` paths specific to 6-flow demo
+- Agent definitions reference `RUN_BASE/signal/`, `RUN_BASE/build/` paths specific to 7-flow demo
 - Flows hard-code step sequences (e.g., "signal → plan → build → gate → deploy → wisdom")
 - Examples show demo agents (context-loader, code-implementer, etc.)
 
@@ -136,7 +136,7 @@ Do NOT add heavy dependencies to core logic (e.g., no numpy, pandas, TensorFlow 
 
 When considering extraction, ask:
 
-1. **Is this portable?** Does it depend on demo-swarm paths, 6-flow structure, or Claude Code concepts?
+1. **Is this portable?** Does it depend on demo-swarm paths, 7-flow structure, or Claude Code concepts?
 2. **Is the API stable?** Does changing this module break many consumers?
 3. **Is the contract clear?** Can users understand what input/output is expected without reading implementation?
 4. **Is it tested?** Are there unit tests independent of repo structure?

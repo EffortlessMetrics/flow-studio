@@ -64,7 +64,7 @@ Open your browser to the URLs shown in the output:
 
 ### What to Look For
 
-- [ ] **Left sidebar**: 6 flows (Signal → Plan → Build → Gate → Deploy → Wisdom)
+- [ ] **Left sidebar**: 7 flows (Signal → Plan → Build → Review → Gate → Deploy → Wisdom)
 - [ ] **Flow graph**: Nodes represent steps, circles represent agents
 - [ ] **Details panel**: Click any node to see its configuration
 - [ ] **Artifacts tab**: See what each flow produces
@@ -90,7 +90,7 @@ Read these in order:
 - [ ] **Selftest tiers**: KERNEL (core) → GOVERNANCE (policy) → OPTIONAL (extras)
 - [ ] **Microloops**: Critics never fix; they write harsh critiques, implementers iterate
 
-**Checkpoint**: You can explain the 6-flow model to a colleague.
+**Checkpoint**: You can explain the 7-flow model to a colleague.
 
 ---
 
@@ -101,7 +101,7 @@ Read these in order:
 make demo-run
 ```
 
-This populates `swarm/runs/demo-health-check/` with artifacts from all 6 flows.
+This populates `swarm/runs/demo-health-check/` with artifacts from all 7 flows.
 
 ```bash
 # View the run in Flow Studio
@@ -128,7 +128,7 @@ make flow-studio
 
 Before deciding, confirm you can check these boxes:
 
-- [ ] **Explain** the 6-flow model to a colleague (Signal → Plan → Build → Gate → Deploy → Wisdom)
+- [ ] **Explain** the 7-flow model to a colleague (Signal → Plan → Build → Review → Gate → Deploy → Wisdom)
 - [ ] **Run** selftest locally and understand what KERNEL vs GOVERNANCE tiers mean
 - [ ] **Navigate** Flow Studio: find a step, see its agent, view artifacts
 - [ ] **Assess** whether this fits your team using the criteria below

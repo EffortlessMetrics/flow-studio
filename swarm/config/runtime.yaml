@@ -21,6 +21,7 @@ engines:
 
   claude:
     mode: "stub"  # Options: stub, sdk, cli
+    execution: "legacy"  # Options: legacy, session (WP6 per-step session pattern)
     provider: "anthropic"  # which provider to use
     env_keys: ["ANTHROPIC_API_KEY"]  # required env vars
 

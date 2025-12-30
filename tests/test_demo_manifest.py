@@ -163,7 +163,7 @@ class TestCommandValidity:
         if not makefile.exists():
             pytest.skip("No Makefile found")
 
-        makefile_content = makefile.read_text()
+        makefile_content = makefile.read_text(encoding="utf-8")
 
         for entry in entries:
             cmd = entry["command"]

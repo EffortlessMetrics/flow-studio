@@ -2,7 +2,7 @@
 
 > For: Teams adopting the swarm pattern for their own repositories
 
-This playbook guides you through adopting the swarm's governance patterns in your repository. You do not need to adopt the entire 6-flow swarm to get value. Start with selftest and expand as needed.
+This playbook guides you through adopting the swarm's governance patterns in your repository. You do not need to adopt the entire 7-flow swarm to get value. Start with selftest and expand as needed.
 
 **Related docs:**
 - [ADOPTING_SELFTEST_CORE.md](./ADOPTING_SELFTEST_CORE.md) - Standalone selftest-core package
@@ -372,7 +372,7 @@ $EDITOR org-selftest-template/selftest.yaml
 
 | Timeframe | Actions | Success Criteria |
 |-----------|---------|------------------|
-| **Day 1** | Run `make flow-studio`; explore the 6 flows | Understand Signal to Wisdom pipeline |
+| **Day 1** | Run `make flow-studio`; explore the 7 flows | Understand Signal to Wisdom pipeline |
 | **Week 1** | Review demo artifacts in `swarm/examples/`; map to your compliance requirements | Gap analysis document |
 | **Month 1** | Propose GOVERNANCE checks that feed your audit needs | At least one repo producing receipts you consume |
 
@@ -411,7 +411,7 @@ uv run python swarm/tools/flow_studio.py
 
 ### Week 3-4: Full Swarm Integration
 
-If you want the full 6-flow SDLC:
+If you want the full 7-flow SDLC:
 
 1. **Read the philosophy**: Start with `docs/WHY_DEMO_SWARM.md`
 2. **Copy the structure**: Fork `flow-studio` or copy `swarm/` directory
@@ -425,9 +425,9 @@ See [ADOPTING_SWARM_VALIDATION.md](./ADOPTING_SWARM_VALIDATION.md) for the full 
 
 ## Anti-Patterns to Avoid
 
-### 1. Don't start with all 6 flows
+### 1. Don't start with all 7 flows
 
-**Bad**: "Let's implement Signal, Plan, Build, Gate, Deploy, and Wisdom all at once!"
+**Bad**: "Let's implement Signal, Plan, Build, Review, Gate, Deploy, and Wisdom all at once!"
 
 **Good**: Start with selftest only. Add flows incrementally when you understand why you need them.
 

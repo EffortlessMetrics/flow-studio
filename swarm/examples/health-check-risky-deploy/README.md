@@ -14,7 +14,7 @@ This scenario demonstrates a complete SDLC run where all flows complete successf
 
 **Risk Management**: Gate approves with monitoring conditions, Deploy proceeds with instrumentation.
 
-**Result**: All 6 flows complete, change is deployed with risk mitigation in place.
+**Result**: All 7 flows complete, change is deployed with risk mitigation in place.
 
 ## Directory Structure
 
@@ -36,16 +36,18 @@ health-check-risky-deploy/
 │   ├── impl_changes_summary.md
 │   ├── code_critique.md
 │   └── build_receipt.json
-├── gate/                       # Flow 4 - MERGE_WITH_CONDITIONS
+├── review/                     # Flow 4 - Draft PR and feedback
+│   └── ...
+├── gate/                       # Flow 5 - MERGE_WITH_CONDITIONS
 │   ├── receipt_audit.md
 │   ├── security_status.md
 │   ├── gate_risk_report.md    # Documents accepted risk
 │   └── merge_recommendation.md # Status: MERGE_WITH_CONDITIONS
-├── deploy/                     # Flow 5 - Complete with monitoring
+├── deploy/                     # Flow 6 - Complete with monitoring
 │   ├── deployment_log.md
 │   ├── verification_report.md
 │   └── deployment_decision.md # proceed_with_risk: true
-└── wisdom/                     # Flow 6 - Complete with learnings
+└── wisdom/                     # Flow 7 - Complete with learnings
     ├── artifact_audit.md
     ├── regression_report.md
     ├── flow_history.json
@@ -60,16 +62,17 @@ When viewed in Flow Studio, this run shows:
 - **Signal (Flow 1)**: GREEN - Complete with risk documentation
 - **Plan (Flow 2)**: GREEN - Complete with mitigation plan
 - **Build (Flow 3)**: GREEN - All artifacts present
-- **Gate (Flow 4)**: YELLOW/CONDITIONAL - MERGE_WITH_CONDITIONS
-- **Deploy (Flow 5)**: GREEN - Deployed with monitoring
-- **Wisdom (Flow 6)**: GREEN - Complete with learnings
+- **Review (Flow 4)**: GREEN - PR feedback harvested
+- **Gate (Flow 5)**: YELLOW/CONDITIONAL - MERGE_WITH_CONDITIONS
+- **Deploy (Flow 6)**: GREEN - Deployed with monitoring
+- **Wisdom (Flow 7)**: GREEN - Complete with learnings
 
 ## Teaching Points
 
 1. **Risk acceptance is valid**: Not all risks block deployment
 2. **Conditional approval pattern**: Gate can approve with monitoring requirements
 3. **Risk mitigation in layers**: Signal identifies, Plan mitigates, Gate conditions, Deploy monitors
-4. **Complete flow execution**: All 6 flows executed end-to-end
+4. **Complete flow execution**: All 7 flows executed end-to-end
 5. **Feedback loop closure**: Wisdom flow extracts learnings for future improvements
 
 ## Expected User Action

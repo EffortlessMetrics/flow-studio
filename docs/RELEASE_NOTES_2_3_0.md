@@ -2,7 +2,7 @@
 
 > **Release Date:** December 2025
 >
-> This release establishes the golden stepwise SDLC harness with full 6-flow coverage,
+> This release establishes the golden stepwise SDLC harness with full 7-flow coverage,
 > expands selftest to 16 steps with a complete AC matrix, and delivers fully operational
 > wisdom cycle tooling.
 
@@ -10,7 +10,7 @@
 
 ## Highlights
 
-- **Golden stepwise SDLC harness** with full 6-flow coverage
+- **Golden stepwise SDLC harness** with full 7-flow coverage
 - **Selftest expanded to 16 steps** with complete AC matrix
 - **Wisdom cycle tooling** fully operational
 - **demo-swarm** one-command entry point for new users

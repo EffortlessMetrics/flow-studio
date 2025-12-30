@@ -65,9 +65,7 @@ class LifecycleCapableEngine(StepEngine):
     """
 
     @abstractmethod
-    def run_worker(
-        self, ctx: StepContext
-    ) -> Tuple[StepResult, List[RunEvent], str]:
+    def run_worker(self, ctx: StepContext) -> Tuple[StepResult, List[RunEvent], str]:
         """Execute the work phase only (no finalization or routing).
 
         The work phase:

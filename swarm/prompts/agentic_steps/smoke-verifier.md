@@ -116,8 +116,8 @@ Append exactly this section (newest at bottom):
 status: VERIFIED | UNVERIFIED | CANNOT_PROCEED
 
 recommended_action: PROCEED | RERUN | BOUNCE | FIX_ENV
-route_to_agent: <agent-name | null>
-route_to_flow: <1|2|3|4|5|6 | null>
+routing_directive: CONTINUE | DETOUR | INJECT_FLOW | INJECT_NODES | EXTEND_GRAPH | null
+routing_target: { flow: "<flow-key>", station: "<agent-name>" } | null
 
 smoke_signal: STABLE | INVESTIGATE | ROLLBACK
 
@@ -156,21 +156,24 @@ notes:
   - Set:
     - `smoke_signal: STABLE`
     - `recommended_action: PROCEED`
-    - `route_to_agent: deploy-decider`
-    - `route_to_flow: 5`
+    - `routing_directive: CONTINUE`
+    - `routing_target: null`
 
 - **UNVERIFIED**
   - Any of: missing tag, missing endpoints, unauthenticated `gh`, inconclusive checks, or failing checks.
   - Set:
     - `smoke_signal: INVESTIGATE` (inconclusive) **or** `ROLLBACK` (clear failures)
     - `recommended_action: PROCEED` (default) to let `deploy-decider` synthesize
-    - If the right next step is to re-run monitoring instead: `recommended_action: RERUN`, `route_to_agent: deploy-monitor`
+    - `routing_directive: CONTINUE`
+    - `routing_target: null`
+    - If the right next step is to re-run monitoring instead: `recommended_action: RERUN`, `routing_directive: DETOUR`, `routing_target: { flow: "deploy", station: "deploy-monitor" }`
 
 - **CANNOT_PROCEED**
   - Mechanical failure only: cannot read/write the report file, `curl` not runnable at all, permissions/tooling failure.
   - Set:
     - `recommended_action: FIX_ENV`
-    - `route_to_*: null`
+    - `routing_directive: null`
+    - `routing_target: null`
 
 ## Handoff Guidelines
 

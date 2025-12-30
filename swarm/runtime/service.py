@@ -117,8 +117,7 @@ class RunService:
         if not backend:
             available = list(self._backends.keys())
             raise ValueError(
-                f"Backend '{spec.backend}' not available. "
-                f"Available backends: {available}"
+                f"Backend '{spec.backend}' not available. Available backends: {available}"
             )
 
         return backend.start(spec)
@@ -271,6 +270,7 @@ class RunService:
         if run_json_path.exists():
             try:
                 import json
+
                 with open(run_json_path) as f:
                     meta = json.load(f)
                 title = meta.get("title")

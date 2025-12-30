@@ -93,7 +93,7 @@ handoff:
     - status
     - summary
     - verdict
-    - route_to_flow
+    - routing_action  # CONTINUE | DETOUR | INJECT_FLOW | INJECT_NODES | EXTEND_GRAPH
 
 invariants:
   - "Never modify code or artifacts - only synthesize and decide"
@@ -103,7 +103,7 @@ invariants:
   - "Prefer BOUNCE over guessing when key inputs are missing"
 
 routing_hints:
-  on_verified: advance  # MERGE verdict
-  on_unverified: bounce  # BOUNCE verdict with target
-  on_partial: advance_with_concerns
-  on_blocked: escalate
+  on_verified: CONTINUE           # MERGE verdict - proceed on golden path
+  on_unverified: INJECT_FLOW      # BOUNCE verdict - inject target flow for remediation
+  on_partial: DETOUR              # Inject sidequest chain for minor issues
+  on_blocked: EXTEND_GRAPH        # Propose patch for unforeseen blockers

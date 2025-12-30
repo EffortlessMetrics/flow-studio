@@ -135,7 +135,9 @@ def load_agent_step_prompt(agent_key: str, repo_root: Path) -> Optional[str]:
             content = primary_path.read_text(encoding="utf-8")
             return _strip_yaml_frontmatter(content)
         except OSError as e:
-            logger.warning("Failed to read agent prompt for '%s' from primary path: %s", agent_key, e)
+            logger.warning(
+                "Failed to read agent prompt for '%s' from primary path: %s", agent_key, e
+            )
             # Fall through to try fallback
 
     # Fallback location: .claude/agents/

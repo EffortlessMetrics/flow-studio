@@ -156,10 +156,11 @@ Include only these line prefixes (one per line):
 
 ## Routing guidance
 
-- Contract/schema fixes → `recommended_action: RERUN`, `route_to_agent: interface-designer`
-- Test plan mapping missing → `recommended_action: RERUN`, `route_to_agent: test-strategist`
-- Requirements ambiguous/untestable → `recommended_action: BOUNCE`, `route_to_flow: 1`, `route_to_agent: requirements-author`
-- Mechanical IO/perms failure → `status: CANNOT_PROCEED`, `recommended_action: FIX_ENV`
+- Contract/schema fixes → `routing: DETOUR`, `target: interface-designer` (stay in current flow, revisit interface-designer)
+- Test plan mapping missing → `routing: DETOUR`, `target: test-strategist` (stay in current flow, revisit test-strategist)
+- Requirements ambiguous/untestable → `routing: INJECT_FLOW`, `target: signal` (inject Flow 1 to refine requirements before continuing)
+- Mechanical IO/perms failure → `routing: EXTEND_GRAPH`, `target: env-fixer` (add remediation node to address environment issues)
+- All issues resolved → `routing: CONTINUE` (proceed to next step in flow)
 
 ## Handoff Guidelines
 

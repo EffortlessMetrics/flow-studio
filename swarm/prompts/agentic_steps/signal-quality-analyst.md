@@ -122,8 +122,8 @@ Write `.runs/<run-id>/wisdom/signal_quality_report.md`:
 ## Machine Summary
 status: VERIFIED | UNVERIFIED | CANNOT_PROCEED
 recommended_action: PROCEED | RERUN | BOUNCE | FIX_ENV
-route_to_flow: null
-route_to_agent: null
+routing: CONTINUE  # Options: CONTINUE, DETOUR, INJECT_FLOW, INJECT_NODES, EXTEND_GRAPH
+routing_target: null  # Populated if routing != CONTINUE
 blockers: []
 concerns: []
 

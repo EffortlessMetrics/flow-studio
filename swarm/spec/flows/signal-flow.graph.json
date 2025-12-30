@@ -1,0 +1,281 @@
+{
+  "$schema": "../schemas/flow_graph.schema.json",
+  "id": "signal-flow",
+  "version": 1,
+  "title": "Flow 1 - Signal",
+  "flow_number": 1,
+  "description": "Raw input to problem statement, requirements, BDD scenarios, and early risk assessment.",
+  "charter": {
+    "goal": "Transform raw signals into verified, testable requirements with BDD scenarios",
+    "question": "What exactly needs to be built and why?",
+    "exit_criteria": [
+      "Requirements are complete, unambiguous, and testable",
+      "BDD scenarios cover happy path and key edge cases",
+      "Scope and risk assessment documented",
+      "Requirements critique status is VERIFIED (or UNVERIFIED with can_further_iteration_help: no)"
+    ],
+    "non_goals": [
+      "Writing implementation code",
+      "Making design decisions",
+      "Selecting technology or architecture",
+      "Estimating delivery timelines beyond rough scope"
+    ],
+    "prime_directive": "Capture the WHY and WHAT. Leave the HOW to later flows. Iterate until requirements are testable."
+  },
+  "nodes": [
+    {
+      "node_id": "normalize",
+      "template_id": "signal-normalizer",
+      "params": {
+        "objective": "Parse raw input, find related context"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Normalize",
+        "position": {"x": 100, "y": 50},
+        "color": "#94a3b8",
+        "teaching": {
+          "highlight": false,
+          "note": "Extract structured data from unstructured input"
+        }
+      }
+    },
+    {
+      "node_id": "frame",
+      "template_id": "problem-framer",
+      "params": {
+        "objective": "Synthesize normalized signal into problem statement"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Frame Problem",
+        "position": {"x": 100, "y": 120}
+      }
+    },
+    {
+      "node_id": "author_reqs",
+      "template_id": "requirements-author",
+      "params": {
+        "objective": "Write functional and non-functional requirements"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Write Requirements",
+        "position": {"x": 100, "y": 190},
+        "color": "#22c55e",
+        "teaching": {
+          "highlight": true,
+          "note": "First draft of requirements. Watch how functional and non-functional are separated."
+        }
+      }
+    },
+    {
+      "node_id": "critique_reqs",
+      "template_id": "requirements-critic",
+      "params": {
+        "objective": "Harsh review of requirements vs completeness, feasibility, testability"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Critique Requirements",
+        "position": {"x": 100, "y": 260},
+        "color": "#ef4444",
+        "teaching": {
+          "highlight": true,
+          "note": "MICROLOOP: Author-critic loop continues until VERIFIED or can_further_iteration_help=no"
+        }
+      }
+    },
+    {
+      "node_id": "author_bdd",
+      "template_id": "bdd-author",
+      "params": {
+        "objective": "Turn verified requirements into executable BDD scenarios"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Write BDD",
+        "position": {"x": 100, "y": 350},
+        "color": "#3b82f6",
+        "teaching": {
+          "highlight": true,
+          "note": "BDD scenarios become the executable contract for Flow 3 testing"
+        }
+      }
+    },
+    {
+      "node_id": "scope",
+      "template_id": "scope-assessor",
+      "params": {
+        "objective": "Assess stakeholders, constraints, risks, effort estimate"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Assess Scope",
+        "position": {"x": 100, "y": 420},
+        "color": "#94a3b8"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "edge_id": "e01-normalize-to-frame",
+      "from": "normalize",
+      "to": "frame",
+      "type": "sequence"
+    },
+    {
+      "edge_id": "e02-frame-to-author",
+      "from": "frame",
+      "to": "author_reqs",
+      "type": "sequence"
+    },
+    {
+      "edge_id": "e03-author-to-critique",
+      "from": "author_reqs",
+      "to": "critique_reqs",
+      "type": "sequence"
+    },
+    {
+      "edge_id": "e04-req-loop",
+      "from": "critique_reqs",
+      "to": "author_reqs",
+      "type": "loop",
+      "priority": 60,
+      "condition": {
+        "field": "status",
+        "operator": "equals",
+        "value": "UNVERIFIED"
+      },
+      "ui": {
+        "style": "dashed",
+        "label": "UNVERIFIED",
+        "color": "#f59e0b"
+      }
+    },
+    {
+      "edge_id": "e05-critique-to-bdd",
+      "from": "critique_reqs",
+      "to": "author_bdd",
+      "type": "sequence",
+      "priority": 40,
+      "condition": {
+        "field": "status",
+        "operator": "in",
+        "value": ["VERIFIED", "UNVERIFIED"]
+      }
+    },
+    {
+      "edge_id": "e06-bdd-to-scope",
+      "from": "author_bdd",
+      "to": "scope",
+      "type": "sequence"
+    }
+  ],
+  "subflows": [
+    {
+      "subflow_id": "requirements-microloop",
+      "title": "Requirements Microloop",
+      "description": "Author/critic loop for requirements quality",
+      "entry_node": "author_reqs",
+      "exit_nodes": ["critique_reqs"],
+      "contained_nodes": ["author_reqs", "critique_reqs"],
+      "ui": {
+        "color": "#fef3c7",
+        "collapsed_by_default": false
+      }
+    }
+  ],
+  "policy": {
+    "max_loop_iterations": 3,
+    "max_depth": 2,
+    "escalation": {
+      "on_blocked": "continue_with_concerns",
+      "max_unverified_streak": 3,
+      "escalate_on_unverified_streak": "continue"
+    },
+    "suggested_detours": [
+      {
+        "from_nodes": ["author_reqs", "critique_reqs"],
+        "to_station": "clarifier",
+        "condition": {
+          "field": "blockers",
+          "operator": "contains",
+          "value": "ambiguous"
+        },
+        "return_to": "source",
+        "priority": 70
+      },
+      {
+        "from_nodes": ["scope"],
+        "to_station": "risk-analyst",
+        "condition": {
+          "field": "concerns",
+          "operator": "not_equals",
+          "value": []
+        },
+        "return_to": "next",
+        "priority": 60
+      }
+    ],
+    "suggested_injections": [
+      {
+        "station_id": "gh-researcher",
+        "inject_after": ["normalize"],
+        "condition": {
+          "field": "context_gaps",
+          "operator": "gt",
+          "value": 0
+        },
+        "one_shot": true,
+        "priority": 50
+      }
+    ],
+    "routing_decisions": {
+      "default_decision": "CONTINUE",
+      "signal_interpretation": {
+        "on_verified": "CONTINUE",
+        "on_unverified_can_iterate": "CONTINUE",
+        "on_unverified_cannot_iterate": "CONTINUE",
+        "on_blocked": "DETOUR",
+        "on_concerns": "CONTINUE"
+      }
+    },
+    "invariants": [
+      "Requirements must be testable",
+      "Critics never fix - only produce reports",
+      "No implementation details in requirements"
+    ]
+  },
+  "defaults": {
+    "context_pack": {
+      "include_upstream_artifacts": false,
+      "include_previous_envelopes": true,
+      "max_envelopes": 8,
+      "include_scent_trail": true
+    },
+    "sdk": {
+      "model": "inherit",
+      "max_turns": 15
+    }
+  },
+  "on_complete": {
+    "next_flow": "2-plan",
+    "reason": "Requirements complete; proceed to design planning",
+    "pass_artifacts": [
+      "signal/requirements.md",
+      "signal/bdd_scenarios.md",
+      "signal/scope_assessment.md",
+      "signal/problem_statement.md"
+    ]
+  },
+  "on_failure": {
+    "next_flow": "1-signal",
+    "reason": "Re-run signal flow with clarified inputs"
+  },
+  "metadata": {
+    "author": "flow-studio-swarm",
+    "tags": ["signal", "requirements", "bdd", "microloop"],
+    "cross_cutting_stations": ["clarifier", "risk-analyst", "gh-reporter"]
+  }
+}

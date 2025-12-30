@@ -1,0 +1,43 @@
+{
+  "id": "wisdom",
+  "name": "Prod → Wisdom",
+  "description": "Analyze artifacts, detect regressions, extract learnings, close feedback loops",
+  "version": 1,
+  "nodes": [
+    {
+      "node_id": "artifact-auditor",
+      "template_id": "artifact-auditor",
+      "params": {}
+    },
+    {
+      "node_id": "regression-analyst",
+      "template_id": "regression-analyst",
+      "params": {}
+    },
+    {
+      "node_id": "flow-historian",
+      "template_id": "flow-historian",
+      "params": {}
+    },
+    {
+      "node_id": "learning-synthesizer",
+      "template_id": "learning-synthesizer",
+      "params": {}
+    },
+    {
+      "node_id": "feedback-applier",
+      "template_id": "feedback-applier",
+      "params": {}
+    }
+  ],
+  "edges": [
+    {"edge_id": "e1", "from": "artifact-auditor", "to": "regression-analyst", "type": "sequence", "priority": 50},
+    {"edge_id": "e2", "from": "regression-analyst", "to": "flow-historian", "type": "sequence", "priority": 50},
+    {"edge_id": "e3", "from": "flow-historian", "to": "learning-synthesizer", "type": "sequence", "priority": 50},
+    {"edge_id": "e4", "from": "learning-synthesizer", "to": "feedback-applier", "type": "sequence", "priority": 50}
+  ],
+  "policy": {
+    "max_loop_iterations": 50,
+    "suggested_sidequests": []
+  }
+}

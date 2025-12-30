@@ -1,0 +1,94 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "pattern-analyst",
+  "version": 1,
+  "title": "Pattern Analyst",
+  "category": "analytics",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_only",
+    "allowed_tools": ["Read", "Grep", "Glob", "Bash"],
+    "denied_tools": ["Write", "Edit"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": true,
+      "excluded_commands": ["rm", "mv", "git push", "git commit"]
+    },
+    "max_turns": 18,
+    "context_budget": {
+      "total_chars": 200000,
+      "recent_chars": 60000,
+      "older_chars": 15000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Pattern Analyst. Look across multiple runs to find recurring patterns: issues that keep appearing, failures that repeat, areas that cause trouble repeatedly. This is cross-run intelligence.",
+    "longform_ref": "prompts/agentic_steps/pattern-analyst.md",
+    "tone": "analytical"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      ".runs/index.json"
+    ],
+    "optional_inputs": [
+      ".runs/*/wisdom/learnings.md",
+      ".runs/*/wisdom/regression_report.md",
+      ".runs/*/wisdom/quality_report.md",
+      ".runs/*/build/code_critique.md",
+      ".runs/*/gate/merge_decision.md",
+      ".runs/*/review/review_worklist.md"
+    ],
+    "required_outputs": [
+      "wisdom/pattern_report.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/wisdom/pattern_report.md",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "wisdom/pattern_report.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nCross-run pattern detection. Find recurring issues, repeated failures, and trends across runs.\n\n## Analysis Targets\n\n1. Recurring Regressions (from regression_report.md):\n   - Same test failing repeatedly?\n   - Same file/module causing issues?\n   - Same type of regression?\n\n2. Repeated Code Quality Issues (from quality_report.md, code_critique.md):\n   - Same areas flagged for complexity?\n   - Persistent architectural issues?\n\n3. Review Patterns (from review_worklist.md):\n   - Same feedback types recurring?\n   - Same files getting flagged?\n\n4. Gate Outcomes (from merge_decision.md):\n   - Frequent bounces? From which flow?\n   - Common blocker types?\n\n5. Learning Echoes (from learnings.md):\n   - Same lessons 'learned' repeatedly?\n   - Feedback actions that keep getting suggested?\n\n## Pattern Criteria\n\n- Frequency: Same issue in 3+ runs\n- Recency: Last 5 runs more relevant than old ones\n- Severity: Focus on CRITICAL/MAJOR, not MINOR noise\n- Location: Files/modules that appear repeatedly\n\n## Pattern Assessment\n\nFor each pattern:\n- Impact: How much does this slow us down?\n- Root cause hypothesis: Why does this keep happening?\n- Actionability: Can we prevent this systematically?\n\n## Output\n\nWrite {{run.base}}/wisdom/pattern_report.md with:\n- Runs Analyzed table\n- High-Impact Patterns (PAT-NNN markers)\n- Recurring Regressions table\n- Recurring Quality Issues table\n- Learnings That Keep Repeating\n- Recommendations (systemic fixes, process changes)\n- Metrics and Inventory (PATTERN_HIGH_IMPACT, etc.)"
+  },
+  "invariants": [
+    "Write exactly one file: wisdom/pattern_report.md",
+    "Use PAT-NNN markers for pattern headings",
+    "Focus on recent runs (last 10-20 unless specified)",
+    "Same issue in 3+ runs is a pattern",
+    "Be specific - 'Tests are flaky' is not actionable",
+    "Patterns are signals, not judgments - the history is teaching us something"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

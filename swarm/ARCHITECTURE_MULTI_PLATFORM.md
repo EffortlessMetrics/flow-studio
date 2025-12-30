@@ -135,7 +135,7 @@ uv run swarm/tools/validate_swarm.py
 1. Write platform profile YAML (toolset mapping, model aliases, syntax rules)
 2. Write templates (prompt structure, frontmatter)
 3. Run generator
-4. Done – all 45 agents + 6 flows wired for the new platform
+4. Done – all 45 agents + 7 flows wired for the new platform
 
 No hand-editing of 45+ agent files per platform.
 
@@ -406,7 +406,7 @@ if __name__ == "__main__":
 
 - [ ] Create `swarm/config/` skeleton
 - [ ] Write `agents.yaml` for all 45 agents (copy metadata from `AGENTS.md`)
-- [ ] Write `flows.yaml` for all 6 flows
+- [ ] Write `flows.yaml` for all 7 flows
 - [ ] Extend `validate_swarm.py` to cross-check config ↔ registry ↔ files
 - [ ] Create `swarm/platforms/claude.yaml` profile
 - [ ] Update this RFC with Phase 1 completion

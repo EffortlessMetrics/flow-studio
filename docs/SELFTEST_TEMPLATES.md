@@ -13,7 +13,7 @@ tooling. Each template trades setup complexity for capability scope.
 |----------|-----------|--------------|----------|
 | selftest-minimal | 15-30 min | 3-tier CI validation, GitHub Action | Teams wanting CI gates without full swarm |
 | flowstudio-only | 1 hour | Flow visualization UI, no SDLC | Teams wanting to visualize existing workflows |
-| Full Flow Studio | 2-3 hours | Complete 6-flow SDLC, 45 agents | Teams adopting full agentic SDLC |
+| Full Flow Studio | 2-3 hours | Complete 7-flow SDLC, 53 agents | Teams adopting full agentic SDLC |
 
 ---
 
@@ -38,8 +38,8 @@ tooling. Each template trades setup complexity for capability scope.
 ### Fork flow-studio if...
 
 - You are ready to adopt a full agentic SDLC
-- You want all 6 flows: Signal, Plan, Build, Gate, Deploy, Wisdom
-- You need 45 agents across shaping, spec, implementation, critic, and verification roles
+- You want all 7 flows: Signal, Plan, Build, Review, Gate, Deploy, Wisdom
+- You need 53 agents across shaping, spec, implementation, critic, and verification roles
 - You want receipts, microloops, and adversarial review built in
 - Your team has 2-3 hours for initial setup and is committed to the approach
 

@@ -430,7 +430,7 @@ Output: $RUN_BASE/build/test.md
     assert_validator_failed(result)
 
     # Both errors should be reported
-    assert result.stderr.count("✗") >= 2
+    assert result.stderr.count("[FAIL]") >= 2
 
 
 # ============================================================================

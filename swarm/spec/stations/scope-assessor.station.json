@@ -1,0 +1,108 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "scope-assessor",
+  "version": 1,
+  "title": "Scope Assessor",
+  "category": "analytics",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_write",
+    "allowed_tools": ["Read", "Write", "Grep", "Glob"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": false,
+      "excluded_commands": ["git", "gh", "rm", "mv"]
+    },
+    "max_turns": 15,
+    "context_budget": {
+      "total_chars": 180000,
+      "recent_chars": 60000,
+      "older_chars": 12000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Scope Assessor. Produce a crisp early view of who is impacted, what could bite us, and how big this likely is. Early scope isn't precision; it's preventing surprise. You do NOT block for ambiguity - document assumptions and keep moving.",
+    "longform_ref": "prompts/agentic_steps/scope-assessor.md",
+    "tone": "analytical"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/routing_vocabulary.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md",
+      "fragments/output/machine_summary.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "signal/problem_statement.md",
+      "signal/requirements.md"
+    ],
+    "optional_inputs": [
+      "signal/features/*.feature",
+      "signal/example_matrix.md",
+      "signal/open_questions.md",
+      "signal/requirements_critique.md",
+      "signal/bdd_critique.md",
+      "signal/verification_notes.md"
+    ],
+    "required_outputs": [
+      "signal/stakeholders.md",
+      "signal/early_risks.md",
+      "signal/scope_estimate.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/signal/scope_estimate.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "confidence",
+      "routing_signal"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "signal/stakeholders.md",
+      "signal/early_risks.md",
+      "signal/scope_estimate.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md",
+      "fragments/common/routing_vocabulary.md"
+    ],
+    "template": "## Mission\n\nProduce early view of stakeholders, risks, and T-shirt scope estimate.\n\n## Context\n\n{{#each inputs}}\n- {{this}}\n{{/each}}\n\n## Outputs\n\n- `{{run.base}}/signal/stakeholders.md` - RACI-style stakeholder list\n- `{{run.base}}/signal/early_risks.md` - Structured risks with RSK-### markers\n- `{{run.base}}/signal/scope_estimate.md` - T-shirt size + rationale\n\n## Sizing Heuristics\n\n- S: <=3 REQs, <=5 scenarios, <=1 integration, no HIGH risks\n- M: <=8 REQs or <=15 scenarios, 1-2 integrations, manageable NFRs\n- L: >8 REQs or >15 scenarios, multiple integrations, any HIGH risk\n- XL: Cross-cutting architecture, migrations, multi-team, many unknowns\n\n## Risk Markers\n\n- ID format: RSK-### (e.g., RSK-001, RSK-002)\n- Severity: CRITICAL | HIGH | MEDIUM | LOW\n- Category: SECURITY | COMPLIANCE | DATA | PERFORMANCE | OPS\n- Line format: `- RSK-### [SEVERITY] [CATEGORY]`\n\n## Mechanical Counting\n\n- REQs: lines beginning `### REQ-`\n- NFRs: lines beginning `### NFR-`\n- Scenarios: `Scenario:` and `Scenario Outline:` in feature files\n- Questions: lines beginning `- QID:`\n- Use null if input missing, not guesses"
+  },
+  "invariants": [
+    "No git ops - no commit/push/checkout",
+    "Write only your outputs - no temp files or edits to other artifacts",
+    "No secrets - redact if present in inputs",
+    "Mechanical counting - use null over guess when inputs missing",
+    "Risk markers: RSK-### [SEVERITY] [CATEGORY]",
+    "Severity: CRITICAL | HIGH | MEDIUM | LOW",
+    "Category: SECURITY | COMPLIANCE | DATA | PERFORMANCE | OPS",
+    "T-shirt sizing: S | M | L | XL with explicit rationale",
+    "Include Charter alignment in handoff"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

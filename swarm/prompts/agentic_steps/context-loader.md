@@ -304,6 +304,57 @@ This helps workers understand the codebase structure, not just file locations.
 **Mechanical failure:**
 - "Cannot write subtask_context_manifest.json due to permissions. Need file system access before proceeding."
 
+## Observations
+
+Record observations that may be valuable for routing or Wisdom:
+
+```json
+{
+  "observations": [
+    {
+      "category": "pattern|anomaly|risk|opportunity",
+      "observation": "What you noticed",
+      "evidence": ["file:line", "artifact_path"],
+      "confidence": 0.8,
+      "suggested_action": "Optional: what to do about it"
+    }
+  ]
+}
+```
+
+Categories:
+- **pattern**: Recurring behavior worth learning from (e.g., "Auth code consistently clusters in src/auth/ with @auth test tags", "All API handlers follow the same middleware chain pattern")
+- **anomaly**: Something unexpected that might indicate a problem (e.g., "Subtask references NFR-SEC-001 but no security-related code found in touches", "Test coverage sparse in the most complex module")
+- **risk**: Potential future issue worth tracking (e.g., "This subtask touches 3 high-coupling modules—changes may cascade", "Observability spec references metrics not yet implemented")
+- **opportunity**: Improvement possibility for Wisdom to consider (e.g., "Found duplicate utility functions across auth and session modules", "Test patterns could be extracted to shared fixtures")
+
+Include observations in the `subtask_context_manifest.json` output:
+
+```json
+{
+  "manifest_version": 2,
+  ...
+  "observations": [
+    {
+      "category": "pattern",
+      "observation": "Auth code follows consistent middleware→handler→util layering",
+      "evidence": ["src/auth/middleware.ts", "src/auth/handlers/", "src/auth/utils/"],
+      "confidence": 0.9,
+      "suggested_action": null
+    },
+    {
+      "category": "risk",
+      "observation": "Subtask touches shared session module with 12 dependents",
+      "evidence": ["src/session/manager.ts:imports"],
+      "confidence": 0.85,
+      "suggested_action": "Consider impact-analyzer review before implementation"
+    }
+  ]
+}
+```
+
+Observations are NOT routing decisions—they're forensic notes for the Navigator and Wisdom.
+
 ## Philosophy
 
 **You are an accelerator, not a gatekeeper.** Downstream agents need *handles*, not haystacks. Your job is to hand them the few files that matter, with reasons, and make uncertainty explicit without stopping the line.

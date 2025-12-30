@@ -39,41 +39,143 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional
+
+# Import MAX_DETOUR_DEPTH from orchestrator
+from swarm.runtime.stepwise.orchestrator import MAX_DETOUR_DEPTH
 
 from .navigator import (
+    DetourRequest,
+    FileChangesSummary,
     Navigator,
     NavigatorInput,
     NavigatorOutput,
     NextStepBrief,
-    RouteIntent,
-    RouteProposal,
-    EdgeCandidate,
-    VerificationSummary,
-    FileChangesSummary,
-    StallSignals,
     ProgressTracker,
     ProposedEdge,
-    ProposedNode,
+    RouteIntent,
+    RouteProposal,
+    StallSignals,
+    VerificationSummary,
     extract_candidate_edges_from_graph,
     navigator_output_to_dict,
 )
+from .router import FlowGraph
 from .sidequest_catalog import (
     SidequestCatalog,
-    SidequestDefinition,
     load_default_catalog,
-    sidequests_to_navigator_options,
 )
+from .station_library import StationLibrary, load_station_library
 from .types import (
     HandoffEnvelope,
-    RunState,
+    InjectedNodeSpec,
+    RoutingCandidate,
     RoutingDecision,
     RoutingSignal,
     RunEvent,
+    RunState,
+    handoff_envelope_to_dict,
 )
-from .router import FlowGraph
+
+# Forensic comparator imports for Semantic Handoff Injection
+from .forensic_comparator import (
+    compare_claim_vs_evidence,
+    forensic_verdict_to_dict,
+)
+from .forensic_types import (
+    DiffScanResult,
+    diff_scan_result_from_dict,
+)
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Detour Depth Utilities
+# =============================================================================
+
+
+def get_current_detour_depth(run_state: RunState) -> int:
+    """Get the current detour nesting depth from run state.
+
+    This is a convenience wrapper around run_state.get_interruption_depth()
+    that provides a semantic name for the detour depth concept.
+
+    Args:
+        run_state: The current run state with interruption stack.
+
+    Returns:
+        The number of nested detours currently active (0 if none).
+    """
+    return run_state.get_interruption_depth()
+
+
+# =============================================================================
+# No-Human-Mid-Flow Policy: PAUSE → DETOUR Rewriting
+# =============================================================================
+
+
+def rewrite_pause_to_detour(
+    nav_output: NavigatorOutput,
+    sidequest_catalog: SidequestCatalog,
+) -> NavigatorOutput:
+    """Rewrite PAUSE intent to DETOUR for no-human-mid-flow policy.
+
+    When autopilot mode is enabled (no_human_mid_flow=True), the run
+    should never block on a human. Instead of pausing, PAUSE intents
+    are rewritten to trigger the clarifier sidequest, which:
+
+    1. Loads context (ADR, specs, requirements)
+    2. Attempts to answer the blocking question using existing context
+    3. Documents assumptions if the answer cannot be found definitively
+    4. Never blocks - continues with best interpretation
+
+    Args:
+        nav_output: Navigator output with PAUSE intent.
+        sidequest_catalog: Catalog to look up the clarifier sidequest.
+
+    Returns:
+        Modified NavigatorOutput with DETOUR intent targeting clarifier,
+        or the original nav_output if PAUSE cannot be rewritten.
+    """
+    if nav_output.route.intent != RouteIntent.PAUSE:
+        return nav_output
+
+    # Get clarifier sidequest
+    clarifier = sidequest_catalog.get_by_id("clarifier")
+    if clarifier is None:
+        logger.warning(
+            "No clarifier sidequest found in catalog, cannot rewrite PAUSE to DETOUR. "
+            "The run will block on human input."
+        )
+        return nav_output
+
+    # Deep copy to avoid mutating the original
+    from copy import deepcopy
+
+    rewritten = deepcopy(nav_output)
+
+    # Rewrite intent to DETOUR
+    rewritten.route.intent = RouteIntent.DETOUR
+    original_reason = nav_output.route.reasoning
+    rewritten.route.reasoning = f"Auto-clarify (no_human_mid_flow): {original_reason}"
+
+    # Create detour request for clarifier sidequest
+    rewritten.detour_request = DetourRequest(
+        sidequest_id="clarifier",
+        objective=f"Clarify: {original_reason}",
+        priority=80,  # High priority - clarification is blocking
+    )
+
+    # Clear needs_human since we're handling it via sidequest
+    rewritten.signals.needs_human = False
+
+    logger.info(
+        "Rewrote PAUSE → DETOUR (clarifier) for no_human_mid_flow policy: %s",
+        original_reason,
+    )
+
+    return rewritten
 
 
 # =============================================================================
@@ -139,6 +241,7 @@ def extract_file_changes_summary(
 
     # Compute change signature for stall detection
     import hashlib
+
     sig_input = "|".join(sorted(all_paths))
     change_signature = hashlib.sha256(sig_input.encode()).hexdigest()[:16]
 
@@ -166,28 +269,55 @@ def build_navigation_context(
     context_digest: str,
     previous_envelope: Optional[HandoffEnvelope],
     sidequest_catalog: Optional[SidequestCatalog] = None,
+    routing_candidates: Optional[List[Dict[str, Any]]] = None,
+    forensic_verdict: Optional[Dict[str, Any]] = None,
 ) -> NavigatorInput:
     """Build NavigatorInput from step execution context.
 
     This function collects outputs from traditional tooling and
     packages them for the Navigator.
+
+    Args:
+        run_id: Run identifier.
+        flow_key: Flow key.
+        current_node: Current node/step ID.
+        iteration: Current iteration count.
+        flow_graph: The flow graph for edge candidates.
+        step_result: Step execution result.
+        verification_result: Verification check results.
+        file_changes: File changes from diff scanner.
+        stall_signals: Stall detection signals.
+        context_digest: Compressed context summary.
+        previous_envelope: Previous step's handoff envelope.
+        sidequest_catalog: Catalog to look up sidequests.
+        routing_candidates: Pre-computed routing candidates from kernel.
+        forensic_verdict: ForensicVerdict comparing claims vs evidence
+            (Semantic Handoff Injection). See forensic_comparator.py.
     """
     # Extract candidate edges from graph
     candidate_edges = extract_candidate_edges_from_graph(flow_graph, current_node)
 
     # Build context for sidequest trigger evaluation
     trigger_context = {
-        "verification_passed": verification_result.get("passed", True) if verification_result else True,
+        "verification_passed": verification_result.get("passed", True)
+        if verification_result
+        else True,
         "stall_signals": {
             "is_stalled": stall_signals.is_stalled if stall_signals else False,
             "stall_count": stall_signals.stall_count if stall_signals else 0,
-            "same_failure_signature": stall_signals.same_failure_signature if stall_signals else False,
-        } if stall_signals else {},
+            "same_failure_signature": stall_signals.same_failure_signature
+            if stall_signals
+            else False,
+        }
+        if stall_signals
+        else {},
         "changed_paths": (
-            file_changes.get("modified", []) +
-            file_changes.get("added", []) +
-            file_changes.get("deleted", [])
-        ) if file_changes else [],
+            file_changes.get("modified", [])
+            + file_changes.get("added", [])
+            + file_changes.get("deleted", [])
+        )
+        if file_changes
+        else [],
         "iteration": iteration,
     }
 
@@ -196,6 +326,7 @@ def build_navigation_context(
     if sidequest_catalog:
         applicable = sidequest_catalog.get_applicable_sidequests(trigger_context, run_id)
         from .navigator import SidequestOption
+
         sidequest_options = [
             SidequestOption(
                 sidequest_id=sq.sidequest_id,
@@ -222,6 +353,8 @@ def build_navigation_context(
         previous_step_summary=previous_envelope.summary if previous_envelope else "",
         previous_step_status=step_result.get("status", ""),
         worker_suggested_route=step_result.get("next_step_id"),
+        routing_candidates=routing_candidates or [],
+        forensic_verdict=forensic_verdict,
     )
 
 
@@ -232,55 +365,101 @@ def build_navigation_context(
 
 def navigator_to_routing_signal(
     nav_output: NavigatorOutput,
+    routing_candidates: Optional[List[RoutingCandidate]] = None,
 ) -> RoutingSignal:
     """Convert NavigatorOutput to RoutingSignal.
 
     This bridges the Navigator's decision format with the existing
-    routing infrastructure.
+    routing infrastructure. Includes chosen_candidate_id from the
+    candidate-set pattern for full audit trail.
+
+    Args:
+        nav_output: The Navigator's output decision.
+        routing_candidates: Optional list of candidates that were presented to Navigator.
+            If not provided, a single candidate representing the chosen route is created.
     """
     intent = nav_output.route.intent
+    target_node = nav_output.route.target_node
+    reasoning = nav_output.route.reasoning
+    chosen_candidate_id = nav_output.chosen_candidate_id
+
+    # If no candidates provided, create one representing the chosen route
+    if routing_candidates is None:
+        # Generate a candidate_id if none provided by Navigator
+        if not chosen_candidate_id:
+            if intent == RouteIntent.TERMINATE:
+                chosen_candidate_id = "terminate"
+            elif intent == RouteIntent.LOOP:
+                chosen_candidate_id = f"loop:{target_node}"
+            elif intent == RouteIntent.PAUSE:
+                chosen_candidate_id = "pause"
+            elif intent == RouteIntent.DETOUR:
+                chosen_candidate_id = f"detour:{target_node}"
+            else:  # ADVANCE
+                chosen_candidate_id = f"advance:{target_node}"
+
+        # Create the implicit candidate
+        routing_candidates = [
+            RoutingCandidate(
+                candidate_id=chosen_candidate_id,
+                action=intent.value if intent != RouteIntent.PAUSE else "terminate",
+                target_node=target_node,
+                reason=reasoning,
+                priority=90,  # Navigator decisions have high priority
+                source="navigator",
+                is_default=False,
+            )
+        ]
+
+    # Common fields for all routing decisions
+    common_fields = {
+        "confidence": nav_output.route.confidence,
+        "needs_human": nav_output.signals.needs_human,
+        "chosen_candidate_id": chosen_candidate_id,
+        "routing_candidates": routing_candidates,
+        "routing_source": "navigator",
+    }
 
     if intent == RouteIntent.TERMINATE:
         return RoutingSignal(
             decision=RoutingDecision.TERMINATE,
             next_step_id=None,
-            reason=nav_output.route.reasoning,
-            confidence=nav_output.route.confidence,
-            needs_human=nav_output.signals.needs_human,
+            reason=reasoning,
             exit_condition_met=True,
+            **common_fields,
         )
     elif intent == RouteIntent.LOOP:
         return RoutingSignal(
             decision=RoutingDecision.LOOP,
-            next_step_id=nav_output.route.target_node,
-            reason=nav_output.route.reasoning,
-            confidence=nav_output.route.confidence,
-            needs_human=nav_output.signals.needs_human,
+            next_step_id=target_node,
+            reason=reasoning,
+            **common_fields,
         )
     elif intent == RouteIntent.PAUSE:
         return RoutingSignal(
             decision=RoutingDecision.TERMINATE,  # Pause = terminate with needs_human
             next_step_id=None,
-            reason=nav_output.route.reasoning,
+            reason=reasoning,
+            needs_human=True,  # Override common_fields
+            chosen_candidate_id=chosen_candidate_id,
+            routing_candidates=routing_candidates,
+            routing_source="navigator",
             confidence=nav_output.route.confidence,
-            needs_human=True,
         )
     elif intent == RouteIntent.DETOUR:
         # Detour is handled separately; return advance to current position
         return RoutingSignal(
             decision=RoutingDecision.ADVANCE,
-            next_step_id=nav_output.route.target_node,
-            reason=f"Detour requested: {nav_output.route.reasoning}",
-            confidence=nav_output.route.confidence,
-            needs_human=nav_output.signals.needs_human,
+            next_step_id=target_node,
+            reason=f"Detour requested: {reasoning}",
+            **common_fields,
         )
     else:  # ADVANCE
         return RoutingSignal(
             decision=RoutingDecision.ADVANCE,
-            next_step_id=nav_output.route.target_node,
-            reason=nav_output.route.reasoning,
-            confidence=nav_output.route.confidence,
-            needs_human=nav_output.signals.needs_human,
+            next_step_id=target_node,
+            reason=reasoning,
+            **common_fields,
         )
 
 
@@ -293,9 +472,19 @@ def apply_detour_request(
     """Apply a detour request to RunState.
 
     If Navigator requested a detour, this:
-    1. Pushes current position to resume stack
-    2. Pushes interruption frame
-    3. Returns the sidequest station to execute
+    1. Validates detour depth against MAX_DETOUR_DEPTH
+    2. Pushes current position to resume stack
+    3. Pushes interruption frame with multi-step tracking
+    4. Injects node specs for ALL steps in the sidequest
+    5. Returns the first sidequest station to execute
+
+    For multi-step sidequests, nodes are injected as:
+    - sq-<sidequest_id>-0
+    - sq-<sidequest_id>-1
+    - ... etc
+
+    Each node has a full InjectedNodeSpec so the orchestrator
+    can resolve it to an execution context.
 
     Args:
         nav_output: Navigator output with detour request.
@@ -304,26 +493,54 @@ def apply_detour_request(
         current_node: Current node (for resume point).
 
     Returns:
-        Station ID to execute for the detour, or None if no detour.
+        First node ID to execute for the detour, or None if:
+        - No detour request in nav_output
+        - Unknown sidequest ID
+        - Maximum detour depth would be exceeded
     """
     if nav_output.detour_request is None:
         return None
 
     detour = nav_output.detour_request
+
+    # Check detour depth BEFORE attempting to push interruption
+    current_depth = get_current_detour_depth(run_state)
+    if current_depth >= MAX_DETOUR_DEPTH:
+        logger.warning(
+            "MAX_DETOUR_DEPTH (%d) reached, rejecting detour request for sidequest '%s'. "
+            "Current depth: %d. This prevents runaway nested sidequests. "
+            "Consider increasing MAX_DETOUR_DEPTH if legitimate deep nesting is required.",
+            MAX_DETOUR_DEPTH,
+            detour.sidequest_id,
+            current_depth,
+        )
+        return None
+
     sidequest = sidequest_catalog.get_by_id(detour.sidequest_id)
 
     if sidequest is None:
         logger.warning("Unknown sidequest requested: %s", detour.sidequest_id)
         return None
 
+    # Get steps from sidequest (handles both single and multi-step)
+    steps = sidequest.to_steps() if hasattr(sidequest, "to_steps") else []
+    if not steps:
+        # Fallback for simple sidequests
+        steps = [type("Step", (), {"station_id": sidequest.station_id, "template_id": None})()]
+
+    total_steps = len(steps)
+
     # Push resume point (where to continue after detour)
     resume_at = detour.resume_at or current_node
-    run_state.push_resume(resume_at, {
-        "detour_reason": detour.objective,
-        "sidequest_id": detour.sidequest_id,
-    })
+    run_state.push_resume(
+        resume_at,
+        {
+            "detour_reason": detour.objective,
+            "sidequest_id": detour.sidequest_id,
+        },
+    )
 
-    # Push interruption frame
+    # Push interruption frame with multi-step tracking
     run_state.push_interruption(
         reason=f"Sidequest: {sidequest.name} - {detour.objective}",
         return_node=resume_at,
@@ -332,21 +549,58 @@ def apply_detour_request(
             "objective": detour.objective,
             "priority": detour.priority,
         },
+        current_step_index=0,  # Starting at first step
+        total_steps=total_steps,
+        sidequest_id=detour.sidequest_id,
     )
 
-    # Add sidequest node to injected nodes
-    sidequest_node_id = f"sidequest-{detour.sidequest_id}-{run_state.step_index}"
-    run_state.add_injected_node(sidequest_node_id)
+    # Inject node specs for ALL steps in the sidequest
+    first_node_id = None
+    for i, step in enumerate(steps):
+        node_id = f"sq-{detour.sidequest_id}-{i}"
+
+        # Get station_id from step (handle different step formats)
+        station_id = (
+            getattr(step, "station_id", None)
+            or getattr(step, "template_id", None)
+            or sidequest.station_id
+        )
+        template_id = getattr(step, "template_id", None)
+
+        # Create full execution spec for this node
+        spec = InjectedNodeSpec(
+            node_id=node_id,
+            station_id=station_id,
+            template_id=template_id,
+            agent_key=station_id,  # Default to station_id as agent key
+            role=f"Sidequest {detour.sidequest_id} step {i + 1}/{total_steps}",
+            params={
+                "objective": detour.objective,
+                "step_index": i,
+            },
+            sidequest_origin=detour.sidequest_id,
+            sequence_index=i,
+            total_in_sequence=total_steps,
+        )
+
+        # Register the spec (this also adds to injected_nodes list)
+        run_state.register_injected_node(spec)
+
+        if i == 0:
+            first_node_id = node_id
 
     # Record usage in catalog
     sidequest_catalog.record_usage(detour.sidequest_id, run_state.run_id)
 
     logger.info(
-        "Detour injected: %s (station=%s, resume_at=%s)",
-        detour.sidequest_id, sidequest.station_id, resume_at,
+        "Detour injected: %s (%d steps, first=%s, resume_at=%s)",
+        detour.sidequest_id,
+        total_steps,
+        first_node_id,
+        resume_at,
     )
 
-    return sidequest.station_id
+    return first_node_id
 
 
 def check_and_handle_detour_completion(
@@ -357,6 +611,12 @@ def check_and_handle_detour_completion(
 
     If the interruption stack has frames and the current detour is
     complete, pop and return the resume node based on ReturnBehavior.
+
+    For multi-step sidequests, this function tracks progress using
+    the current_step_index field on InterruptionFrame. When a step
+    completes:
+    - If more steps remain: increment index and return next step's station
+    - If all steps complete: pop frame and resume original flow
 
     Args:
         run_state: Current run state with interruption/resume stacks.
@@ -373,10 +633,13 @@ def check_and_handle_detour_completion(
     if top_frame is None:
         return None
 
-    # Get sidequest context from frame
-    context_snapshot = top_frame.context_snapshot or {}
-    sidequest_id = context_snapshot.get("sidequest_id")
-    current_step_index = context_snapshot.get("current_step_index", 0)
+    # Get sidequest info from frame fields (new durable cursor approach)
+    # Fall back to context_snapshot for backwards compatibility with existing state
+    sidequest_id = top_frame.sidequest_id
+    if sidequest_id is None:
+        sidequest_id = top_frame.context_snapshot.get("sidequest_id")
+    current_step_index = top_frame.current_step_index
+    # total_steps is available on top_frame but not needed for advance logic
 
     # Check if multi-step sidequest has more steps
     if sidequest_catalog and sidequest_id:
@@ -386,17 +649,21 @@ def check_and_handle_detour_completion(
             if current_step_index < len(steps) - 1:
                 # More steps remain - advance to next step
                 next_step_index = current_step_index + 1
-                next_step = steps[next_step_index]
 
-                # Update context with new step index
-                context_snapshot["current_step_index"] = next_step_index
-                # Note: We'd need to update the frame, but stacks are immutable
-                # For now, log and return the next step's template
+                # Use the injected node ID format
+                next_node_id = f"sq-{sidequest_id}-{next_step_index}"
+
+                # Update the frame's step index directly (durable cursor)
+                top_frame.current_step_index = next_step_index
+
                 logger.info(
-                    "Multi-step sidequest %s advancing to step %d: %s",
-                    sidequest_id, next_step_index, next_step.template_id,
+                    "Multi-step sidequest %s advancing to step %d/%d: %s",
+                    sidequest_id,
+                    next_step_index + 1,
+                    len(steps),
+                    next_node_id,
                 )
-                return next_step.template_id
+                return next_node_id
 
     # Sidequest is complete - apply return behavior
     resume_point = run_state.pop_resume()
@@ -411,7 +678,8 @@ def check_and_handle_detour_completion(
             if return_behavior.mode == "bounce_to" and return_behavior.target_node:
                 logger.info(
                     "Sidequest %s bouncing to: %s",
-                    sidequest_id, return_behavior.target_node,
+                    sidequest_id,
+                    return_behavior.target_node,
                 )
                 return return_behavior.target_node
 
@@ -485,10 +753,13 @@ def apply_extend_graph_request(
 
     # Push resume point if this is a return edge
     if proposed.is_return:
-        run_state.push_resume(current_node, {
-            "extend_graph_reason": proposed.why,
-            "injected_node_id": injected_node_id,
-        })
+        run_state.push_resume(
+            current_node,
+            {
+                "extend_graph_reason": proposed.why,
+                "injected_node_id": injected_node_id,
+            },
+        )
 
         # Push interruption frame for map gap
         run_state.push_interruption(
@@ -511,7 +782,9 @@ def apply_extend_graph_request(
 
     logger.info(
         "EXTEND_GRAPH: Injected node %s (target=%s, resume=%s)",
-        injected_node_id, target_id, proposed.is_return,
+        injected_node_id,
+        target_id,
+        proposed.is_return,
     )
 
     return target_id
@@ -539,11 +812,12 @@ def emit_graph_patch_suggested_event(
     """
     if append_event_fn is None:
         from . import storage as storage_module
+
         append_event_fn = storage_module.append_event
 
     patch_payload = {
         "op": "add",
-        "path": f"/edges/-",
+        "path": "/edges/-",
         "value": {
             "edge_id": f"suggested-{proposed_edge.from_node}-{proposed_edge.to_node}",
             "from": proposed_edge.from_node,
@@ -557,9 +831,10 @@ def emit_graph_patch_suggested_event(
         # Also suggest adding the node
         node_patch = {
             "op": "add",
-            "path": f"/nodes/-",
+            "path": "/nodes/-",
             "value": {
-                "node_id": proposed_edge.proposed_node.node_id or f"suggested-{proposed_edge.to_node}",
+                "node_id": proposed_edge.proposed_node.node_id
+                or f"suggested-{proposed_edge.to_node}",
                 "template_id": proposed_edge.proposed_node.template_id or proposed_edge.to_node,
                 "station_id": proposed_edge.proposed_node.station_id,
             },
@@ -664,6 +939,7 @@ def load_next_step_brief(
 @dataclass
 class NavigationResult:
     """Result of navigation decision."""
+
     next_node: Optional[str]
     routing_signal: RoutingSignal
     brief_stored: bool
@@ -704,6 +980,7 @@ class NavigationOrchestrator:
         navigator: Optional[Navigator] = None,
         sidequest_catalog: Optional[SidequestCatalog] = None,
         progress_tracker: Optional[ProgressTracker] = None,
+        station_library: Optional[StationLibrary] = None,
     ):
         """Initialize NavigationOrchestrator.
 
@@ -712,11 +989,14 @@ class NavigationOrchestrator:
             navigator: Navigator instance. If None, uses deterministic fallback.
             sidequest_catalog: Sidequest catalog. If None, uses default.
             progress_tracker: Progress tracker. If None, creates new one.
+            station_library: Station library for EXTEND_GRAPH validation.
+                If None, loads default + repo pack.
         """
         self._repo_root = repo_root or Path.cwd()
         self._navigator = navigator or Navigator()
         self._sidequest_catalog = sidequest_catalog or load_default_catalog()
         self._progress_tracker = progress_tracker or ProgressTracker()
+        self._station_library = station_library or load_station_library(self._repo_root)
 
     def navigate(
         self,
@@ -731,6 +1011,8 @@ class NavigationOrchestrator:
         run_state: RunState,
         context_digest: str = "",
         previous_envelope: Optional[HandoffEnvelope] = None,
+        no_human_mid_flow: bool = False,
+        routing_candidates: Optional[List[Dict[str, Any]]] = None,
     ) -> NavigationResult:
         """Execute navigation decision.
 
@@ -746,6 +1028,12 @@ class NavigationOrchestrator:
             run_state: Current run state.
             context_digest: Compressed context summary.
             previous_envelope: Previous step's handoff envelope.
+            no_human_mid_flow: If True, rewrite PAUSE intents to DETOUR
+                targeting the clarifier sidequest. This enables fully
+                autonomous flow execution without human intervention.
+            routing_candidates: Pre-computed routing candidates from the kernel.
+                Navigator chooses from these via chosen_candidate_id.
+                Each dict has: candidate_id, action, target_node, reason, priority.
 
         Returns:
             NavigationResult with routing decision and artifacts.
@@ -753,6 +1041,18 @@ class NavigationOrchestrator:
         # Check if resuming from a completed detour
         resume_node = check_and_handle_detour_completion(run_state, self._sidequest_catalog)
         if resume_node:
+            # Create audit trail for detour resume
+            candidate_id = f"detour_resume:{resume_node}"
+            chosen_candidate = RoutingCandidate(
+                candidate_id=candidate_id,
+                action="advance",
+                target_node=resume_node,
+                reason="Resuming from completed detour",
+                priority=100,  # Detour resume is deterministic
+                source="detour_resume",
+                is_default=True,
+            )
+
             # Return resume routing
             return NavigationResult(
                 next_node=resume_node,
@@ -760,6 +1060,10 @@ class NavigationOrchestrator:
                     decision=RoutingDecision.ADVANCE,
                     next_step_id=resume_node,
                     reason="Resuming from completed detour",
+                    confidence=1.0,
+                    chosen_candidate_id=candidate_id,
+                    routing_candidates=[chosen_candidate],
+                    routing_source="detour_resume",
                 ),
                 brief_stored=False,
                 detour_injected=False,
@@ -781,6 +1085,54 @@ class NavigationOrchestrator:
             step_output=step_result,
         )
 
+        # =================================================================
+        # SEMANTIC HANDOFF INJECTION: Compute forensic verdict
+        # =================================================================
+        # Compare worker claims (in handoff envelope) against actual evidence
+        # (diff scan, test results). This enables Navigator to detect
+        # "reward hacking" - e.g., deleted tests, fake progress claims.
+        forensic_verdict = None
+        if previous_envelope is not None:
+            try:
+                # Convert handoff envelope to dict for comparison
+                handoff_dict = handoff_envelope_to_dict(previous_envelope)
+
+                # Convert file_changes dict to DiffScanResult if available
+                diff_result = None
+                if file_changes:
+                    try:
+                        diff_result = diff_scan_result_from_dict(file_changes)
+                    except Exception as e:
+                        logger.debug(
+                            "Could not convert file_changes to DiffScanResult: %s",
+                            e,
+                        )
+
+                # Compute forensic verdict comparing claims vs evidence
+                verdict = compare_claim_vs_evidence(
+                    handoff=handoff_dict,
+                    diff_result=diff_result,
+                    test_summary=None,  # TODO: wire in test_summary when available
+                )
+
+                # Convert to dict for NavigatorInput
+                forensic_verdict = forensic_verdict_to_dict(verdict)
+
+                logger.debug(
+                    "Forensic verdict for step %s: recommendation=%s, confidence=%.2f, flags=%s",
+                    current_node,
+                    verdict.recommendation.value,
+                    verdict.confidence,
+                    [f.value for f in verdict.reward_hacking_flags],
+                )
+
+            except Exception as e:
+                logger.warning(
+                    "Failed to compute forensic verdict for step %s: %s",
+                    current_node,
+                    e,
+                )
+
         # Build navigation context
         nav_input = build_navigation_context(
             run_id=run_id,
@@ -795,10 +1147,51 @@ class NavigationOrchestrator:
             context_digest=context_digest,
             previous_envelope=previous_envelope,
             sidequest_catalog=self._sidequest_catalog,
+            routing_candidates=routing_candidates,
+            forensic_verdict=forensic_verdict,
         )
 
         # Run Navigator
         nav_output = self._navigator.navigate(nav_input)
+
+        # =================================================================
+        # CANDIDATE VALIDATION: Verify chosen_candidate_id is valid
+        # =================================================================
+        # If routing candidates were provided, Navigator must choose one.
+        # EXTEND_GRAPH intent is exempt (it's proposing something new).
+        if routing_candidates and nav_output.chosen_candidate_id:
+            valid_ids = {c["candidate_id"] for c in routing_candidates}
+            chosen_id = nav_output.chosen_candidate_id
+
+            if chosen_id not in valid_ids:
+                # Allow "extend_graph" as a special value for EXTEND_GRAPH intent
+                if nav_output.route.intent == RouteIntent.EXTEND_GRAPH:
+                    logger.debug(
+                        "Navigator chose EXTEND_GRAPH (not in candidate set): %s",
+                        chosen_id,
+                    )
+                else:
+                    logger.warning(
+                        "Navigator chose invalid candidate_id '%s' (valid: %s). "
+                        "Falling back to default candidate.",
+                        chosen_id,
+                        list(valid_ids),
+                    )
+                    # Fall back to the default candidate
+                    default_candidate = next(
+                        (c for c in routing_candidates if c.get("is_default")),
+                        routing_candidates[0] if routing_candidates else None,
+                    )
+                    if default_candidate:
+                        nav_output.chosen_candidate_id = default_candidate["candidate_id"]
+                        nav_output.route.target_node = default_candidate.get("target_node")
+                        nav_output.route.reasoning = (
+                            f"Fallback to default: {default_candidate.get('reason', '')}"
+                        )
+
+        # Apply no-human-mid-flow policy: rewrite PAUSE → DETOUR
+        if no_human_mid_flow and nav_output.route.intent == RouteIntent.PAUSE:
+            nav_output = rewrite_pause_to_detour(nav_output, self._sidequest_catalog)
 
         # Apply detour if requested
         detour_station = None
@@ -824,7 +1217,7 @@ class NavigationOrchestrator:
                 nav_output=nav_output,
                 run_state=run_state,
                 current_node=current_node,
-                station_library=None,  # TODO: Pass station library for validation
+                station_library=self._station_library.list_station_ids(),
             )
             if extend_graph_target:
                 extend_graph_injected = True
@@ -875,6 +1268,22 @@ class NavigationOrchestrator:
         """Get the sidequest catalog for external use."""
         return self._sidequest_catalog
 
+    @property
+    def station_library(self) -> StationLibrary:
+        """Get the station library for external use."""
+        return self._station_library
+
+    def validate_extend_graph_target(self, target_id: str) -> bool:
+        """Validate that a target is valid for EXTEND_GRAPH.
+
+        Args:
+            target_id: The proposed target station/template ID.
+
+        Returns:
+            True if the target exists in the station library.
+        """
+        return self._station_library.validate_target(target_id)
+
     def reset(self, run_id: Optional[str] = None) -> None:
         """Reset state for a new run.
 
@@ -908,6 +1317,7 @@ def emit_navigation_event(
     """
     if append_event_fn is None:
         from . import storage as storage_module
+
         append_event_fn = storage_module.append_event
 
     event = RunEvent(

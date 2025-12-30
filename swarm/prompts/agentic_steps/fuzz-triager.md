@@ -81,8 +81,8 @@ If crashes occur, for each distinct crash signature:
 
 ### Step 4: Decide routing
 
-- If fuzz ran and any crashes found: `UNVERIFIED`, `recommended_action: BOUNCE`, `route_to_flow: 3`, `route_to_agent: code-implementer`
-- If fuzz ran clean: `VERIFIED`, `recommended_action: PROCEED`
+- If fuzz ran and any crashes found: `UNVERIFIED`, `routing: DETOUR` to inject code-implementer for crash fixes
+- If fuzz ran clean: `VERIFIED`, `routing: CONTINUE` on golden path
 
 ## fuzz_report.md format (required)
 
@@ -118,7 +118,7 @@ Write `.runs/<run-id>/build/fuzz_report.md` in exactly this structure:
   - Evidence: <short excerpt or pointer>
   - Repro: <minimal steps>
   - Suggested regression test: <what to add>
-  - Route: code-implementer
+  - Routing: DETOUR to code-implementer
 
 ## Inventory (machine countable)
 - FUZZ_CRASH: FUZZ-CRASH-001

@@ -30,11 +30,11 @@ import json
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 from swarm.config.flow_registry import TeachingNotes, get_flow_steps
-from swarm.runtime.types import HandoffEnvelope, RunState, handoff_envelope_from_dict
 from swarm.runtime.navigator import NextStepBrief
+from swarm.runtime.types import HandoffEnvelope, RunState, handoff_envelope_from_dict
 
 if TYPE_CHECKING:
     from swarm.runtime.engines import StepContext
@@ -604,9 +604,7 @@ def _extract_previous_envelopes(
     # This is a simplified ordering; for proper ordering we'd need
     # access to the flow registry
     prior_envelopes = [
-        env
-        for step_id, env in handoff_envelopes.items()
-        if step_id != current_step_id
+        env for step_id, env in handoff_envelopes.items() if step_id != current_step_id
     ]
 
     # Sort by timestamp as a proxy for chronological order

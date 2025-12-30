@@ -1,0 +1,329 @@
+{
+  "$schema": "../schemas/flow_graph.schema.json",
+  "id": "gate-flow",
+  "version": 1,
+  "title": "Flow 5 - Gate",
+  "flow_number": 5,
+  "description": "Pre-merge gate - audit receipts, check contracts/security/policy; recommend merge or bounce. Uses parallel execution for independent audits.",
+  "charter": {
+    "goal": "Produce a confident MERGE, BOUNCE, or ESCALATE decision based on objective audits",
+    "question": "Is this code safe to merge?",
+    "exit_criteria": [
+      "Receipt audit confirms build artifacts are complete",
+      "Contract audit verifies API compliance",
+      "Security scan finds no critical vulnerabilities",
+      "Coverage audit confirms threshold compliance",
+      "merge_decision.md produced with clear verdict and rationale"
+    ],
+    "non_goals": [
+      "Fixing logic or design issues (mechanical fixes only)",
+      "Adding new features or tests",
+      "Changing API contracts",
+      "Making subjective quality judgments"
+    ],
+    "prime_directive": "Apply objective audits. Mechanical fixes only. No judgment calls - just rules."
+  },
+  "nodes": [
+    {
+      "node_id": "receipt",
+      "template_id": "receipt-checker",
+      "params": {
+        "objective": "Verify build_receipt.json completeness"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Check Receipt",
+        "position": {"x": 250, "y": 50},
+        "color": "#94a3b8",
+        "teaching": {
+          "highlight": true,
+          "note": "Gate checkpoint: verify all build artifacts exist and receipt is well-formed"
+        }
+      }
+    },
+    {
+      "node_id": "contract",
+      "template_id": "contract-enforcer",
+      "params": {
+        "objective": "Check API changes versus contracts"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Contract Audit",
+        "position": {"x": 100, "y": 150},
+        "color": "#3b82f6",
+        "teaching": {
+          "highlight": true,
+          "note": "Runs in PARALLEL with security/coverage/policy"
+        }
+      }
+    },
+    {
+      "node_id": "security",
+      "template_id": "security-scanner",
+      "params": {
+        "objective": "Run SAST and secret scans"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Security Audit",
+        "position": {"x": 200, "y": 150},
+        "color": "#ef4444",
+        "teaching": {
+          "highlight": true,
+          "note": "Runs in PARALLEL with contract/coverage/policy"
+        }
+      }
+    },
+    {
+      "node_id": "coverage",
+      "template_id": "coverage-enforcer",
+      "params": {
+        "objective": "Verify test coverage meets thresholds"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Coverage Audit",
+        "position": {"x": 300, "y": 150},
+        "color": "#22c55e",
+        "teaching": {
+          "highlight": true,
+          "note": "Runs in PARALLEL with contract/security/policy"
+        }
+      }
+    },
+    {
+      "node_id": "policy_check",
+      "template_id": "policy-analyst",
+      "params": {
+        "objective": "Check policy compliance"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Policy Audit",
+        "position": {"x": 400, "y": 150},
+        "color": "#8b5cf6",
+        "teaching": {
+          "highlight": true,
+          "note": "Runs in PARALLEL with contract/security/coverage"
+        }
+      }
+    },
+    {
+      "node_id": "gate_fix",
+      "template_id": "gate-fixer",
+      "params": {
+        "objective": "Apply mechanical fixes only"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Gate Fix",
+        "position": {"x": 250, "y": 270},
+        "color": "#22c55e",
+        "teaching": {
+          "highlight": true,
+          "note": "JOIN POINT: MECHANICAL ONLY - lint, format, docstrings, typos"
+        }
+      }
+    },
+    {
+      "node_id": "merge_decision",
+      "template_id": "merge-decider",
+      "params": {
+        "objective": "Synthesize all checks into merge decision"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Merge Decision",
+        "position": {"x": 250, "y": 360},
+        "color": "#3b82f6",
+        "teaching": {
+          "highlight": true,
+          "note": "Final gate: MERGE/BOUNCE/ESCALATE based on all audits"
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "edge_id": "e01-receipt-fork",
+      "from": "receipt",
+      "to": "contract",
+      "type": "fork",
+      "fork_config": {
+        "targets": ["contract", "security", "coverage", "policy_check"],
+        "execution_policy": "concurrent",
+        "isolation": "isolated",
+        "failure_policy": "continue_all"
+      }
+    },
+    {
+      "edge_id": "e02-receipt-to-security",
+      "from": "receipt",
+      "to": "security",
+      "type": "sequence",
+      "ui": {
+        "style": "dashed",
+        "color": "#94a3b8"
+      }
+    },
+    {
+      "edge_id": "e03-receipt-to-coverage",
+      "from": "receipt",
+      "to": "coverage",
+      "type": "sequence",
+      "ui": {
+        "style": "dashed",
+        "color": "#94a3b8"
+      }
+    },
+    {
+      "edge_id": "e04-receipt-to-policy",
+      "from": "receipt",
+      "to": "policy_check",
+      "type": "sequence",
+      "ui": {
+        "style": "dashed",
+        "color": "#94a3b8"
+      }
+    },
+    {
+      "edge_id": "e05-contract-to-join",
+      "from": "contract",
+      "to": "gate_fix",
+      "type": "join",
+      "join_config": {
+        "strategy": "all_complete",
+        "merge_artifacts": true,
+        "merge_concerns": true,
+        "aggregate_status": "worst"
+      }
+    },
+    {
+      "edge_id": "e06-security-to-join",
+      "from": "security",
+      "to": "gate_fix",
+      "type": "sequence"
+    },
+    {
+      "edge_id": "e07-coverage-to-join",
+      "from": "coverage",
+      "to": "gate_fix",
+      "type": "sequence"
+    },
+    {
+      "edge_id": "e08-policy-to-join",
+      "from": "policy_check",
+      "to": "gate_fix",
+      "type": "sequence"
+    },
+    {
+      "edge_id": "e09-fix-to-decision",
+      "from": "gate_fix",
+      "to": "merge_decision",
+      "type": "sequence"
+    }
+  ],
+  "subflows": [
+    {
+      "subflow_id": "parallel-audits",
+      "title": "Parallel Audits",
+      "description": "Contract, security, coverage, and policy audits run concurrently",
+      "entry_node": "contract",
+      "exit_nodes": ["contract", "security", "coverage", "policy_check"],
+      "contained_nodes": ["contract", "security", "coverage", "policy_check"],
+      "ui": {
+        "color": "#dbeafe",
+        "collapsed_by_default": false
+      }
+    }
+  ],
+  "policy": {
+    "max_loop_iterations": 1,
+    "max_depth": 2,
+    "escalation": {
+      "on_blocked": "continue_with_concerns",
+      "max_unverified_streak": 1,
+      "escalate_on_unverified_streak": "human_review"
+    },
+    "suggested_detours": [
+      {
+        "from_nodes": ["gate_fix"],
+        "to_station": "risk-analyst",
+        "condition": {
+          "field": "security_concerns",
+          "operator": "gt",
+          "value": 0
+        },
+        "return_to": "next",
+        "priority": 80
+      }
+    ],
+    "suggested_injections": [
+      {
+        "station_id": "security-scanner",
+        "inject_after": ["gate_fix"],
+        "condition": {
+          "field": "security_inconclusive",
+          "operator": "equals",
+          "value": true
+        },
+        "one_shot": true,
+        "priority": 90
+      }
+    ],
+    "routing_decisions": {
+      "default_decision": "CONTINUE",
+      "signal_interpretation": {
+        "on_verified": "CONTINUE",
+        "on_unverified_can_iterate": "CONTINUE",
+        "on_unverified_cannot_iterate": "CONTINUE",
+        "on_blocked": "DETOUR",
+        "on_concerns": "CONTINUE"
+      }
+    },
+    "invariants": [
+      "Gate fixes are MECHANICAL ONLY",
+      "No logic changes allowed",
+      "No API contract changes",
+      "No test assertion changes"
+    ]
+  },
+  "defaults": {
+    "context_pack": {
+      "include_upstream_artifacts": true,
+      "include_previous_envelopes": true,
+      "max_envelopes": 12,
+      "include_scent_trail": true
+    },
+    "sdk": {
+      "model": "inherit",
+      "max_turns": 15
+    }
+  },
+  "on_complete": {
+    "next_flow": "6-deploy",
+    "reason": "Gate passed; proceed to deployment",
+    "pass_artifacts": [
+      "gate/merge_decision.md",
+      "gate/receipt_audit.md",
+      "gate/contract_audit.md",
+      "gate/security_audit.md",
+      "gate/coverage_audit.md"
+    ],
+    "condition": {
+      "field": "decision",
+      "operator": "equals",
+      "value": "MERGE"
+    }
+  },
+  "on_failure": {
+    "next_flow": "3-build",
+    "reason": "Gate bounced; return to build for fixes"
+  },
+  "metadata": {
+    "author": "flow-studio-swarm",
+    "tags": ["gate", "audit", "security", "parallel"],
+    "cross_cutting_stations": ["policy-analyst", "risk-analyst", "gh-reporter"]
+  }
+}

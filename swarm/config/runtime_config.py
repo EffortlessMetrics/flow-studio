@@ -156,6 +156,7 @@ def _default_config() -> Dict[str, Any]:
             "gemini": {"mode": "stub"},
             "claude": {
                 "mode": "stub",
+                "execution": "legacy",
                 "provider": "anthropic",
                 "env_keys": ["ANTHROPIC_API_KEY"],
             },
@@ -254,6 +255,80 @@ def is_stub_mode(engine: str) -> bool:
         True if the engine should use stub mode.
     """
     return get_engine_mode(engine) == "stub"
+
+
+# Valid execution modes
+VALID_EXECUTION_MODES = ("legacy", "session")
+
+
+def get_engine_execution(engine: str) -> str:
+    """Get execution pattern for an engine, respecting environment variable overrides.
+
+    The execution pattern is orthogonal to mode (stub/sdk/cli). It controls
+    how steps are executed:
+    - legacy: Traditional run_step() lifecycle (work, finalize, route separately)
+    - session: WP6 per-step session pattern (single session for all phases)
+
+    Environment variable precedence (highest to lowest):
+    1. SWARM_<ENGINE>_EXECUTION (e.g., SWARM_CLAUDE_EXECUTION)
+    2. Config file value
+    3. Default: "legacy"
+
+    Args:
+        engine: Engine identifier ("gemini" or "claude").
+
+    Returns:
+        Execution pattern string: "legacy" or "session".
+        Logs a warning and returns "legacy" if invalid value is configured.
+    """
+    # 1. Check engine-specific execution env var (highest priority)
+    engine_upper = engine.upper()
+    exec_env_var = f"SWARM_{engine_upper}_EXECUTION"
+    exec_value = os.environ.get(exec_env_var)
+    if exec_value:
+        exec_lower = exec_value.lower()
+        if exec_lower not in VALID_EXECUTION_MODES:
+            logger.warning(
+                "Invalid %s value '%s' (valid: %s). Falling back to 'legacy'.",
+                exec_env_var,
+                exec_value,
+                ", ".join(VALID_EXECUTION_MODES),
+            )
+            return "legacy"
+        return exec_lower
+
+    # 2. Check config file
+    config = _load_config()
+    engines = config.get("engines", {})
+    engine_config = engines.get(engine.lower(), {})
+    config_execution = engine_config.get("execution")
+    if config_execution:
+        exec_lower = config_execution.lower()
+        if exec_lower not in VALID_EXECUTION_MODES:
+            logger.warning(
+                "Invalid execution value '%s' in config for engine '%s' (valid: %s). "
+                "Falling back to 'legacy'.",
+                config_execution,
+                engine,
+                ", ".join(VALID_EXECUTION_MODES),
+            )
+            return "legacy"
+        return exec_lower
+
+    # 3. Default to legacy for backwards compatibility
+    return "legacy"
+
+
+def is_session_execution(engine: str) -> bool:
+    """Check if an engine should use the WP6 session execution pattern.
+
+    Args:
+        engine: Engine identifier ("gemini" or "claude").
+
+    Returns:
+        True if the engine should use session execution.
+    """
+    return get_engine_execution(engine) == "session"
 
 
 def get_cli_path(engine: str) -> str:

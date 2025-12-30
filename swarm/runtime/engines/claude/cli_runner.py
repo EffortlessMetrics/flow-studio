@@ -17,7 +17,11 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 from swarm.runtime.path_helpers import (
     ensure_llm_dir,
     ensure_receipts_dir,
+)
+from swarm.runtime.path_helpers import (
     receipt_path as make_receipt_path,
+)
+from swarm.runtime.path_helpers import (
     transcript_path as make_transcript_path,
 )
 from swarm.runtime.types import RunEvent
@@ -34,7 +38,9 @@ def run_step_cli(
     cli_cmd: str,
     engine_id: str,
     provider: Optional[str],
-    build_prompt_fn: Callable[[StepContext], Tuple[str, Optional[HistoryTruncationInfo], Optional[str]]],
+    build_prompt_fn: Callable[
+        [StepContext], Tuple[str, Optional[HistoryTruncationInfo], Optional[str]]
+    ],
     timeout: int = 300,
 ) -> Tuple[StepResult, Iterable[RunEvent]]:
     """Execute a step using the Claude CLI.
@@ -159,9 +165,7 @@ def run_step_cli(
                     if usage:
                         token_counts["prompt"] = usage.get("input_tokens", 0)
                         token_counts["completion"] = usage.get("output_tokens", 0)
-                        token_counts["total"] = (
-                            token_counts["prompt"] + token_counts["completion"]
-                        )
+                        token_counts["total"] = token_counts["prompt"] + token_counts["completion"]
                     if event_data.get("model"):
                         model_name = event_data["model"]
 
@@ -197,6 +201,7 @@ def run_step_cli(
     receipt = {
         "engine": engine_id,
         "mode": "cli",
+        "execution_mode": "legacy",
         "provider": provider,
         "model": model_name,
         "step_id": ctx.step_id,

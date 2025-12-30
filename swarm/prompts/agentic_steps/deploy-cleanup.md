@@ -165,9 +165,15 @@ From `deployment_decision.md` `## Machine Summary`, extract via the demoswarm sh
 ```bash
 bash .claude/scripts/demoswarm.sh ms get --file ".runs/<run-id>/deploy/deployment_decision.md" --section "## Machine Summary" --key "status" --null-if-missing
 bash .claude/scripts/demoswarm.sh ms get --file ".runs/<run-id>/deploy/deployment_decision.md" --section "## Machine Summary" --key "recommended_action" --null-if-missing
-bash .claude/scripts/demoswarm.sh ms get --file ".runs/<run-id>/deploy/deployment_decision.md" --section "## Machine Summary" --key "route_to_flow" --null-if-missing
-bash .claude/scripts/demoswarm.sh ms get --file ".runs/<run-id>/deploy/deployment_decision.md" --section "## Machine Summary" --key "route_to_agent" --null-if-missing
+bash .claude/scripts/demoswarm.sh ms get --file ".runs/<run-id>/deploy/deployment_decision.md" --section "## Machine Summary" --key "routing" --null-if-missing
 ```
+
+**Routing vocabulary:**
+- `CONTINUE` — proceed on golden path (normal completion)
+- `DETOUR` — inject sidequest chain (e.g., additional verification)
+- `INJECT_FLOW` — inject named flow (e.g., bounce to build)
+- `INJECT_NODES` — ad-hoc nodes (custom remediation steps)
+- `EXTEND_GRAPH` — propose patch (structural changes)
 
 If Machine Summary is missing/unparseable:
 
@@ -234,16 +240,18 @@ Compute receipt routing:
 
 Tighten-only rules:
 
-- If `status: CANNOT_PROCEED` ⇒ `recommended_action: FIX_ENV`, routes null
-- Else if `missing_required` non-empty ⇒ `recommended_action: RERUN`, routes null
+- If `status: CANNOT_PROCEED` ⇒ `recommended_action: FIX_ENV`, `routing: null`
+- Else if `missing_required` non-empty ⇒ `recommended_action: RERUN`, `routing: null`
 - Else:
-  - Copy `recommended_action` / `route_to_*` from `deployment_decision.md` Machine Summary if present
-  - If absent, set `recommended_action: PROCEED` (UNVERIFIED) and add a blocker ("no routing signals available")
+  - Copy `recommended_action` / `routing` from `deployment_decision.md` Machine Summary if present
+  - If absent, set `recommended_action: PROCEED`, `routing: CONTINUE` (UNVERIFIED) and add a blocker ("no routing signals available")
 
 Routing constraint:
 
-- `route_to_flow` / `route_to_agent` must be non-null **only** when `recommended_action: BOUNCE`.
-  Otherwise set both to `null` and record a concern if the source disagrees.
+- `routing` must be `CONTINUE` for normal completion (VERIFIED or UNVERIFIED without bounce)
+- `routing` must be `INJECT_FLOW` when `recommended_action: BOUNCE` (specifies which flow to bounce to)
+- `routing` may be `DETOUR`, `INJECT_NODES`, or `EXTEND_GRAPH` for non-standard remediation paths
+- Record a concern if the source routing signal is inconsistent with `recommended_action`
 
 ### Step 6: Write deploy_receipt.json
 
@@ -251,14 +259,14 @@ Write `.runs/<run-id>/deploy/deploy_receipt.json`:
 
 ```json
 {
-  "schema_version": "deploy_receipt_v1",
+  "schema_version": "deploy_receipt_v2",
   "run_id": "<run-id>",
   "flow": "deploy",
 
   "status": "VERIFIED | UNVERIFIED | CANNOT_PROCEED",
   "recommended_action": "PROCEED | RERUN | BOUNCE | FIX_ENV",
-  "route_to_flow": null,
-  "route_to_agent": null,
+  "routing": "CONTINUE | DETOUR | INJECT_FLOW | INJECT_NODES | EXTEND_GRAPH | null",
+  "routing_target": null,
 
   "missing_required": [],
   "missing_optional": [],

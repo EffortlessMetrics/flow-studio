@@ -1,0 +1,88 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "reset-sync-upstream",
+  "version": 1,
+  "title": "Reset: Sync Upstream",
+  "category": "infra",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "full_access",
+    "allowed_tools": ["Read", "Bash", "Grep", "Glob", "Write"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": true,
+      "excluded_commands": ["rm -rf", "git push --force", "git reset --hard", "git clean -fd"]
+    },
+    "max_turns": 15,
+    "context_budget": {
+      "total_chars": 100000,
+      "recent_chars": 40000,
+      "older_chars": 10000
+    }
+  },
+  "identity": {
+    "system_append": "You are executing the Sync Upstream step in Flow 8 (Reset). Your task is to fetch upstream changes and synchronize the work branch. Prefer rebase for linear history. Use merge if conflicts are expected. NEVER use --force operations. If conflicts occur, set routing signal for resolve_conflicts step.",
+    "longform_ref": "prompts/steps/reset/sync_upstream.md",
+    "tone": "neutral"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "reset/diagnose_report.md"
+    ],
+    "optional_inputs": [
+      "reset/stash_report.md"
+    ],
+    "required_outputs": [
+      "reset/sync_report.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/reset/sync_report.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "routing_signal"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "reset/sync_report.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nFetch upstream changes and rebase/merge the work branch.\n\n## Strategy\n\n1. Fetch origin to get latest remote state\n2. If behind-only: rebase for linear history\n3. If diverged: assess conflict risk\n   - Low risk: rebase\n   - High risk: merge to preserve history\n4. If conflicts occur: do NOT abort, set has_conflicts signal\n\n## Constraints\n\n- NEVER use --force operations\n- NEVER use git reset --hard\n- Prefer rebase for linear history when safe\n- Use merge if conflicts expected or divergence is complex\n\n## Output\n\nWrite {{run.base}}/reset/sync_report.md with sync results and conflict status."
+  },
+  "invariants": [
+    "NEVER use --force or --hard operations",
+    "Prefer rebase for linear history when safe",
+    "Use merge if conflicts are expected",
+    "If conflicts occur, do NOT abort - set has_conflicts routing signal",
+    "Document sync strategy and rationale",
+    "Safe Bash only - no destructive commands"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

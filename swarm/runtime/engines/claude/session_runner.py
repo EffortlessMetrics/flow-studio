@@ -19,35 +19,40 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime, timezone
-from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Tuple
+from typing import TYPE_CHECKING, Iterable, List, Optional, Tuple
 
-from swarm.runtime.path_helpers import (
-    ensure_llm_dir,
-    ensure_receipts_dir,
-    handoff_envelope_path as make_handoff_envelope_path,
-    receipt_path as make_receipt_path,
-    transcript_path as make_transcript_path,
-)
-from swarm.runtime.handoff_io import (
-    write_handoff_envelope,
-    update_envelope_routing,
-)
-from swarm.runtime.types import (
-    RoutingDecision,
-    RoutingSignal,
-    RunEvent,
-)
 from swarm.runtime.claude_sdk import (
     ClaudeSDKClient,
-    create_tool_policy_hook,
     TelemetryData,
     create_dangerous_command_hook,
     create_telemetry_hook,
+    create_tool_policy_hook,
 )
+from swarm.runtime.handoff_io import (
+    update_envelope_routing,
+    write_handoff_envelope,
+)
+from swarm.runtime.path_helpers import (
+    ensure_llm_dir,
+    ensure_receipts_dir,
+)
+from swarm.runtime.path_helpers import (
+    handoff_envelope_path as make_handoff_envelope_path,
+)
+from swarm.runtime.path_helpers import (
+    receipt_path as make_receipt_path,
+)
+from swarm.runtime.path_helpers import (
+    transcript_path as make_transcript_path,
+)
+from swarm.runtime.routing_utils import parse_routing_decision
+from swarm.runtime.types import (
+    RoutingSignal,
+    RunEvent,
+)
+
 from ..async_utils import run_async_safely
 from ..models import StepContext, StepResult
-
 from .prompt_builder import load_agent_persona
 from .stubs import run_step_stub
 
@@ -55,64 +60,6 @@ if TYPE_CHECKING:
     from .engine import ClaudeStepEngine
 
 logger = logging.getLogger(__name__)
-
-
-def parse_routing_decision(decision_str: str) -> RoutingDecision:
-    """Parse a routing decision string into a RoutingDecision enum.
-
-    Handles both canonical values (advance, loop, terminate, branch) and
-    common aliases from external sources (proceed, rerun, blocked, route).
-
-    Args:
-        decision_str: The routing decision string (case-insensitive).
-
-    Returns:
-        The corresponding RoutingDecision enum value.
-        Defaults to ADVANCE if unrecognized.
-    """
-    decision_lower = decision_str.lower().strip()
-
-    # Canonical mappings
-    canonical_map = {
-        "advance": RoutingDecision.ADVANCE,
-        "loop": RoutingDecision.LOOP,
-        "terminate": RoutingDecision.TERMINATE,
-        "branch": RoutingDecision.BRANCH,
-    }
-
-    if decision_lower in canonical_map:
-        return canonical_map[decision_lower]
-
-    # Common aliases
-    alias_map = {
-        "proceed": RoutingDecision.ADVANCE,
-        "continue": RoutingDecision.ADVANCE,
-        "next": RoutingDecision.ADVANCE,
-        "rerun": RoutingDecision.LOOP,
-        "retry": RoutingDecision.LOOP,
-        "repeat": RoutingDecision.LOOP,
-        "blocked": RoutingDecision.TERMINATE,
-        "stop": RoutingDecision.TERMINATE,
-        "end": RoutingDecision.TERMINATE,
-        "exit": RoutingDecision.TERMINATE,
-        "route": RoutingDecision.BRANCH,
-        "switch": RoutingDecision.BRANCH,
-        "redirect": RoutingDecision.BRANCH,
-    }
-
-    if decision_lower in alias_map:
-        logger.debug(
-            "Mapped routing decision alias '%s' -> %s",
-            decision_str,
-            alias_map[decision_lower].value,
-        )
-        return alias_map[decision_lower]
-
-    logger.warning(
-        "Unknown routing decision '%s', defaulting to ADVANCE",
-        decision_str,
-    )
-    return RoutingDecision.ADVANCE
 
 
 async def execute_step_session(
@@ -146,7 +93,9 @@ async def execute_step_session(
             engine._mode,
             engine._check_sdk_available(),
         )
-        result, events = run_step_stub(ctx, engine.engine_id, engine._provider, engine._build_prompt)
+        result, events = run_step_stub(
+            ctx, engine.engine_id, engine._provider, engine._build_prompt
+        )
         return result, events, None
 
     return await _execute_step_session_sdk(engine, ctx, is_terminal)
@@ -239,7 +188,7 @@ async def _execute_step_session_sdk(
         if finalize_result.success and finalize_result.envelope:
             # Enrich envelope with file_changes if available from work phase
             envelope_data = dict(finalize_result.envelope)
-            if hasattr(work_result, 'file_changes') and work_result.file_changes:
+            if hasattr(work_result, "file_changes") and work_result.file_changes:
                 envelope_data["file_changes"] = work_result.file_changes
 
             # Write envelope using unified IO (handles draft + committed)
@@ -345,7 +294,8 @@ async def _execute_step_session_sdk(
     r_path = make_receipt_path(ctx.run_base, ctx.step_id, agent_key)
     receipt = {
         "engine": engine.engine_id,
-        "mode": "session",
+        "mode": engine._mode,
+        "execution_mode": "session",
         "session_id": session_result.session_id,
         "provider": engine._provider or "claude-sdk",
         "model": work_result.model,

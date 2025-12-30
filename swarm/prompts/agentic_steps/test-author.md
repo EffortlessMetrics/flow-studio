@@ -108,8 +108,8 @@ Existing tests:
 status: VERIFIED | UNVERIFIED | CANNOT_PROCEED
 
 recommended_action: PROCEED | RERUN | BOUNCE | FIX_ENV
-route_to_agent: <agent-name | null>
-route_to_flow: <1|2|3|4|5|6 | null>
+routing_action: CONTINUE | DETOUR | INJECT_FLOW | INJECT_NODES | EXTEND_GRAPH
+routing_target: <agent-name | flow-key | null>
 
 work_status: COMPLETED | PARTIAL | FAILED
 
@@ -212,10 +212,10 @@ Use when:
 Set:
 
 - `recommended_action: PROCEED`
-- `route_to_agent: null`
-- `route_to_flow: null`
+- `routing_action: CONTINUE`
+- `routing_target: null`
 
-**Note:** The orchestrator knows the next station is `test-critic`. `route_to_*` fields are only populated for `BOUNCE`.
+**Note:** The orchestrator knows the next station is `test-critic`. `routing_action` is only set to `DETOUR`/`INJECT_FLOW`/`INJECT_NODES`/`EXTEND_GRAPH` for `BOUNCE` scenarios.
 
 ### UNVERIFIED
 
@@ -228,11 +228,11 @@ Use when:
 
 Routing:
 
-- If gaps are test-local → `recommended_action: RERUN`, `route_to_agent: null`, `route_to_flow: null`
-- If you need implementation to proceed (but tests exist) → `recommended_action: PROCEED`, `route_to_agent: null`, `route_to_flow: null` (and set `tests_passed: expected_failures`)
-- If ambiguity/spec hole blocks correct tests → `recommended_action: BOUNCE`, `route_to_agent: clarifier`, `route_to_flow: 1` (or `2` if it's a design-level gap)
+- If gaps are test-local → `recommended_action: RERUN`, `routing_action: CONTINUE`, `routing_target: null`
+- If you need implementation to proceed (but tests exist) → `recommended_action: PROCEED`, `routing_action: CONTINUE`, `routing_target: null` (and set `tests_passed: expected_failures`)
+- If ambiguity/spec hole blocks correct tests → `recommended_action: BOUNCE`, `routing_action: DETOUR`, `routing_target: clarifier` (or `INJECT_FLOW` with `routing_target: signal` if it's a requirements-level gap, or `routing_target: plan` if it's a design-level gap)
 
-**Note:** `route_to_*` fields must only be populated when `recommended_action: BOUNCE`. For `PROCEED`, `RERUN`, and `FIX_ENV`, set both to `null`.
+**Note:** `routing_action` should be `CONTINUE` for `PROCEED`, `RERUN`, and `FIX_ENV`. Use `DETOUR` to route to a specific agent, `INJECT_FLOW` to re-run an earlier flow, `INJECT_NODES` to add ad-hoc steps, or `EXTEND_GRAPH` to append steps to the current flow.
 
 ### CANNOT_PROCEED
 
@@ -244,7 +244,8 @@ Mechanical failure only:
 Set:
 
 - `recommended_action: FIX_ENV`
-- `route_to_*: null`
+- `routing_action: CONTINUE`
+- `routing_target: null`
 
 ## Handoff Guidelines
 

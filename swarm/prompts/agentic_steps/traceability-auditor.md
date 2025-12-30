@@ -127,20 +127,27 @@ Include an `## Inventory (machine countable)` section containing only lines star
 ## Status + Routing
 
 - **VERIFIED**: identity + receipts coherent; spec traceability coherent; (if GH allowed) markers/comments present.
-- **UNVERIFIED**: gaps or mismatches; route specifically:
-  - Missing/invalid receipt → `BOUNCE` to the producing flow with `route_to_station: <flow>-cleanup` (e.g., `build-cleanup`), `route_to_agent: null`
-  - run_meta/index mismatch → `BOUNCE` with `route_to_station: run-prep` (or `signal-run-prep` in Flow 1), `route_to_agent: null`
-  - Spec traceability failures (REQ/BDD) → `BOUNCE` to Flow 1 with `route_to_agent: requirements-author` or `bdd-author` (known agents)
-  - AC traceability failures (AC matrix/status) → `BOUNCE` to Flow 2 with `route_to_agent: test-strategist` or Flow 3 if AC loop incomplete
-  - GH markers missing (but GH allowed) → `BOUNCE` with `route_to_agent: gh-issue-manager`
-  - GH comment missing (but GH allowed) → `BOUNCE` with `route_to_agent: gh-reporter`
-  - Otherwise `PROCEED` with blockers recorded
+- **UNVERIFIED**: gaps or mismatches; route specifically using the routing vocabulary:
+  - Missing/invalid receipt → `DETOUR` to `<flow>-cleanup` station (e.g., `build-cleanup`)
+  - run_meta/index mismatch → `DETOUR` to `run-prep` (or `signal-run-prep` in Flow 1)
+  - Spec traceability failures (REQ/BDD) → `INJECT_NODES` with target agents `requirements-author` or `bdd-author`
+  - AC traceability failures (AC matrix/status) → `INJECT_NODES` with target agent `test-strategist` (Flow 2) or `DETOUR` to Flow 3 if AC loop incomplete
+  - GH markers missing (but GH allowed) → `INJECT_NODES` with target agent `gh-issue-manager`
+  - GH comment missing (but GH allowed) → `INJECT_NODES` with target agent `gh-reporter`
+  - Otherwise `CONTINUE` with blockers recorded
 - **CANNOT_PROCEED**: Mechanical inability to read/write required local files → `recommended_action: FIX_ENV`
 
-**Routing field rules:**
-- `route_to_station` is a free-text hint (e.g., "build-cleanup", "test-executor"). Use when you know the station but not the exact agent.
-- `route_to_agent` is a strict enum. Only set when certain the agent name is valid (e.g., `requirements-author`, `bdd-author`, `gh-issue-manager`).
-- Never set `route_to_agent` to a station name like `<flow>-cleanup`.
+**Routing vocabulary:**
+- `CONTINUE` — proceed to the next step in the current flow (default happy path)
+- `DETOUR` — temporarily jump to a station/flow for remediation, then return
+- `INJECT_NODES` — insert specific agent(s) into the current flow before continuing
+- `INJECT_FLOW` — insert an entire sub-flow before continuing
+- `EXTEND_GRAPH` — add new nodes to the flow graph dynamically
+
+**Field rules:**
+- `route_target` is a free-text hint (e.g., "build-cleanup", "test-executor"). Use when you know the station but not the exact agent.
+- `route_agents` is a list of agent keys. Only set when certain the agent name is valid (e.g., `requirements-author`, `bdd-author`, `gh-issue-manager`).
+- Never put station names like `<flow>-cleanup` in `route_agents`.
 
 ## Output format (write exactly)
 
@@ -150,9 +157,9 @@ Include an `## Inventory (machine countable)` section containing only lines star
 ## Machine Summary
 status: VERIFIED | UNVERIFIED | CANNOT_PROCEED
 recommended_action: PROCEED | RERUN | BOUNCE | FIX_ENV
-route_to_flow: <1|2|3|4|5|6|null>
-route_to_station: <string|null>
-route_to_agent: <agent|null>
+routing: CONTINUE | DETOUR | INJECT_NODES | INJECT_FLOW | EXTEND_GRAPH
+route_target: <string|null>
+route_agents: []
 missing_required: []
 blockers: []
 concerns: []

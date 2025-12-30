@@ -31,7 +31,7 @@ import json
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +52,7 @@ class TriggerCondition:
     - path_pattern: File paths match a pattern (e.g., "auth/*", "security/*")
     - iteration_count: Microloop iteration threshold
     """
+
     condition_type: str  # field_check, stall, path_pattern, iteration_count
     field: Optional[str] = None  # For field_check
     operator: str = "equals"  # equals, not_equals, gt, lt, gte, lte, contains
@@ -80,6 +81,7 @@ class SidequestStep:
         max_turns: Maximum turns for this step.
         model_tier: Model tier override ("haiku", "sonnet", "opus").
     """
+
     template_id: str
     step_id: Optional[str] = None
     objective_override: Optional[str] = None
@@ -112,6 +114,7 @@ class ReturnBehavior:
         on_condition_false: Target if condition is false.
         pass_artifacts: Artifacts to forward to resume point.
     """
+
     mode: str = "resume"
     target_node: Optional[str] = None
     condition: Optional[str] = None
@@ -135,6 +138,7 @@ class SidequestDefinition:
 
     For backwards compatibility, single-station sidequests still work.
     """
+
     sidequest_id: str
     name: str
     description: str
@@ -156,9 +160,7 @@ class SidequestDefinition:
     max_uses_per_run: int = 3  # Prevent infinite sidequest loops
 
     # Return behavior (enhanced for v2)
-    return_behavior: ReturnBehavior = field(
-        default_factory=lambda: ReturnBehavior(mode="resume")
-    )
+    return_behavior: ReturnBehavior = field(default_factory=lambda: ReturnBehavior(mode="resume"))
 
     # Metadata
     tags: List[str] = field(default_factory=list)
@@ -190,10 +192,12 @@ class SidequestDefinition:
             return self.steps
         elif self.station_id:
             # Backwards compatibility: convert to single-step
-            return [SidequestStep(
-                template_id=self.station_id,
-                objective_override=self.objective_template,
-            )]
+            return [
+                SidequestStep(
+                    template_id=self.station_id,
+                    objective_override=self.objective_template,
+                )
+            ]
         return []
 
     def get_station_id(self) -> Optional[str]:
@@ -222,7 +226,12 @@ DEFAULT_SIDEQUESTS: List[Dict[str, Any]] = [
         "station_id": "clarifier",
         "objective_template": "Clarify the following ambiguity: {{issue}}. Document assumptions and questions.",
         "triggers": [
-            {"condition_type": "field_check", "field": "has_ambiguity", "operator": "equals", "value": True},
+            {
+                "condition_type": "field_check",
+                "field": "has_ambiguity",
+                "operator": "equals",
+                "value": True,
+            },
             {"condition_type": "stall", "field": "stall_count", "operator": "gte", "value": 2},
         ],
         "trigger_mode": "any",
@@ -237,9 +246,24 @@ DEFAULT_SIDEQUESTS: List[Dict[str, Any]] = [
         "station_id": "fixer",
         "objective_template": "Diagnose environment issue: {{error_signature}}. Check dependencies, configs, and paths.",
         "triggers": [
-            {"condition_type": "field_check", "field": "failure_type", "operator": "equals", "value": "environment"},
-            {"condition_type": "field_check", "field": "error_category", "operator": "contains", "value": "import"},
-            {"condition_type": "field_check", "field": "error_category", "operator": "contains", "value": "module"},
+            {
+                "condition_type": "field_check",
+                "field": "failure_type",
+                "operator": "equals",
+                "value": "environment",
+            },
+            {
+                "condition_type": "field_check",
+                "field": "error_category",
+                "operator": "contains",
+                "value": "import",
+            },
+            {
+                "condition_type": "field_check",
+                "field": "error_category",
+                "operator": "contains",
+                "value": "module",
+            },
         ],
         "trigger_mode": "any",
         "priority": 80,
@@ -253,8 +277,18 @@ DEFAULT_SIDEQUESTS: List[Dict[str, Any]] = [
         "station_id": "test-critic",
         "objective_template": "Triage test failures: {{failure_summary}}. Identify root cause and recommend fixes.",
         "triggers": [
-            {"condition_type": "field_check", "field": "verification_passed", "operator": "equals", "value": False},
-            {"condition_type": "stall", "field": "same_failure_signature", "operator": "equals", "value": True},
+            {
+                "condition_type": "field_check",
+                "field": "verification_passed",
+                "operator": "equals",
+                "value": False,
+            },
+            {
+                "condition_type": "stall",
+                "field": "same_failure_signature",
+                "operator": "equals",
+                "value": True,
+            },
         ],
         "trigger_mode": "all",
         "priority": 60,
@@ -305,7 +339,12 @@ DEFAULT_SIDEQUESTS: List[Dict[str, Any]] = [
         "objective_template": "Refresh context for: {{current_task}}. Load additional files: {{suggested_paths}}.",
         "triggers": [
             {"condition_type": "stall", "field": "stall_count", "operator": "gte", "value": 3},
-            {"condition_type": "field_check", "field": "context_insufficient", "operator": "equals", "value": True},
+            {
+                "condition_type": "field_check",
+                "field": "context_insufficient",
+                "operator": "equals",
+                "value": True,
+            },
         ],
         "trigger_mode": "any",
         "priority": 55,
@@ -380,6 +419,7 @@ def evaluate_trigger(
 
     elif trigger.condition_type == "path_pattern":
         import fnmatch
+
         changed_paths = context.get("changed_paths", [])
         pattern = trigger.pattern or ""
         for path in changed_paths:
@@ -450,9 +490,7 @@ def parse_sidequest_definition(sq_data: Dict[str, Any]) -> SidequestDefinition:
     Supports both v1 (single station) and v2 (multi-step) formats.
     """
     # Parse triggers
-    triggers = [
-        TriggerCondition(**t) for t in sq_data.get("triggers", [])
-    ]
+    triggers = [TriggerCondition(**t) for t in sq_data.get("triggers", [])]
 
     # Parse steps if present (v2 format)
     steps = []
@@ -460,9 +498,7 @@ def parse_sidequest_definition(sq_data: Dict[str, Any]) -> SidequestDefinition:
         steps = [_parse_sidequest_step(s) for s in sq_data["steps"]]
 
     # Parse return behavior
-    return_behavior = _parse_return_behavior(
-        sq_data.get("return_behavior", "resume")
-    )
+    return_behavior = _parse_return_behavior(sq_data.get("return_behavior", "resume"))
 
     return SidequestDefinition(
         sidequest_id=sq_data["sidequest_id"],
@@ -623,6 +659,7 @@ def load_catalog_from_file(path: Path) -> SidequestCatalog:
         with open(path, "r") as f:
             if path.suffix in (".yaml", ".yml"):
                 import yaml
+
                 data = yaml.safe_load(f)
             else:
                 data = json.load(f)
@@ -664,12 +701,14 @@ def sidequests_to_navigator_options(
         if sq.is_multi_step and sq.steps:
             objective = sq.steps[0].objective_override or objective
 
-        options.append(SidequestOption(
-            sidequest_id=sq.sidequest_id,
-            station_template=station_id,
-            trigger_description=sq.description,
-            objective_template=objective,
-            priority=sq.priority,
-            cost_hint=sq.cost_hint,
-        ))
+        options.append(
+            SidequestOption(
+                sidequest_id=sq.sidequest_id,
+                station_template=station_id,
+                trigger_description=sq.description,
+                objective_template=objective,
+                priority=sq.priority,
+                cost_hint=sq.cost_hint,
+            )
+        )
     return options

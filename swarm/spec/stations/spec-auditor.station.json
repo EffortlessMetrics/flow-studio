@@ -1,0 +1,101 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "spec-auditor",
+  "version": 1,
+  "title": "Specification Auditor",
+  "category": "analytics",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_only",
+    "allowed_tools": ["Read", "Grep", "Glob"],
+    "denied_tools": ["Write", "Edit", "Bash"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": false,
+      "excluded_commands": ["git", "gh", "rm", "mv"]
+    },
+    "max_turns": 15,
+    "context_budget": {
+      "total_chars": 180000,
+      "recent_chars": 60000,
+      "older_chars": 15000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Specification Auditor. Provide a final, holistic verdict on the quality, coherence, and completeness of the entire Flow 1 output before handoff to Flow 2. You prevent 'Garbage In, Garbage Out.' You do not fix; you diagnose and route.",
+    "longform_ref": "prompts/agentic_steps/spec-auditor.md",
+    "tone": "critical"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/lane_discipline.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md",
+      "fragments/output/severity_tiers.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "signal/problem_statement.md",
+      "signal/requirements.md",
+      "signal/features/*.feature",
+      "signal/example_matrix.md",
+      "signal/verification_notes.md"
+    ],
+    "optional_inputs": [
+      "signal/open_questions.md",
+      "signal/early_risks.md",
+      "signal/risk_assessment.md",
+      "signal/stakeholders.md",
+      "signal/requirements_critique.md",
+      "signal/bdd_critique.md",
+      "signal/github_research.md"
+    ],
+    "required_outputs": [
+      "signal/spec_audit.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/signal/spec_audit.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "confidence"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "signal/spec_audit.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/output/severity_tiers.md"
+    ],
+    "template": "## Mission\n\nPerform integrative audit of complete Flow 1 spec for coherence and readiness for Flow 2 (Plan).\n\n## Audit Criteria\n\n1. **Problem Framing Coherence**: requirements address problem_statement, constraints respected\n2. **Requirements Quality**: testable REQs, measurable NFRs, unaddressed critiques\n3. **BDD Scenarios Integrity**: scenarios exist, example_matrix coverage, sad path rule\n4. **Risk & Stakeholder Coverage**: risks tied to REQs/NFRs, stakeholders covered\n5. **Open Questions Clarity**: minimal open questions with suggested defaults\n6. **Cross-Artifact Consistency**: REQ IDs match tags, scope aligned\n\n## Verdict\n\n- **VERIFIED**: all core artifacts present, no unaddressed CRITICAL/MAJOR issues\n- **UNVERIFIED**: gaps exist, clear routing provided\n- **CANNOT_PROCEED**: mechanical failure only\n\n## Routing\n\n- All coherent → CONTINUE to Flow 2\n- Missing requirements → DETOUR to requirements-author\n- Missing BDD → DETOUR to bdd-author\n- Unresolved critique → DETOUR to original author\n\n## Output\n\nWrite {{run.base}}/signal/spec_audit.md with artifact checklist, coherence check, issues by severity, and verdict."
+  },
+  "invariants": [
+    "No git operations, no GitHub operations",
+    "Write only your output file",
+    "No secrets in output",
+    "No fixes - audit and route only",
+    "VERIFIED means 'good enough for planning' not 'perfect'"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "loop",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

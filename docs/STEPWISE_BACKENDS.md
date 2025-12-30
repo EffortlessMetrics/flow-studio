@@ -555,7 +555,7 @@ Pre-generated stepwise runs are available in `swarm/examples/`:
 | `stepwise-build-claude/` | Claude | signal, plan, build | Build flow (rich mode) |
 | `stepwise-gate-claude/` | Claude | signal, plan, build, gate | Through Gate verification |
 | `stepwise-deploy-claude/` | Claude | signal, plan, build, gate, deploy | Through Deploy |
-| `stepwise-sdlc-claude/` | Claude | all 6 flows | **Complete SDLC** (44 steps, recommended) |
+| `stepwise-sdlc-claude/` | Claude | all 7 flows | **Complete SDLC** (44 steps, recommended) |
 
 Each example includes:
 - `spec.json` - Run specification
@@ -695,6 +695,8 @@ BackendId = Literal[
 
 Stepwise runs emit these event kinds:
 
+### Core Execution Events
+
 | Event | Level | Description |
 |-------|-------|-------------|
 | `run_created` | Run | Initial run creation (has `stepwise: true`) |
@@ -705,6 +707,37 @@ Stepwise runs emit these event kinds:
 | `step_end` | Step | Step completed successfully |
 | `step_error` | Step | Step failed with error |
 | `run_completed` | Run | All steps finished |
+| `run_stopping` | Run | Orderly shutdown initiated |
+| `run_stopped` | Run | Run stopped before completion |
+| `run_pausing` | Run | Pause requested |
+| `run_paused` | Run | Run paused at step boundary |
+| `run_resumed` | Run | Execution resumed |
+
+### Routing Events
+
+| Event | Level | Description |
+|-------|-------|-------------|
+| `routing_decision` | Step | Navigator made a routing decision |
+| `routing_offroad` | Step | Navigator deviated from golden path |
+| `flow_injected` | Flow | A new flow was injected mid-run |
+| `node_injected` | Step | A new node was added to current flow |
+| `graph_extended` | Run | Navigator proposed spec changes |
+
+### Stack Events
+
+| Event | Level | Description |
+|-------|-------|-------------|
+| `stack_push` | Flow | A flow was paused and new flow injected |
+| `stack_pop` | Flow | An injected flow completed, resuming parent |
+| `stack_overflow_prevented` | Flow | Max stack depth would be exceeded |
+
+### Fact Extraction Events
+
+| Event | Level | Description |
+|-------|-------|-------------|
+| `facts_updated` | Step | Fact markers extracted from handoff |
+| `assumption_recorded` | Step | An assumption was documented |
+| `decision_recorded` | Step | A significant decision was documented |
 
 Event payload examples:
 
@@ -722,6 +755,26 @@ Event payload examples:
   "status": "succeeded",
   "duration_ms": 5000,
   "engine": "claude-step"
+}
+
+// routing_offroad
+{
+  "golden_path_step": "code-critic",
+  "actual_step": "security-scanner",
+  "route_type": "DETOUR",
+  "rationale": "Detected potential SQL injection pattern",
+  "return_address": "code-critic",
+  "confidence": 0.85,
+  "evaluated_conditions": ["has_db_queries == true"],
+  "tie_breaker_used": false
+}
+
+// stack_push
+{
+  "paused_flow": "build",
+  "paused_step": "code-implementer",
+  "injected_flow": "rebase",
+  "current_depth": 2
 }
 ```
 

@@ -7,16 +7,17 @@ Thanks for contributing to Flow Studio. This project uses an agentic SDLC with s
 > - [Merge Checklist](docs/MERGE_CHECKLIST.md) — Pre-merge verification checklist
 > - [CI Troubleshooting](docs/CI_TROUBLESHOOTING.md) — Fixing CI failures
 
-All contributions go through six flows:
+All contributions go through seven flows:
 
 1. **Signal → Specs** — Problem statement, requirements, BDD
 2. **Specs → Plan** — Design, contracts, observability, test plans
 3. **Plan → Build** — Implementation with adversarial microloops
-4. **Build → Gate** — Pre-merge verification (receipts, contracts, security)
-5. **Gate → Deploy** — Merge and deployment
-6. **Deploy → Wisdom** — Regression analysis and learning loops
+4. **Build → Review** — Code review and feedback
+5. **Review → Gate** — Pre-merge verification (receipts, contracts, security)
+6. **Gate → Deploy** — Merge and deployment
+7. **Deploy → Wisdom** — Regression analysis and learning loops
 
-Before editing docs, README, or agent prompts: Skim [VOICE.md](docs/archive/VOICE.md). Docs should read like a senior engineer explaining what works, not a product launch or transformation pitch.
+Before editing docs, README, or agent prompts: Write like a senior engineer explaining what works, not a product launch or transformation pitch. Be direct, technical, and honest about trade-offs.
 
 ## Local Development Setup
 

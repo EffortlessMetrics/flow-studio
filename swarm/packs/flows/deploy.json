@@ -1,0 +1,37 @@
+{
+  "id": "deploy",
+  "name": "Artifact → Prod",
+  "description": "Move approved artifact to deployed - verify health, create audit trail",
+  "version": 1,
+  "nodes": [
+    {
+      "node_id": "deploy-trigger",
+      "template_id": "deploy-trigger",
+      "params": {}
+    },
+    {
+      "node_id": "deploy-monitor",
+      "template_id": "deploy-monitor",
+      "params": {"monitor_duration_seconds": 300}
+    },
+    {
+      "node_id": "smoke-verifier",
+      "template_id": "smoke-verifier",
+      "params": {}
+    },
+    {
+      "node_id": "deploy-decider",
+      "template_id": "deploy-decider",
+      "params": {}
+    }
+  ],
+  "edges": [
+    {"edge_id": "e1", "from": "deploy-trigger", "to": "deploy-monitor", "type": "sequence", "priority": 50},
+    {"edge_id": "e2", "from": "deploy-monitor", "to": "smoke-verifier", "type": "sequence", "priority": 50},
+    {"edge_id": "e3", "from": "smoke-verifier", "to": "deploy-decider", "type": "sequence", "priority": 50}
+  ],
+  "policy": {
+    "max_loop_iterations": 50,
+    "suggested_sidequests": []
+  }
+}

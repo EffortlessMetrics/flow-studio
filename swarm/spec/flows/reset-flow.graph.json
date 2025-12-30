@@ -1,0 +1,345 @@
+{
+  "$schema": "../schemas/flow_graph.schema.json",
+  "id": "reset-flow",
+  "version": 2,
+  "title": "Flow 8 - Reset",
+  "flow_number": 8,
+  "description": "Branch synchronization, cleanup, and run archiving. Injected when work branch diverges from upstream.",
+  "charter": {
+    "goal": "Safely synchronize work branch with upstream, clean up stale state, and archive run artifacts",
+    "question": "Is the work environment in a clean, synchronized state ready for continued work?",
+    "exit_criteria": [
+      "Work branch is rebased or merged with upstream",
+      "No untracked or uncommitted changes that could cause conflicts",
+      "Stale run artifacts are archived",
+      "Git state is verified clean"
+    ],
+    "non_goals": [
+      "Making code changes beyond conflict resolution",
+      "Running tests or builds",
+      "Creating new features or fixes",
+      "Making design decisions"
+    ],
+    "prime_directive": "Restore a clean, synchronized work environment. Preserve work-in-progress via stash or branch. Never lose uncommitted work."
+  },
+  "nodes": [
+    {
+      "node_id": "diagnose",
+      "template_id": "reset-step",
+      "overrides": {
+        "station_id": "reset-diagnose"
+      },
+      "params": {
+        "objective": "Diagnose git state: branch divergence, uncommitted changes, stale tracking"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Diagnose State",
+        "position": {"x": 100, "y": 50},
+        "color": "#94a3b8",
+        "teaching": {
+          "highlight": true,
+          "note": "Assess git state before any modifications. Never modify blindly."
+        }
+      }
+    },
+    {
+      "node_id": "stash_wip",
+      "template_id": "reset-step",
+      "overrides": {
+        "station_id": "reset-stash-wip"
+      },
+      "params": {
+        "objective": "Stash any work-in-progress changes if present"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Stash WIP",
+        "position": {"x": 100, "y": 120},
+        "color": "#f59e0b",
+        "teaching": {
+          "highlight": false,
+          "note": "Preserve uncommitted work before rebase/merge operations"
+        }
+      }
+    },
+    {
+      "node_id": "sync_upstream",
+      "template_id": "reset-step",
+      "overrides": {
+        "station_id": "reset-sync-upstream"
+      },
+      "params": {
+        "objective": "Fetch upstream and rebase/merge work branch"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Sync Upstream",
+        "position": {"x": 100, "y": 190},
+        "color": "#3b82f6",
+        "teaching": {
+          "highlight": true,
+          "note": "CRITICAL: Rebase preferred for linear history. Merge if conflicts expected."
+        }
+      }
+    },
+    {
+      "node_id": "resolve_conflicts",
+      "template_id": "reset-step",
+      "overrides": {
+        "station_id": "reset-resolve-conflicts"
+      },
+      "params": {
+        "objective": "Resolve any merge/rebase conflicts using safe strategies"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Resolve Conflicts",
+        "position": {"x": 100, "y": 260},
+        "color": "#ef4444",
+        "teaching": {
+          "highlight": true,
+          "note": "Mechanical conflict resolution only. Complex conflicts should pause."
+        }
+      }
+    },
+    {
+      "node_id": "restore_wip",
+      "template_id": "reset-step",
+      "overrides": {
+        "station_id": "reset-restore-wip"
+      },
+      "params": {
+        "objective": "Pop stashed changes and verify they apply cleanly"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Restore WIP",
+        "position": {"x": 100, "y": 330},
+        "color": "#22c55e",
+        "teaching": {
+          "highlight": false,
+          "note": "Use git stash apply, verify, then drop - never use pop directly"
+        }
+      }
+    },
+    {
+      "node_id": "prune_branches",
+      "template_id": "reset-step",
+      "overrides": {
+        "station_id": "reset-prune-branches"
+      },
+      "params": {
+        "objective": "Clean up stale remote-tracking branches and local merged branches"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Prune Branches",
+        "position": {"x": 100, "y": 400},
+        "color": "#94a3b8",
+        "teaching": {
+          "highlight": false,
+          "note": "Use safe delete (-d) only. Never delete protected branches."
+        }
+      }
+    },
+    {
+      "node_id": "archive_run",
+      "template_id": "reset-step",
+      "overrides": {
+        "station_id": "reset-archive-run"
+      },
+      "params": {
+        "objective": "Archive old run artifacts to prevent accumulation"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Archive Run",
+        "position": {"x": 100, "y": 470},
+        "color": "#94a3b8",
+        "teaching": {
+          "highlight": false,
+          "note": "Archive before delete - never permanently delete without archiving"
+        }
+      }
+    },
+    {
+      "node_id": "verify_clean",
+      "template_id": "reset-step",
+      "overrides": {
+        "station_id": "reset-verify-clean"
+      },
+      "params": {
+        "objective": "Verify git state is clean and ready for continued work"
+      },
+      "ui": {
+        "type": "step",
+        "label": "Verify Clean",
+        "position": {"x": 100, "y": 540},
+        "color": "#22c55e",
+        "teaching": {
+          "highlight": true,
+          "note": "Final gate: confirm clean state before returning to main flow"
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "edge_id": "e01-diagnose-to-stash",
+      "from": "diagnose",
+      "to": "stash_wip",
+      "type": "sequence",
+      "condition": {
+        "field": "has_uncommitted_changes",
+        "operator": "equals",
+        "value": true
+      }
+    },
+    {
+      "edge_id": "e02-diagnose-to-sync",
+      "from": "diagnose",
+      "to": "sync_upstream",
+      "type": "sequence",
+      "priority": 40,
+      "condition": {
+        "field": "has_uncommitted_changes",
+        "operator": "equals",
+        "value": false
+      }
+    },
+    {
+      "edge_id": "e03-stash-to-sync",
+      "from": "stash_wip",
+      "to": "sync_upstream",
+      "type": "sequence"
+    },
+    {
+      "edge_id": "e04-sync-to-resolve",
+      "from": "sync_upstream",
+      "to": "resolve_conflicts",
+      "type": "sequence",
+      "condition": {
+        "field": "has_conflicts",
+        "operator": "equals",
+        "value": true
+      }
+    },
+    {
+      "edge_id": "e05-sync-to-restore",
+      "from": "sync_upstream",
+      "to": "restore_wip",
+      "type": "sequence",
+      "priority": 40,
+      "condition": {
+        "field": "has_conflicts",
+        "operator": "equals",
+        "value": false
+      }
+    },
+    {
+      "edge_id": "e06-resolve-to-restore",
+      "from": "resolve_conflicts",
+      "to": "restore_wip",
+      "type": "sequence"
+    },
+    {
+      "edge_id": "e07-restore-to-prune",
+      "from": "restore_wip",
+      "to": "prune_branches",
+      "type": "sequence"
+    },
+    {
+      "edge_id": "e08-prune-to-archive",
+      "from": "prune_branches",
+      "to": "archive_run",
+      "type": "sequence"
+    },
+    {
+      "edge_id": "e09-archive-to-verify",
+      "from": "archive_run",
+      "to": "verify_clean",
+      "type": "sequence"
+    }
+  ],
+  "subflows": [],
+  "policy": {
+    "max_loop_iterations": 2,
+    "max_depth": 1,
+    "escalation": {
+      "on_blocked": "pause_for_human",
+      "max_unverified_streak": 2,
+      "escalate_on_unverified_streak": "pause"
+    },
+    "suggested_detours": [
+      {
+        "from_nodes": ["resolve_conflicts"],
+        "to_station": "clarifier",
+        "condition": {
+          "field": "conflict_complexity",
+          "operator": "equals",
+          "value": "high"
+        },
+        "return_to": "source",
+        "priority": 80
+      }
+    ],
+    "suggested_injections": [],
+    "routing_decisions": {
+      "default_decision": "CONTINUE",
+      "signal_interpretation": {
+        "on_verified": "CONTINUE",
+        "on_unverified_can_iterate": "CONTINUE",
+        "on_unverified_cannot_iterate": "PAUSE",
+        "on_blocked": "PAUSE",
+        "on_concerns": "CONTINUE"
+      }
+    },
+    "invariants": [
+      "Never lose uncommitted work",
+      "No force push to shared branches",
+      "Safe commands only (no --hard, no --force)",
+      "Archive before delete"
+    ]
+  },
+  "defaults": {
+    "context_pack": {
+      "include_upstream_artifacts": false,
+      "include_previous_envelopes": true,
+      "max_envelopes": 4,
+      "include_scent_trail": true
+    },
+    "sdk": {
+      "model": "inherit",
+      "max_turns": 10
+    }
+  },
+  "on_complete": {
+    "next_flow": "return",
+    "reason": "Reset complete; return to interrupted flow",
+    "pass_artifacts": [
+      "reset/git_status.md",
+      "reset/sync_report.md"
+    ]
+  },
+  "on_failure": {
+    "next_flow": "pause",
+    "reason": "Reset failed; human intervention required"
+  },
+  "metadata": {
+    "author": "flow-studio-swarm",
+    "tags": ["reset", "git", "cleanup", "rebase", "utility"],
+    "step_specific_stations": [
+      "reset-diagnose",
+      "reset-stash-wip",
+      "reset-sync-upstream",
+      "reset-resolve-conflicts",
+      "reset-restore-wip",
+      "reset-prune-branches",
+      "reset-archive-run",
+      "reset-verify-clean"
+    ],
+    "injection_trigger": "upstream_diverged",
+    "is_utility_flow": true
+  }
+}

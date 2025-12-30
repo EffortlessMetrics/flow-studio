@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any, Union
+from typing import Any
 
 
 def canonical_json(obj: Any, *, indent: int | None = None) -> str:
@@ -147,11 +147,7 @@ def normalize_for_hash(obj: Any) -> Any:
         Normalized copy of the object.
     """
     if isinstance(obj, dict):
-        return {
-            k: normalize_for_hash(v)
-            for k, v in sorted(obj.items())
-            if v is not None
-        }
+        return {k: normalize_for_hash(v) for k, v in sorted(obj.items()) if v is not None}
     elif isinstance(obj, (list, tuple)):
         return [normalize_for_hash(item) for item in obj]
     elif isinstance(obj, set):
@@ -205,7 +201,6 @@ def canonicalize_file(input_path: str, output_path: str | None = None) -> str:
         FileNotFoundError: If input file doesn't exist.
         json.JSONDecodeError: If input is not valid JSON.
     """
-    import os
 
     with open(input_path, "r", encoding="utf-8") as f:
         obj = json.load(f)

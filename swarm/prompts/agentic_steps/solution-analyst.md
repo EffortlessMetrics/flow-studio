@@ -140,8 +140,8 @@ Write `.runs/<run-id>/wisdom/solution_analysis.md`:
 ## Machine Summary
 status: VERIFIED | UNVERIFIED | CANNOT_PROCEED
 recommended_action: PROCEED | RERUN | BOUNCE | FIX_ENV
-route_to_flow: null
-route_to_agent: null
+routing_decision: CONTINUE | DETOUR | INJECT_FLOW | INJECT_NODES | EXTEND_GRAPH
+routing_target: null  # Flow or node reference when routing_decision is not CONTINUE
 blockers: []
 concerns: []
 
@@ -286,6 +286,27 @@ Examples:
 **Recommendation:** PROCEED to next station.
 
 **Reasoning:** Core requirements (REQ-001, REQ-002, REQ-004) fully traced with implementation and tests. REQ-003 missing OAuth implementation (documented gap). REQ-002 has missing edge case tests (identified as SOL-002). Overall: we built what was specified, with documented gaps.
+```
+
+## Off-Road Justification
+
+When recommending any off-road decision (DETOUR, INJECT_FLOW, INJECT_NODES) via routing_decision, you MUST provide why_now justification:
+
+- **trigger**: What specific condition triggered this recommendation?
+- **delay_cost**: What happens if we don't act now?
+- **blocking_test**: Is this blocking the current objective?
+- **alternatives_considered**: What other options were evaluated?
+
+Example:
+```json
+{
+  "why_now": {
+    "trigger": "REQ-003 (OAuth) has no implementation—0% coverage",
+    "delay_cost": "Core feature missing from release; users cannot authenticate via SSO",
+    "blocking_test": "Cannot satisfy 'all requirements implemented' gate criterion",
+    "alternatives_considered": ["Ship without OAuth (rejected: contractual requirement)", "Mark as known gap (rejected: blocks primary use case)"]
+  }
+}
 ```
 
 ## Philosophy

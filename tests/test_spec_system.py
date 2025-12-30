@@ -487,7 +487,8 @@ class TestSpecCompilerSimpleFlow:
         assert plan.station_id == "test-station"
         assert plan.step_id == "step_1"
         assert plan.flow_id == "test-flow"
-        assert plan.model == "sonnet"
+        # Model is resolved from tier name to full ID
+        assert plan.model.startswith("claude-"), f"Expected resolved model ID, got: {plan.model}"
         assert len(plan.prompt_hash) == 16  # Truncated SHA256
 
     def test_compile_with_context_pack(self, populated_spec_repo: Path, mock_context_pack):

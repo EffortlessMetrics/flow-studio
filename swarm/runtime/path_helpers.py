@@ -30,6 +30,7 @@ from typing import List, Optional, Tuple
 LLM_DIR = "llm"
 RECEIPTS_DIR = "receipts"
 HANDOFF_DIR = "handoff"
+FORENSICS_DIR = "forensics"
 
 # File extensions
 TRANSCRIPT_EXT = ".jsonl"
@@ -174,6 +175,51 @@ def handoff_envelope_path(run_base: Path, step_id: str) -> Path:
     """
     filename = f"{step_id}.json"
     return run_base / HANDOFF_DIR / filename
+
+
+def ensure_forensics_dir(run_base: Path) -> Path:
+    """Ensure forensics/ directory exists and return its path.
+
+    Creates the directory and any parent directories if they don't exist.
+    Forensics files contain out-of-line data extracted from handoff envelopes
+    to reduce ledger bloat (e.g., file_changes, large artifacts).
+
+    Args:
+        run_base: The RUN_BASE path
+
+    Returns:
+        Path to the forensics/ directory
+
+    Example:
+        >>> forensics_dir = ensure_forensics_dir(Path("/runs/abc/build"))
+        >>> forensics_dir.exists()
+        True
+    """
+    forensics_path = run_base / FORENSICS_DIR
+    forensics_path.mkdir(parents=True, exist_ok=True)
+    return forensics_path
+
+
+def file_changes_path(run_base: Path, step_id: str) -> Path:
+    """Generate file_changes artifact path for out-of-line storage.
+
+    When file_changes data exceeds a size threshold, it is extracted
+    from the handoff envelope and stored separately in the forensics
+    directory to reduce ledger bloat.
+
+    Args:
+        run_base: The RUN_BASE path (e.g., swarm/runs/<run-id>/<flow-key>)
+        step_id: Step identifier within the flow
+
+    Returns:
+        Path to the file_changes artifact: RUN_BASE/forensics/file_changes_<step_id>.json
+
+    Example:
+        >>> file_changes_path(Path("/runs/abc/build"), "1")
+        PosixPath('/runs/abc/build/forensics/file_changes_1.json')
+    """
+    filename = f"file_changes_{step_id}.json"
+    return run_base / FORENSICS_DIR / filename
 
 
 def parse_transcript_filename(filename: str) -> Optional[Tuple[str, str, str]]:

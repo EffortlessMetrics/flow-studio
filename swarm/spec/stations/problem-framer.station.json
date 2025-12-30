@@ -1,0 +1,94 @@
+{
+  "$schema": "../schemas/station.schema.json",
+  "id": "problem-framer",
+  "version": 1,
+  "title": "Problem Framer",
+  "category": "shaping",
+  "sdk": {
+    "model": "inherit",
+    "permission_mode": "bypassPermissions",
+    "tool_profile": "read_write",
+    "allowed_tools": ["Read", "Write", "Grep", "Glob"],
+    "sandbox": {
+      "enabled": true,
+      "auto_allow_bash": false,
+      "excluded_commands": ["git", "gh", "rm", "mv"]
+    },
+    "max_turns": 12,
+    "context_budget": {
+      "total_chars": 150000,
+      "recent_chars": 50000,
+      "older_chars": 10000
+    }
+  },
+  "identity": {
+    "system_append": "You are the Problem Framer. Distill raw signal into a crisp, testable problem statement that makes requirements obvious. Convert 'what was said' into 'what the system must address' without prescribing implementation. You do NOT block for ambiguity - document assumptions and keep moving.",
+    "longform_ref": "prompts/agentic_steps/problem-framer.md",
+    "tone": "analytical"
+  },
+  "policy": {
+    "invariants_ref": [
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md",
+      "fragments/common/lane_discipline.md"
+    ],
+    "handoff_ref": [
+      "fragments/common/handoff.md",
+      "fragments/common/status_model.md",
+      "fragments/output/machine_summary.md"
+    ]
+  },
+  "io": {
+    "required_inputs": [
+      "signal/issue_normalized.md"
+    ],
+    "optional_inputs": [
+      "signal/context_brief.md",
+      "signal/github_research.md"
+    ],
+    "required_outputs": [
+      "signal/problem_statement.md"
+    ],
+    "optional_outputs": []
+  },
+  "handoff": {
+    "draft_path_template": "{{run.base}}/signal/problem_statement.md",
+    "schema_ref": "schemas/handoff_envelope.schema.json",
+    "required_fields": [
+      "status",
+      "summary",
+      "artifacts",
+      "confidence"
+    ]
+  },
+  "verify": {
+    "required_artifacts": [
+      "signal/problem_statement.md"
+    ],
+    "gate_status_on_fail": "UNVERIFIED"
+  },
+  "runtime_prompt": {
+    "fragments": [
+      "fragments/common/preflight.md",
+      "fragments/common/lane_discipline.md",
+      "fragments/common/invariants.md",
+      "fragments/common/run_base.md"
+    ],
+    "template": "## Mission\n\nDistill normalized signal into a crisp, testable problem statement.\n\n## Context\n\n{{#each inputs}}\n- {{this}}\n{{/each}}\n\n## Output\n\n- `{{run.base}}/signal/problem_statement.md`\n\n## Key Questions to Answer\n\n- What outcome is currently blocked or degraded?\n- What behavior is missing/incorrect?\n- Does this request imply a change to how data is stored or structured? (If yes, include State Transitions section)\n\n## Constraints\n\n- Distill, don't solve - state the problem in system terms, not solutions\n- Assumptions over blocking - when ambiguous, make a conservative assumption and document it\n- Flag state changes - if data/schema changes implied, create State Transitions section\n- Questions with defaults - always suggest a default so the flow can proceed\n- No git ops, no secrets, no solutions"
+  },
+  "invariants": [
+    "No git ops - no commit/push/checkout",
+    "Write only your output: problem_statement.md",
+    "No secrets - redact tokens/keys in output as [REDACTED:<type>]",
+    "No solutions - state constraints, risks, success criteria, and non-goals but never prescribe architecture or libraries",
+    "Distill, don't solve - state the problem in system terms",
+    "Assumptions over blocking - when ambiguous, make a conservative assumption and document it",
+    "If data/schema changes implied, MUST include State Transitions section"
+  ],
+  "routing_hints": {
+    "on_verified": "advance",
+    "on_unverified": "advance_with_concerns",
+    "on_partial": "advance_with_concerns",
+    "on_blocked": "escalate"
+  }
+}

@@ -89,7 +89,7 @@ All 7 files reviewed for markdown formatting, cross-references, accuracy, and st
 **Findings**:
 - Markdown formatting: CORRECT
 - Section 2.5 (Out-of-Band Execution Model) added: Well-structured with:
-  - Relationship to six flows table
+  - Relationship to seven flows table
   - No mid-flow blocking guarantee
   - Applicability matrix
   - Timing diagram (ASCII art renders correctly)
@@ -153,7 +153,7 @@ All 7 files reviewed for markdown formatting, cross-references, accuracy, and st
 **Status**: VERIFIED
 
 **Findings**:
-- Directory structure: Complete with all 6 flow directories (signal, plan, build, gate, deploy, wisdom)
+- Directory structure: Complete with all 7 flow directories (signal, plan, build, review, gate, deploy, wisdom)
 - README.md: Well-formatted, documents purpose and FR verification scope
 - EXECUTION_CHECKLIST.md: Comprehensive M4-M6 execution guide
 - Artifacts present:

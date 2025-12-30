@@ -5,6 +5,31 @@ key: review
 title: "Flow 4 - Draft → Ready (Review)"
 description: "Harvest PR feedback, cluster into actionable items, apply fixes, flip Draft to Ready when complete."
 
+charter:
+  goal: "Resolve all blocking PR feedback and transition Draft PR to Ready for merge"
+  exit_criteria:
+    - "All CRITICAL and MAJOR work items resolved"
+    - "PR feedback processed and clustered into review_worklist.json"
+    - "pending_blocking count is 0"
+    - "Draft PR flipped to Ready (or documented reason why not)"
+    - "review_receipt.json produced with resolution summary"
+  non_goals:
+    - "Adding features not requested in feedback"
+    - "Fundamental design changes (bounce to Flow 2 if needed)"
+    - "Refactoring beyond what feedback explicitly requests"
+    - "Addressing INFO-level items if CRITICAL/MAJOR remain"
+  offroad_policy:
+    justified:
+      - "DETOUR to run additional tests when feedback questions coverage"
+      - "DETOUR to lint-fix when style feedback is clustered"
+      - "INJECT_NODES for targeted security fix if reviewer flags vulnerability"
+      - "Loop back to harvest step when new feedback arrives mid-resolution"
+    not_justified:
+      - "INJECT_FLOW to wisdom before review is complete"
+      - "Design changes without explicit reviewer request and Flow 2 bounce"
+      - "Expanding scope to address nice-to-have suggestions"
+      - "Ignoring blocking feedback to accelerate merge"
+
 teaching:
   title: "Draft to Ready: The Finishing School"
   summary: "Flow 3 built the house. Flow 4 does the punch list. Harvest all PR feedback (bots + humans), cluster into Work Items, apply fixes, checkpoint often, and flip Draft PR to Ready when review is complete."

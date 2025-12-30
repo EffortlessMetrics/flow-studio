@@ -46,11 +46,14 @@ Optional (if present):
 
 `PROCEED | RERUN | BOUNCE | FIX_ENV`
 
-Routing specificity:
-- `route_to_flow: 1|2|3|4|5|6|7|null`
-- `route_to_agent: <agent-name|null>`
+**Actions explained:**
+- `PROCEED`: Ready for Gate, continue on golden path
+- `RERUN`: Issue fixable within Build—describe what needs fixing in handoff
+- `BOUNCE`: Issue requires Plan or Signal work—describe the upstream dependency in handoff
+- `FIX_ENV`: Environment/tooling issue—Navigator injects `env-doctor` sidequest
 
-Route fields may be populated for **RERUN** or **BOUNCE**. For `PROCEED` and `FIX_ENV`, set both to `null`.
+The Navigator uses your `recommended_action` and handoff summary to determine routing.
+You don't need to specify flow numbers or agent names—describe the issue clearly.
 
 ## What you are checking
 
@@ -99,8 +102,8 @@ Write exactly this structure:
 ## Machine Summary
 status: VERIFIED | UNVERIFIED | CANNOT_PROCEED
 recommended_action: PROCEED | RERUN | BOUNCE | FIX_ENV
-route_to_flow: <1|2|3|4|5|6|null>
-route_to_agent: <agent-name|null>
+routing_intent: CONTINUE | DETOUR | INJECT_FLOW | INJECT_NODES | EXTEND_GRAPH
+routing_target: <agent-name or flow-name or null>
 
 blockers:
   - <must change to proceed>
@@ -161,13 +164,25 @@ Rationale: <1 short paragraph grounded in critic statuses + mismatch check>
 
 ## Routing guidance (how to fill Machine Summary)
 
-* If you cannot read/write due to IO/perms → `status: CANNOT_PROCEED`, `recommended_action: FIX_ENV`.
-* If `test_critique.md` missing → `status: UNVERIFIED`, `recommended_action: RERUN`, `route_to_agent: test-critic`, `route_to_flow: 3`.
-* If `code_critique.md` missing → `status: UNVERIFIED`, `recommended_action: RERUN`, `route_to_agent: code-critic`, `route_to_flow: 3`.
-* If test-critic UNVERIFIED and can_further_iteration_help is yes → `recommended_action: RERUN`, `route_to_agent: test-author`, `route_to_flow: 3`.
-* If code-critic UNVERIFIED and can_further_iteration_help is yes → `recommended_action: RERUN`, `route_to_agent: code-implementer`, `route_to_flow: 3`.
-* If remaining issues require design/spec answers → `recommended_action: BOUNCE`, set `route_to_flow: 2` (Plan) or `1` (Signal).
-* If everything is clean → `status: VERIFIED`, `recommended_action: PROCEED`.
+The new routing vocabulary uses **intent** and **target** instead of legacy `route_to_flow`/`route_to_agent`:
+
+| Intent | Meaning |
+|--------|---------|
+| `CONTINUE` | Proceed on the golden path (next step or flow) |
+| `DETOUR` | Jump to a specific agent within the current flow |
+| `INJECT_FLOW` | Insert an entire flow before continuing |
+| `INJECT_NODES` | Insert specific agent steps before continuing |
+| `EXTEND_GRAPH` | Add nodes to the end of the current flow |
+
+**Routing rules:**
+
+* If you cannot read/write due to IO/perms → `status: CANNOT_PROCEED`, `recommended_action: FIX_ENV`, `routing_intent: INJECT_NODES`, `routing_target: env-doctor`.
+* If `test_critique.md` missing → `status: UNVERIFIED`, `recommended_action: RERUN`, `routing_intent: DETOUR`, `routing_target: test-critic`.
+* If `code_critique.md` missing → `status: UNVERIFIED`, `recommended_action: RERUN`, `routing_intent: DETOUR`, `routing_target: code-critic`.
+* If test-critic UNVERIFIED and can_further_iteration_help is yes → `recommended_action: RERUN`, `routing_intent: DETOUR`, `routing_target: test-author`.
+* If code-critic UNVERIFIED and can_further_iteration_help is yes → `recommended_action: RERUN`, `routing_intent: DETOUR`, `routing_target: code-implementer`.
+* If remaining issues require design/spec answers → `recommended_action: BOUNCE`, `routing_intent: INJECT_FLOW`, `routing_target: plan` (or `signal` for requirements issues).
+* If everything is clean → `status: VERIFIED`, `recommended_action: PROCEED`, `routing_intent: CONTINUE`, `routing_target: null`.
 
 ## Handoff Guidelines
 

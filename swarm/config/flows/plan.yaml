@@ -5,6 +5,29 @@ key: plan
 title: "Flow 2 - Spec → Design (Planning)"
 description: "Requirements → ADR, contracts, observability spec, test/work plans, design validation."
 
+charter:
+  goal: "Produce a complete, validated design with ADR, contracts, and work plan"
+  exit_criteria:
+    - "ADR documents chosen architecture with context and consequences"
+    - "API contracts define all public interfaces"
+    - "Test plan maps BDD scenarios to test types with coverage targets"
+    - "Work plan breaks implementation into atomic, testable subtasks"
+    - "Design critique confirms alignment with requirements"
+  non_goals:
+    - "Writing implementation code"
+    - "Creating tests (test plan only, not test code)"
+    - "Modifying existing codebase"
+    - "Making deployment decisions"
+  offroad_policy:
+    justified:
+      - "DETOUR to gather additional codebase context when impact analysis is incomplete"
+      - "DETOUR to research external API dependencies when contracts depend on them"
+      - "INJECT_NODES for additional design review if security/compliance concerns surface"
+    not_justified:
+      - "INJECT_FLOW to build - design must be complete first"
+      - "Implementation spikes disguised as design validation"
+      - "Expanding scope beyond verified requirements from Flow 1"
+
 teaching:
   title: "Spec to Design: Architecture Decisions and Contracts"
   summary: "This flow transforms requirements into concrete design decisions documented in an ADR (Architecture Decision Record). The ADR becomes the authoritative guide for Flow 3 implementation, and contracts define the boundaries that the Gate flow will enforce."

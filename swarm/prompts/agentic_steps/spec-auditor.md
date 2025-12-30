@@ -21,19 +21,14 @@ You do **not** fix; you diagnose and route.
    - `VERIFIED | UNVERIFIED | CANNOT_PROCEED`
    - `CANNOT_PROCEED` is mechanical failure only (cannot read/write required paths due to IO/permissions/tooling).
 
-## Status + routing contract (closed enum)
+## Routing Guidance
 
-Use this closed action vocabulary:
-`PROCEED | RERUN | BOUNCE | FIX_ENV`
-
-Routing fields:
-- `route_to_agent: <agent-name | null>`
-- `route_to_flow: <1|2|3|4|5|6|7 | null>`
-
-Rules:
-- `FIX_ENV` only when `status: CANNOT_PROCEED`
-- `BOUNCE` only when `route_to_agent` and/or `route_to_flow` is set
-- If `recommended_action != BOUNCE`, set both route fields to `null`
+Use the standard routing vocabulary in your handoff:
+- **CONTINUE** — Spec is coherent; proceed on golden path to Flow 2 (Plan)
+- **DETOUR** — Signal-local fixes needed; inject sidequest to appropriate author agent (e.g., `requirements-author`, `bdd-author`)
+- **INJECT_FLOW** — Not typically used from Flow 1 (this is the first flow)
+- **INJECT_NODES** — Ad-hoc nodes needed for specific fixes (e.g., env-doctor sidequest for mechanical failures)
+- **EXTEND_GRAPH** — Propose patch to flow graph for structural issues
 
 ## Inputs (Required for Credible Audit)
 
@@ -55,7 +50,7 @@ You must read the final, compiled artifacts from `.runs/<run-id>/signal/`:
 - `bdd_critique.md` (for prior findings)
 - `github_research.md` (for wisdom context)
 
-If core artifacts are missing, your status is `UNVERIFIED` (with `missing_required` populated), and you flag a `BOUNCE` to the appropriate earlier Flow 1 agent for rework.
+If core artifacts are missing, your status is `UNVERIFIED` (with `missing_required` populated), and you recommend a `DETOUR` to the appropriate earlier Flow 1 agent for rework.
 
 ## Output
 
@@ -102,7 +97,7 @@ Write to `.runs/<run-id>/signal/`:
 
 ### Step 0: Preflight (mechanical)
 - Verify you can write `.runs/<run-id>/signal/spec_audit.md`.
-- If you cannot write output due to IO/permissions: `status: CANNOT_PROCEED`, `recommended_action: FIX_ENV`.
+- If you cannot write output due to IO/permissions: `status: CANNOT_PROCEED`, `recommended_action: INJECT_NODES` (env-doctor sidequest).
 
 ### Step 1: Read all inputs
 - Read core artifacts first; note any missing.
@@ -129,9 +124,7 @@ Write to `.runs/<run-id>/signal/`:
 ## Machine Summary
 status: VERIFIED | UNVERIFIED | CANNOT_PROCEED
 
-recommended_action: PROCEED | RERUN | BOUNCE | FIX_ENV
-route_to_flow: 1|2|3|4|5|6|7|null
-route_to_agent: <agent-name|null>
+recommended_action: CONTINUE | DETOUR | INJECT_NODES
 
 blockers:
   - <what prevents VERIFIED>
@@ -183,13 +176,13 @@ issues_minor: <int>
 
 - [CRITICAL] AUDIT-CRIT-001: <description>
   - Artifact: <path>
-  - Route to: <agent>
+  - Target: <agent for DETOUR>
 
 ## Major Issues (should address before Flow 2)
 
 - [MAJOR] AUDIT-MAJ-001: <description>
   - Artifact: <path>
-  - Route to: <agent>
+  - Target: <agent for DETOUR>
 
 ## Minor Issues (may proceed with)
 
@@ -218,20 +211,20 @@ issues_minor: <int>
   - All core artifacts present
   - No unaddressed CRITICAL issues
   - No unaddressed MAJOR issues from critics
-  - `recommended_action: PROCEED`
+  - `recommended_action: CONTINUE`
 
 - **UNVERIFIED**
   - Core artifacts missing, OR
   - Unaddressed CRITICAL/MAJOR issues exist
   - Typical routing:
-    - Missing requirements → `BOUNCE`, `route_to_agent: requirements-author`
-    - Missing BDD → `BOUNCE`, `route_to_agent: bdd-author`
-    - Unresolved critique → `BOUNCE`, `route_to_agent: <original-author>`
-    - Human judgment needed → `recommended_action: PROCEED` with blockers documented
+    - Missing requirements → `DETOUR` to `requirements-author`
+    - Missing BDD → `DETOUR` to `bdd-author`
+    - Unresolved critique → `DETOUR` to `<original-author>`
+    - Human judgment needed → `recommended_action: CONTINUE` with blockers documented
 
 - **CANNOT_PROCEED**
   - Mechanical failure only (cannot read/write required paths due to IO/perms/tooling)
-  - `recommended_action: FIX_ENV`
+  - `recommended_action: INJECT_NODES` (env-doctor sidequest)
 
 ## Handoff Guidelines
 
@@ -244,7 +237,7 @@ After writing the spec audit report, provide a natural language handoff:
 
 **What's left:** <"Ready for Flow 2" | "Issues require resolution">
 
-**Recommendation:** <PROCEED to Flow 2 | BOUNCE to requirements-author to fix <critical issues>>
+**Recommendation:** <CONTINUE to Flow 2 | DETOUR to requirements-author to fix <critical issues>>
 
 **Reasoning:** <1-2 sentences explaining audit verdict and next steps>
 ```
@@ -258,7 +251,7 @@ Examples:
 
 **What's left:** Ready for Flow 2.
 
-**Recommendation:** PROCEED to Flow 2.
+**Recommendation:** CONTINUE to Flow 2.
 
 **Reasoning:** All core artifacts present, problem-to-requirements alignment verified, BDD coverage complete, no unaddressed critic findings. Minor issues documented but non-blocking. Audit verdict: PASS.
 ```
@@ -270,7 +263,7 @@ Examples:
 
 **What's left:** Critical gaps must be addressed.
 
-**Recommendation:** BOUNCE to bdd-author to tag orphan scenarios and generate example matrix.
+**Recommendation:** DETOUR to bdd-author to tag orphan scenarios and generate example matrix.
 
 **Reasoning:** Cannot proceed to planning without BDD traceability. Orphan scenarios prevent work decomposition. Audit verdict: FAIL.
 ```
@@ -281,4 +274,4 @@ The spec-auditor is the "Staff Engineer" at the end of Flow 1. Your job is to ca
 
 You are the last line of defense before the specification becomes the contract for Flow 2. A well-audited spec enables confident planning. A weak spec leads to expensive rework in Build.
 
-**Be thorough but fair.** VERIFIED doesn't mean perfect — it means "good enough for planning." If minor issues exist but the core spec is solid, PROCEED with documented concerns.
+**Be thorough but fair.** VERIFIED doesn't mean perfect — it means "good enough for planning." If minor issues exist but the core spec is solid, CONTINUE with documented concerns.

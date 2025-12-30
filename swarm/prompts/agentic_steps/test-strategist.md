@@ -193,9 +193,10 @@ blockers:
   - <short actionable blocker>
 concerns:
   - <non-gating issues>
-recommended_action: PROCEED | RERUN | BOUNCE | FIX_ENV
-route_to_agent: <agent-name | null>
-route_to_flow: <1|2|3|4|5|6 | null>
+routing:
+  decision: CONTINUE | DETOUR | INJECT_FLOW
+  target: <flow-or-node | null>
+  justification: <reason for non-CONTINUE decisions>
 
 counts:
   scenarios_total: <int|null>
@@ -326,11 +327,10 @@ Use when:
 
 Set:
 
-* `recommended_action: PROCEED`
-* `route_to_agent: null`
-* `route_to_flow: null`
+* `routing.decision: CONTINUE`
+* `routing.target: null`
 
-**Note:** The orchestrator knows the next station. `route_to_*` fields are only populated for `BOUNCE`.
+**Note:** The orchestrator knows the next station. CONTINUE means proceed on the golden path.
 
 ### UNVERIFIED
 
@@ -343,11 +343,11 @@ Use when:
 
 Routing:
 
-* If gaps are spec-local (missing features/scenarios) → `recommended_action: BOUNCE`, `route_to_agent: bdd-author`, `route_to_flow: 1`
-* If requirements are missing/unclear → `recommended_action: BOUNCE`, `route_to_agent: requirements-author`, `route_to_flow: 1`
-* If you can proceed with documented assumptions → `recommended_action: PROCEED`, `route_to_agent: null`, `route_to_flow: null` (and note assumptions in Gaps section)
+* If gaps are spec-local (missing features/scenarios) → `routing.decision: DETOUR`, `routing.target: bdd-author`, `routing.justification: "Missing @REQ tags on scenarios"`
+* If requirements are missing/unclear → `routing.decision: DETOUR`, `routing.target: requirements-author`, `routing.justification: "Requirements incomplete"`
+* If you can proceed with documented assumptions → `routing.decision: CONTINUE`, `routing.target: null` (and note assumptions in Gaps section)
 
-**Note:** `route_to_*` fields must only be populated when `recommended_action: BOUNCE`. For `PROCEED`, `RERUN`, and `FIX_ENV`, set both to `null`.
+**Note:** DETOUR injects a sidequest and returns to the golden path. CONTINUE proceeds normally. Use INJECT_FLOW only when a full flow (e.g., Flow 1) needs to run.
 
 ### CANNOT_PROCEED
 
@@ -358,8 +358,10 @@ Mechanical failure only:
 
 Set:
 
-* `recommended_action: FIX_ENV`
-* `route_to_*: null`
+* `routing.decision: CONTINUE` (with blocker documented)
+* `routing.target: null`
+
+The blocker should be listed in the `blockers:` field. The orchestrator will handle environmental issues.
 
 ## Handoff Guidelines
 
@@ -372,7 +374,7 @@ After writing the test plan and AC matrix, provide a natural language handoff:
 
 **What's left:** <"Ready for implementation planning" | "Gaps in test mapping">
 
-**Recommendation:** <PROCEED to work-planner | BOUNCE to bdd-author to fix <gaps>>
+**Recommendation:** <CONTINUE to work-planner | DETOUR to bdd-author to fix <gaps>>
 
 **Reasoning:** <1-2 sentences explaining test strategy and AC breakdown>
 ```
@@ -386,7 +388,7 @@ Examples:
 
 **What's left:** Ready for implementation planning.
 
-**Recommendation:** PROCEED to work-planner.
+**Recommendation:** CONTINUE to work-planner.
 
 **Reasoning:** Complete scenario-to-test-type mapping. All requirements have corresponding ACs. Coverage thresholds set per test_plan.md stable markers. Mutation testing required for auth module (P0).
 ```
@@ -398,7 +400,7 @@ Examples:
 
 **What's left:** Orphan scenarios prevent test type assignment.
 
-**Recommendation:** BOUNCE to bdd-author to tag scenarios in login.feature.
+**Recommendation:** DETOUR to bdd-author to tag scenarios in login.feature.
 
 **Reasoning:** Cannot create complete AC matrix without REQ traceability. Scenarios at login.feature:12, :25, :38 need @REQ tags.
 ```
