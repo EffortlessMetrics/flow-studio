@@ -461,7 +461,7 @@ def extract_facts_from_run(
         result.errors.append(f"Run directory not found: {run_base}")
         return result
 
-    # Known flow keys from registry
+    # Known flow keys from registry (includes review)
     flow_keys = get_flow_order()
 
     for flow_key in flow_keys:

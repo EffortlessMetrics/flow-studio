@@ -31,11 +31,9 @@ from __future__ import annotations
 
 import json
 import sys
-import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
-from unittest.mock import MagicMock, patch
+from typing import Any, Dict, List
 
 import pytest
 
@@ -55,9 +53,6 @@ from swarm.runtime.types import (
     RunSummary,
     SDLCStatus,
     generate_run_id,
-    run_event_from_dict,
-    run_state_from_dict,
-    run_state_to_dict,
 )
 
 
@@ -289,8 +284,9 @@ class TestPhase6Verification:
                 run_id=run_id,
             )
         except Exception as e:
-            # Even if execution fails, verify what was created
-            pass
+            # Expected: execution may fail due to missing flow registry config
+            # in temp directory. We verify artifacts created before failure.
+            print(f"Expected failure during stub execution: {type(e).__name__}: {e}")
 
         # Verify run directory exists
         assert run_path.exists(), f"Run directory should exist: {run_path}"
@@ -336,8 +332,8 @@ class TestPhase6Verification:
         run_id = generate_run_id()
         flow_key = "signal"
 
-        # Create initial run artifacts
-        run_path = _write_initial_run_artifacts(env["runs_dir"], run_id, flow_key)
+        # Create initial run artifacts (run_path unused, but call is needed for side effects)
+        _write_initial_run_artifacts(env["runs_dir"], run_id, flow_key)
 
         # Create initial run_state.json simulating an interrupted run
         initial_state = RunState(
@@ -428,8 +424,8 @@ class TestPhase6Verification:
         run_id = generate_run_id()
         flow_key = "signal"
 
-        # Create initial run artifacts
-        run_path = _write_initial_run_artifacts(env["runs_dir"], run_id, flow_key)
+        # Create initial run artifacts (run_path unused, but call is needed for side effects)
+        _write_initial_run_artifacts(env["runs_dir"], run_id, flow_key)
 
         # Simulate a complete run by writing events
         events_to_write = [
@@ -526,8 +522,8 @@ class TestPhase6Verification:
         run_id = generate_run_id()
         flow_key = "signal"
 
-        # Create initial run artifacts
-        run_path = _write_initial_run_artifacts(env["runs_dir"], run_id, flow_key)
+        # Create initial run artifacts (run_path unused, but call is needed for side effects)
+        _write_initial_run_artifacts(env["runs_dir"], run_id, flow_key)
 
         # Simulate a microloop execution with multiple iterations
         loop_iterations = []
@@ -718,8 +714,8 @@ class TestPhase6EdgeCases:
         env = temp_run_dir
         run_id = generate_run_id()
 
-        # Create run directory without events
-        run_path = _write_initial_run_artifacts(env["runs_dir"], run_id, "signal")
+        # Create run directory without events (run_path unused)
+        _write_initial_run_artifacts(env["runs_dir"], run_id, "signal")
 
         # Read events from empty/nonexistent file
         events = storage.read_events(run_id, runs_dir=env["runs_dir"])
@@ -784,8 +780,8 @@ class TestPhase6EdgeCases:
         env = temp_run_dir
         run_id = generate_run_id()
 
-        # Create run directory
-        run_path = _write_initial_run_artifacts(env["runs_dir"], run_id, "signal")
+        # Create run directory (run_path unused)
+        _write_initial_run_artifacts(env["runs_dir"], run_id, "signal")
 
         # Write initial run state
         initial_state = RunState(

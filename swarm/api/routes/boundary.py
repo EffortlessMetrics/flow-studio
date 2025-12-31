@@ -326,7 +326,7 @@ def _read_all_envelopes(run_base: Path, flow_key: Optional[str] = None) -> List[
     """Read all handoff envelopes for a run, optionally filtered by flow."""
     envelopes = []
 
-    # Flow order for iteration
+    # Flow order for iteration (from registry, includes review)
     flow_order = get_flow_order()
 
     if flow_key:

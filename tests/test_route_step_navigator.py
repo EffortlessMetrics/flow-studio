@@ -588,14 +588,16 @@ class TestNavigatorErrorHandling:
 
         # Verify warning was logged
         mock_logger.warning.assert_called()
-        warning_call = mock_logger.warning.call_args
-        warning_str = str(warning_call)
+        call_args = mock_logger.warning.call_args.args
+
+        # Join all args to check message content (more robust than str(call))
+        message_content = " ".join(str(arg) for arg in call_args)
 
         # Should include exception type, step_id, run_id, flow_key in the message
-        assert "ValueError" in warning_str  # Exception type
-        assert "test_step" in warning_str    # Step ID
-        assert "test-run" in warning_str     # Run ID
-        assert "build" in warning_str        # Flow key
+        assert "ValueError" in message_content, f"Missing ValueError in: {message_content}"
+        assert "test_step" in message_content, f"Missing step_id in: {message_content}"
+        assert "test-run" in message_content, f"Missing run_id in: {message_content}"
+        assert "build" in message_content, f"Missing flow_key in: {message_content}"
 
 
 # -----------------------------------------------------------------------------

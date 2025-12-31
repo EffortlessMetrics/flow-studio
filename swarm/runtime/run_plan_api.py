@@ -179,7 +179,7 @@ def create_default_autopilot_plan() -> StoredPlan:
             is_default=True,
         ),
         spec=RunPlanSpec(
-            flow_sequence=get_sdlc_flow_keys(),
+            flow_sequence=get_sdlc_flow_keys(),  # From registry, includes review
             macro_policy=MacroPolicy.default(),
             human_policy=HumanPolicy.autopilot(),
             constraints=[
@@ -204,7 +204,7 @@ def create_default_supervised_plan() -> StoredPlan:
             is_default=True,
         ),
         spec=RunPlanSpec(
-            flow_sequence=get_sdlc_flow_keys(),
+            flow_sequence=get_sdlc_flow_keys(),  # From registry, includes review
             macro_policy=MacroPolicy.default(),
             human_policy=HumanPolicy.supervised(),
             constraints=[
@@ -400,7 +400,7 @@ class RunPlanAPI:
         hp = HumanPolicy.autopilot() if human_policy == "autopilot" else HumanPolicy.supervised()
 
         spec = RunPlanSpec(
-            flow_sequence=flow_sequence or get_sdlc_flow_keys(),
+            flow_sequence=flow_sequence or get_sdlc_flow_keys(),  # From registry
             macro_policy=MacroPolicy.default(),
             human_policy=hp,
             constraints=constraints or [],

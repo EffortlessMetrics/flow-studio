@@ -79,7 +79,7 @@ def aggregate_summaries(summaries: List[Dict[str, Any]]) -> Dict[str, Any]:
             "message": "No wisdom summaries found",
         }
 
-    # Initialize aggregation
+    # Initialize aggregation (from registry, includes review)
     flow_success_counts: Dict[str, Dict[str, int]] = {
         flow: {"succeeded": 0, "failed": 0, "skipped": 0}
         for flow in get_flow_order()

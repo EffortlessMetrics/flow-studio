@@ -1489,7 +1489,7 @@ class RunPlanSpec:
     """
 
     flow_sequence: List[str] = field(
-        default_factory=lambda: _get_default_flow_sequence()
+        default_factory=lambda: _get_default_flow_sequence()  # From registry, includes review
     )
     macro_policy: MacroPolicy = field(default_factory=MacroPolicy.default)
     human_policy: HumanPolicy = field(default_factory=HumanPolicy.autopilot)
@@ -1500,7 +1500,7 @@ class RunPlanSpec:
     def default(cls) -> "RunPlanSpec":
         """Create a default RunPlanSpec with standard SDLC configuration."""
         return cls(
-            flow_sequence=_get_default_flow_sequence(),
+            flow_sequence=_get_default_flow_sequence(),  # From registry, includes review
             macro_policy=MacroPolicy.default(),
             human_policy=HumanPolicy.autopilot(),
             constraints=[

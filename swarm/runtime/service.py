@@ -245,7 +245,7 @@ class RunService:
         if not run_path.exists():
             return None
 
-        # Detect which flows have artifacts
+        # Detect which flows have artifacts (from registry, includes review)
         flow_keys = []
         for flow_dir in get_flow_order():
             if (run_path / flow_dir).exists():

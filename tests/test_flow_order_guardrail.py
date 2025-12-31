@@ -383,8 +383,9 @@ flows = [
         # This won't be detected by current patterns since they're single-line
         # That's acceptable - the main risk is copy-paste of inline lists
         # Multiline lists are less common and easier to spot in review
-        violations = _find_violations(code, Path("test.py"))
+        _violations = _find_violations(code, Path("test.py"))  # noqa: F841
         # We don't require detection of multiline lists, just document behavior
+        # The assignment above documents that we tried the pattern
         assert True  # Pattern behavior is acceptable
 
 

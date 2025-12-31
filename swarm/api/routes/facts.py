@@ -165,7 +165,7 @@ async def get_facts_summary(run_id: str):
                 )
             )
 
-    # Build by_flow response
+    # Build by_flow response (from registry, includes review)
     flow_order = get_flow_order()
     flow_counts = []
     for flow_key in flow_order:

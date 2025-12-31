@@ -87,7 +87,7 @@ class WisdomSummarizer:
     in JSON format that captures key metrics and metadata.
     """
 
-    # Standard flow keys in execution order (from registry)
+    # Standard flow keys in execution order (from registry, includes review)
     FLOW_KEYS = get_flow_order()
 
     # Wisdom artifacts to look for

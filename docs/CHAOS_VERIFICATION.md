@@ -178,8 +178,9 @@ python -m json.tool RUN_BASE/run_state.json > /dev/null && echo "PASS: Valid JSO
 # Check events.jsonl has no corrupted lines
 python -c "import json; [json.loads(line) for line in open('RUN_BASE/events.jsonl')]" && echo "PASS: Valid events" || echo "FAIL: Corrupted events"
 
-# Verify no double-writes after resume
-grep '"step_start"' RUN_BASE/events.jsonl | sort | uniq -d && echo "FAIL: Duplicate step starts" || echo "PASS: No duplicates"
+# Verify no double-writes after resume (uniq -d exits 0 regardless of duplicates)
+test -z "$(grep '"step_start"' RUN_BASE/events.jsonl | sort | uniq -d)" \
+  && echo "PASS: No duplicates" || echo "FAIL: Duplicate step starts"
 ```
 
 ### Pass Condition

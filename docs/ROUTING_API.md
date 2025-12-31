@@ -27,14 +27,21 @@ The single entry point for all routing decisions in stepwise orchestration.
 
 ```python
 def route_step(
+    *,
     step: StepDefinition,
-    step_result: StepResult,
+    step_result: Any,  # StepResult dict or object
     run_state: RunState,
-    loop_state: Dict[str, LoopState],
+    loop_state: Dict[str, int],
     iteration: int,
-    routing_mode: RoutingMode = RoutingMode.ASSIST,
+    routing_mode: RoutingMode,
+    # Optional Navigator parameters (required for ASSIST/AUTHORITATIVE modes)
+    run_id: Optional[str] = None,
+    flow_key: Optional[str] = None,
     flow_graph: Optional[FlowGraph] = None,
-    nav_context: Optional[Dict[str, Any]] = None,
+    flow_def: Optional[FlowDefinition] = None,
+    spec: Optional[RunSpec] = None,
+    run_base: Optional[Path] = None,
+    navigation_orchestrator: Optional[Any] = None,
 ) -> RoutingOutcome:
     """Determine the next step after execution.
 
@@ -47,18 +54,25 @@ def route_step(
 
     Args:
         step: The step definition that just executed.
-        step_result: The execution result from the step.
+        step_result: The execution result (StepResult dict/object with status).
         run_state: Current run state with cursor position.
-        loop_state: Microloop state for each loop target.
+        loop_state: Dict mapping step_id to iteration count.
         iteration: Current iteration count for this step.
         routing_mode: Controls Navigator behavior (see RoutingMode).
-        flow_graph: Optional flow graph for topology-aware routing.
-        nav_context: Optional additional context for Navigator.
+        run_id: Run identifier (for navigator context).
+        flow_key: Flow being executed (for navigator context).
+        flow_graph: Flow graph for topology-aware routing.
+        flow_def: Flow definition with step specs.
+        spec: RunSpec with execution settings.
+        run_base: Path to run artifacts directory.
+        navigation_orchestrator: Navigator instance for LLM routing.
 
     Returns:
         RoutingOutcome with decision, next_step_id, and audit trail.
     """
 ```
+
+**Note:** All parameters are keyword-only (`*`). The optional Navigator parameters are required for ASSIST/AUTHORITATIVE modes to enable LLM-based routing.
 
 ---
 
@@ -217,4 +231,4 @@ Each stage sets `routing_source` appropriately for audit trail.
 - [ROUTING_PROTOCOL.md](./ROUTING_PROTOCOL.md) — Conceptual routing model
 - [STEPWISE_CONTRACT.md](./STEPWISE_CONTRACT.md) — Behavioral contract
 - `swarm/runtime/stepwise/routing/driver.py` — Implementation
-- `swarm/runtime/types.py` — Type definitions
+- `swarm/runtime/types/` — Type definitions package

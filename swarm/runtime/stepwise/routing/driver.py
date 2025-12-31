@@ -308,6 +308,60 @@ def _try_fast_path(
 
 
 # =============================================================================
+# Helper: Convert StepResult to dict
+# =============================================================================
+
+
+def _step_result_to_dict(step_result: Any) -> Dict[str, Any]:
+    """Convert a step result to a dictionary for routing logic.
+
+    The step_result can be:
+    - A dict: returned as-is
+    - A StepResult dataclass: converted to dict with status, output, etc.
+    - An object with to_dict(): uses that method
+    - Any other object: extracts common attributes
+
+    This ensures routing logic always receives the status, output, and
+    other fields needed for routing decisions (e.g., microloop exit conditions).
+
+    Args:
+        step_result: The result from step execution (any type).
+
+    Returns:
+        A dictionary with at minimum 'status' key if available.
+    """
+    if isinstance(step_result, dict):
+        return step_result
+
+    # Try to_dict() method first (common pattern for dataclasses with custom serialization)
+    if hasattr(step_result, "to_dict") and callable(step_result.to_dict):
+        return step_result.to_dict()
+
+    # Extract common attributes from StepResult or similar objects
+    result: Dict[str, Any] = {}
+
+    # Core routing fields
+    if hasattr(step_result, "status"):
+        result["status"] = step_result.status
+    if hasattr(step_result, "output"):
+        result["output"] = step_result.output
+    if hasattr(step_result, "error"):
+        result["error"] = step_result.error
+    if hasattr(step_result, "duration_ms"):
+        result["duration_ms"] = step_result.duration_ms
+    if hasattr(step_result, "step_id"):
+        result["step_id"] = step_result.step_id
+    if hasattr(step_result, "artifacts"):
+        result["artifacts"] = step_result.artifacts
+
+    # Microloop-specific fields (from receipts or step output)
+    if hasattr(step_result, "can_further_iteration_help"):
+        result["can_further_iteration_help"] = step_result.can_further_iteration_help
+
+    return result
+
+
+# =============================================================================
 # Deterministic Routing
 # =============================================================================
 
@@ -340,18 +394,19 @@ def _try_deterministic(
     Returns:
         RoutingOutcome if deterministic routing resolves, None otherwise.
     """
-    # TODO: Implement deterministic routing logic
-    # This will use the existing _routing_legacy functions
     logger.debug("Deterministic routing: evaluating edges and conditions")
 
     # Import here to avoid circular imports
     from swarm.runtime.stepwise._routing_legacy import create_routing_signal
 
+    # Convert step_result to dict to ensure routing logic sees status, output, etc.
+    result_dict = _step_result_to_dict(step_result)
+
     # Try to create a routing signal using existing logic
     try:
         signal = create_routing_signal(
             step=step,
-            result=step_result if isinstance(step_result, dict) else {},
+            result=result_dict,
             loop_state=loop_state,
             run_state=run_state,
         )
@@ -571,6 +626,61 @@ def _escalate(
 
 
 # =============================================================================
+# Loop State Management
+# =============================================================================
+
+
+def _update_loop_state_if_looping(
+    outcome: RoutingOutcome,
+    step: "StepDefinition",
+    loop_state: Dict[str, int],
+) -> None:
+    """Update loop_state in-place when routing decision is LOOP.
+
+    This ensures microloop iteration counters are properly incremented.
+    Without this, the driver would return LOOP decisions but the counter
+    wouldn't increment, risking infinite loops.
+
+    The loop_key format is "{step_id}:{loop_target}" to match legacy behavior.
+
+    Args:
+        outcome: The routing outcome to check.
+        step: The step that was executed.
+        loop_state: Dictionary tracking iteration counts (mutated in-place).
+    """
+    if outcome.decision != RoutingDecision.LOOP:
+        return
+
+    # Determine loop_target from step routing config
+    routing = getattr(step, "routing", None)
+    if routing is None:
+        return
+
+    loop_target = getattr(routing, "loop_target", None)
+    if loop_target is None:
+        # Fallback: use next_step_id from outcome as loop target
+        loop_target = outcome.next_step_id
+    if loop_target is None:
+        return
+
+    # Compute loop key (matches legacy format)
+    loop_key = f"{step.id}:{loop_target}"
+
+    # Increment iteration count
+    current_iter = loop_state.get(loop_key, 0)
+    loop_state[loop_key] = current_iter + 1
+
+    # Update outcome with current loop iteration
+    outcome.loop_iteration = current_iter + 1
+
+    logger.debug(
+        "Loop state updated: %s -> %d",
+        loop_key,
+        loop_state[loop_key],
+    )
+
+
+# =============================================================================
 # Main Driver Function
 # =============================================================================
 
@@ -639,6 +749,7 @@ def route_step(
     outcome = _try_fast_path(step, step_result, loop_state, iteration)
     if outcome:
         logger.debug("Routing via fast-path: %s", outcome.reason)
+        _update_loop_state_if_looping(outcome, step, loop_state)
         return outcome
 
     # 2. Deterministic fallback (required in DETERMINISTIC_ONLY mode)
@@ -649,6 +760,7 @@ def route_step(
         )
         if outcome:
             logger.debug("Routing via deterministic: %s", outcome.reason)
+            _update_loop_state_if_looping(outcome, step, loop_state)
             return outcome
         # In DETERMINISTIC_ONLY mode, we must not use Navigator
         # Fall through to envelope fallback
@@ -668,12 +780,14 @@ def route_step(
         )
         if outcome:
             logger.debug("Routing via navigator: %s", outcome.reason)
+            _update_loop_state_if_looping(outcome, step, loop_state)
             return outcome
 
     # 4. Envelope fallback (legacy path)
     outcome = _try_envelope_fallback(step, step_result)
     if outcome:
         logger.debug("Routing via envelope fallback: %s", outcome.reason)
+        _update_loop_state_if_looping(outcome, step, loop_state)
         return outcome
 
     # 5. Try deterministic as final attempt before escalation
@@ -685,10 +799,13 @@ def route_step(
         )
         if outcome:
             logger.debug("Routing via deterministic (final attempt): %s", outcome.reason)
+            _update_loop_state_if_looping(outcome, step, loop_state)
             return outcome
 
     # 6. Escalate: No routing strategy could determine next step
-    return _escalate(
+    outcome = _escalate(
         step, step_result,
         reason="no_routing_strategy_matched",
     )
+    _update_loop_state_if_looping(outcome, step, loop_state)
+    return outcome
