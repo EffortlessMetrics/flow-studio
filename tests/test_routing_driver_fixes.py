@@ -19,8 +19,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
-import pytest
-
 from swarm.config.flow_registry import StepDefinition, StepRouting
 from swarm.runtime.stepwise.routing.driver import (
     RoutingOutcome,

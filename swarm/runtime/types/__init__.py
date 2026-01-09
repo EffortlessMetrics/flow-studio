@@ -1489,7 +1489,7 @@ class RunPlanSpec:
     """
 
     flow_sequence: List[str] = field(
-        default_factory=lambda: _get_default_flow_sequence()  # From registry, includes review
+        default_factory=_get_default_flow_sequence  # From registry, includes review
     )
     macro_policy: MacroPolicy = field(default_factory=MacroPolicy.default)
     human_policy: HumanPolicy = field(default_factory=HumanPolicy.autopilot)

@@ -339,25 +339,17 @@ def _step_result_to_dict(step_result: Any) -> Dict[str, Any]:
 
     # Extract common attributes from StepResult or similar objects
     result: Dict[str, Any] = {}
-
-    # Core routing fields
-    if hasattr(step_result, "status"):
-        result["status"] = step_result.status
-    if hasattr(step_result, "output"):
-        result["output"] = step_result.output
-    if hasattr(step_result, "error"):
-        result["error"] = step_result.error
-    if hasattr(step_result, "duration_ms"):
-        result["duration_ms"] = step_result.duration_ms
-    if hasattr(step_result, "step_id"):
-        result["step_id"] = step_result.step_id
-    if hasattr(step_result, "artifacts"):
-        result["artifacts"] = step_result.artifacts
-
-    # Microloop-specific fields (from receipts or step output)
-    if hasattr(step_result, "can_further_iteration_help"):
-        result["can_further_iteration_help"] = step_result.can_further_iteration_help
-
+    for attr in (
+        "status",
+        "output",
+        "error",
+        "duration_ms",
+        "step_id",
+        "artifacts",
+        "can_further_iteration_help",
+    ):
+        if hasattr(step_result, attr):
+            result[attr] = getattr(step_result, attr)
     return result
 
 
