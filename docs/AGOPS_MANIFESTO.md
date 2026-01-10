@@ -8,17 +8,25 @@ This document defines the operational philosophy for **Flow Studio**—a Python 
 
 ---
 
-## 1. The Core Economic Thesis: Attention Economics
+## 1. The Core Economic Thesis: Developer Enablement
 
-**"Compute is a Utility; Attention is the Asset."**
+**"Code generation is fast, good, and cheap. The bottleneck is trust."**
 
-- **The Old Logic:** Optimize prompt engineering to save tokens and reduce API costs.
-- **The AgOps Logic:** Intentionally "waste" compute to buy back human time.
-  - We run redundant verification steps.
-  - We let agents loop 50 times to fix a dependency.
-  - We spin up separate "Architect" sessions just to route traffic.
+Models now deliver Sonnet-level reasoning at 1,000+ tokens/second with reasonable pricing. The question isn't "can the LLM write code"—it's "can a human review and trust the output in 30 minutes instead of spending a week doing it themselves."
 
-**The Math:** Spending $2.00 on a background run is infinitely better than spending 20 minutes of a Senior Engineer's time debugging a "halting" agent.
+**The Shift:**
+
+| Old Way | AgOps Way |
+|---------|-----------|
+| Spend a week implementing | System spends 4 hours iterating |
+| Review by reading every line | Review via inspection report + hotspots |
+| Hope tests are meaningful | Mutation testing proves coverage depth |
+| "It works on my machine" | Receipts prove what happened and why |
+| Developer time = implementation | Developer time = planning + architecture + review |
+
+**The Math:** Spending $2.00 on a background run that produces a reviewable PR with evidence is infinitely better than spending 5 days of a developer's time producing something worse.
+
+**The Posture:** This isn't "AI vs. developers." It's developers doing more, better, by offloading the grind to systems that iterate tirelessly and produce proof.
 
 ---
 
@@ -308,11 +316,28 @@ The system is working when:
 1. You can drop a GitHub Issue URL into the UI.
 2. You click "Run."
 3. You walk away.
-4. The system grinds for 5 hours, looping, detouring, and fixing itself.
-5. You return to find a **PR** that is green, verified, and architecturally sound.
-6. If the system crashes, you type `--resume` and it picks up exactly where it left off.
+4. The system grinds for 4 hours, looping, detouring, and fixing itself.
+5. You return to find a **PR** with:
+   - A bounded change (what changed, where, and why)
+   - An evidence pack (tests, diffs, receipts, checks)
+   - Quality events (interface locks, complexity caps, verification depth, security airbags)
+   - Known limits (what isn't proven / what's deferred)
+6. You review in 30 minutes instead of spending a week doing it yourself.
+7. If the system crashes, you type `--resume` and it picks up exactly where it left off.
 
-**This is not a tool for writing code. It is an infrastructure for manufacturing logic.**
+**This is not a tool for writing code. It is an infrastructure for manufacturing logic with proof.**
+
+### The Review Contract
+
+A reviewer should be able to answer these questions in 2-5 minutes:
+
+1. **Where did behavior change?** (hotspots + surface deltas)
+2. **What boundaries were enforced?** (interface lock / deps / layering)
+3. **What proof exists?** (tests, mutation, security, receipts)
+4. **What is not measured / still risky?** (explicit unknowns)
+5. **What should I spot-check?** (3-8 files max)
+
+The PR body is the "review cockpit." Receipts are the audit truth. The diff is the spot-check surface.
 
 ---
 
@@ -360,6 +385,8 @@ You have designed a system where **Time is on your side.** The longer you use Fl
 
 | Principle | Implementation |
 |-----------|----------------|
+| Developer Enablement | 4 hours of system work → 30 min of human review |
+| Quality First | Interface locks, complexity caps, test depth, security airbags |
 | Compute over Attention | Let agents iterate; review receipts, not steps |
 | High Trust Model | Golden Path + documented deviations, not button allowlists |
 | Goal-Aligned Routing | Navigator asks "Does this help the objective?" + Blocking Dependency Test |
@@ -370,4 +397,4 @@ You have designed a system where **Time is on your side.** The longer you use Fl
 | Trust with Verification | `bypassPermissions` + Forensic Scanners |
 | Isolation | Shadow Fork + orderly shutdown + resume |
 
-**You stop being a Coder. You become the Plant Manager.**
+**You stop grinding on implementation. You start architecting, planning, and reviewing—the work that actually needs your judgment.**

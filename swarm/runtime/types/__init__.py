@@ -81,6 +81,7 @@ from .routing import (
     RoutingMode,
     RoutingSignal,
     SkipJustification,
+    StallContext,
     WhyNowJustification,
     WP4EliminationEntry,
     WP4RoutingExplanation,

@@ -1,0 +1,9 @@
+# Flow 8: Reset/Rebase agent
+key: reset-prune-branches
+flows:
+  - reset
+category: implementation
+color: green
+source: project/user
+short_role: "Clean up old shadow branches and stale remote tracking refs."
+model: inherit

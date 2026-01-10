@@ -1,0 +1,9 @@
+# Flow 8: Reset/Rebase agent
+key: reset-verify-clean
+flows:
+  - reset
+category: verification
+color: blue
+source: project/user
+short_role: "Verify clean state after reset. Validate repo integrity."
+model: inherit

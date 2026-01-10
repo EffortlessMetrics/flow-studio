@@ -193,6 +193,35 @@ class DecisionMetrics:
     cel_evaluations: int = 0
 
 
+@dataclass
+class StallContext:
+    """Context from ProgressTracker for stall detection (Elephant Protocol).
+
+    Captures stall detection signals from the ProgressTracker to inform
+    routing decisions and provide audit trail for why sidequests were
+    triggered or escalations occurred.
+
+    The Elephant Protocol: Progress is measured by velocity (the derivative),
+    not budget. If error signatures remain identical, velocity is zero
+    and we're stalled.
+
+    Attributes:
+        is_stalled: Whether the tracker considers progress stalled.
+        stall_count: Number of consecutive identical error signatures.
+        velocity: Progress velocity (0.0 = fully stalled, 1.0 = all different).
+        last_signature: Most recent error signature (for debugging/audit).
+        recommendation: Suggested action (continue, investigate, escalate).
+        triggered_sidequest: If stall triggered a sidequest, which one.
+    """
+
+    is_stalled: bool = False
+    stall_count: int = 0
+    velocity: float = 1.0
+    last_signature: str = ""
+    recommendation: str = "continue"  # continue, investigate, escalate
+    triggered_sidequest: Optional[str] = None  # sidequest_id if triggered
+
+
 # =============================================================================
 # WP4: Simplified Routing Explanation for Audit Trail
 # =============================================================================
@@ -275,6 +304,7 @@ class RoutingExplanation:
     cel_evaluation: Optional[CELEvaluation] = None
     microloop_context: Optional[MicroloopContext] = None
     metrics: Optional[DecisionMetrics] = None
+    stall_context: Optional[StallContext] = None  # Elephant Protocol stall detection
 
 
 @dataclass
@@ -465,6 +495,17 @@ def routing_explanation_to_dict(explanation: RoutingExplanation) -> Dict[str, An
             "cel_evaluations": explanation.metrics.cel_evaluations,
         }
 
+    if explanation.stall_context:
+        sc = explanation.stall_context
+        result["stall_context"] = {
+            "is_stalled": sc.is_stalled,
+            "stall_count": sc.stall_count,
+            "velocity": sc.velocity,
+            "last_signature": sc.last_signature,
+            "recommendation": sc.recommendation,
+            "triggered_sidequest": sc.triggered_sidequest,
+        }
+
     return result
 
 
@@ -551,6 +592,18 @@ def routing_explanation_from_dict(data: Dict[str, Any]) -> RoutingExplanation:
             cel_evaluations=m_data.get("cel_evaluations", 0),
         )
 
+    stall_context = None
+    if "stall_context" in data:
+        sc_data = data["stall_context"]
+        stall_context = StallContext(
+            is_stalled=sc_data.get("is_stalled", False),
+            stall_count=sc_data.get("stall_count", 0),
+            velocity=sc_data.get("velocity", 1.0),
+            last_signature=sc_data.get("last_signature", ""),
+            recommendation=sc_data.get("recommendation", "continue"),
+            triggered_sidequest=sc_data.get("triggered_sidequest"),
+        )
+
     return RoutingExplanation(
         decision_type=DecisionType(data.get("decision_type", "deterministic")),
         selected_target=data.get("selected_target", ""),
@@ -563,6 +616,7 @@ def routing_explanation_from_dict(data: Dict[str, Any]) -> RoutingExplanation:
         cel_evaluation=cel_evaluation,
         microloop_context=microloop_context,
         metrics=metrics,
+        stall_context=stall_context,
     )
 
 

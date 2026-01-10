@@ -1,12 +1,22 @@
 # Positioning: What This Repo Does
 
-This repo implements agentic SDLC flows with receipts and tests. It's designed for teams that want to trade compute for human attention and get audit trails instead of guessing.
+This repo implements agentic SDLC flows with receipts and tests. It's designed for teams that want to multiply developer throughput while maintaining quality gates and audit trails.
+
+## The Economics Shift
+
+**Code generation is faster than human review. The bottleneck is trust.**
+
+Open-weight models now produce junior-or-better code, faster than you can read it, cheap enough to run repeatedly. Just like programmers stopped reading assembly, developers stop grinding on first-draft implementation—the job moves up the stack.
+
+When quality is already acceptable and generation outpaces review, **verification becomes the limiting reagent**. Flow Studio uses that leverage: run many small, scoped iterations (research, plan, build, test, harden), then publish a PR cockpit—hotspots, quality events, evidence, and explicit "not measured"—that's reviewable in one sitting.
+
+The system does the repetitions; humans do the decisions. See [docs/MARKET_SNAPSHOT.md](../docs/MARKET_SNAPSHOT.md) for current data points.
 
 ## The Core Trade
 
-**Economics**: Compute is cheap and getting cheaper (tokens, wall-clock time, disk). Human attention is expensive and getting more so (Staff engineer focus, context switching, burnout).
+**Compute is cheap. Reviewer attention is scarce.**
 
-So we spend tokens freely to save senior engineer time. That means:
+So we burn tokens freely to buy back senior engineer time. That means:
 
 - **Optimize for auditability**, not micro-efficiency. Massive scaffolding and explicit logic beat terse cleverness.
 - **Favor verbose receipts** over minimalist diffs. When something breaks, you can trace the decision back to the spec instead of guessing.
@@ -23,6 +33,31 @@ So we spend tokens freely to save senior engineer time. That means:
 **Humans review topology, not vibes**: You don't read every line of agent-generated code. You review the ADR, the test plan, the build receipt, and the critic verdicts. The scaffolding carries the proof; you audit the structure.
 
 **Receipts over speed**: We'd rather spend 10 minutes and produce a 50KB build receipt than finish in 30 seconds with no audit trail. When something fails in production, you want to know *why* the gate let it through.
+
+## The Reviewer Contract
+
+A 100k LOC change can still be reviewable—you're not reviewing 100k LOC; you're reviewing **the inspection report + hotspots**.
+
+**What reviewers should be able to answer in 2-5 minutes:**
+
+1. **Where did behavior change?** (hotspots + surface deltas)
+2. **What boundaries were enforced?** (interface lock / deps / layering)
+3. **What proof exists?** (tests, mutation, security, receipts)
+4. **What is not measured / still risky?** (explicit unknowns)
+5. **What should I spot-check?** (3-8 files max)
+
+Everything else is optional.
+
+**Quality events as first-class outputs:**
+
+| Event Type | What It Proves |
+|------------|----------------|
+| **Interface Lock** | No breaking API/schema changes (or detected and resolved) |
+| **Complexity Cap** | Hotspots reduced, module boundaries respected |
+| **Test Depth** | Tests added, mutation score met (or "not measured") |
+| **Security Airbag** | No secrets, no vulns (or flagged for review) |
+
+The PR body becomes the "review cockpit"—a rendered view of receipts. Every strong claim links to evidence (or says "not measured").
 
 ## Key Principles
 
@@ -60,7 +95,31 @@ Think of this as an assembly line:
 - **Receipts** are QA stamps at each station
 - **Humans** are the plant manager who reviews stamps, not every weld
 
+**Claude Code is the worker. Flow Studio is the foreman and the inspection process.**
+
 This posture fits platform engineering: you're building a reliable pipeline, not a magic wand.
+
+## Developer Enabler, Not Developer Replacement
+
+This isn't "AI vs. developers." It's "developers + AI doing more, better."
+
+**What the system does:**
+- Research the codebase and understand patterns
+- Plan implementation approaches
+- Build with consecutive passes and iteration
+- Test with BDD, property tests, mutation testing
+- Review its own work with harsh critics
+- Improve based on feedback loops
+- Fuzz edge cases and harden boundaries
+
+**What developers do:**
+- Define the gravity well (contracts, thresholds, acceptance criteria)
+- Review the inspection report, not every line
+- Spot-check the hotspots the system identifies
+- Make architectural decisions the system surfaces
+- Accept, reject, or refine the output
+
+The time you'd spend grinding on implementation shifts to planning and review—the high-leverage work.
 
 ## Evolution: From Vibe Coding to Vibe Architecting
 
@@ -82,14 +141,28 @@ You still need judgment to set up the gravity well (what contracts? what tests? 
 
 ## What This Is Good For
 
-- Platform / DevEx / infra teams automating SDLC
-- Staff+ engineers designing CI/CD flows with agent integration
-- Teams building or evaluating agentic tooling
-- Environments where compute is cheaper than senior engineer time
+- **Teams that want to ship more without hiring more**: Multiply throughput, not headcount
+- **Platform / DevEx / infra teams** automating SDLC at scale
+- **Staff+ engineers** designing CI/CD flows with agent integration
+- **Teams building or evaluating agentic tooling** for their orgs
+- **Environments where reviewer attention is the bottleneck**: The system does the grinding; humans do the deciding
 
 ## What This Isn't Good For
 
-- Small teams or simple projects (this is overkill; just use code completion)
-- Environments where compute is expensive or constrained
-- Teams that can't review receipts/ADRs/test plans (you still need human judgment)
-- Projects where "just ship it" beats "prove it works"
+- **Small teams or simple projects**: This is overkill; just use code completion
+- **Environments where compute is expensive or constrained**: We burn tokens freely
+- **Teams that can't review receipts/ADRs/test plans**: You still need human judgment at gates
+- **Projects where "just ship it" beats "prove it works"**: We optimize for evidence, not speed
+
+## The Time Shift
+
+The pattern is: **hours of system iteration → one-sitting human review**.
+
+| Metric | Traditional | With Flow Studio |
+|--------|-------------|------------------|
+| **System work** | Human grinding | System iterating (background) |
+| **Review surface** | Reading every line | Inspection report + hotspots |
+| **Evidence produced** | "Tests pass" | Receipts, diffs, quality events, mutation scores |
+| **Developer time spent** | Implementation | Planning, architecture, review |
+
+Concrete numbers vary by task complexity, but the pattern holds: the system does the repetitions; humans do the judgment. The rest of your day goes to planning the next feature, designing the architecture, and making the decisions that actually require your attention.

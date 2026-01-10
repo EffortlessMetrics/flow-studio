@@ -1,0 +1,9 @@
+# Flow 8: Reset/Rebase agent
+key: reset-diagnose
+flows:
+  - reset
+category: analytics
+color: orange
+source: project/user
+short_role: "Analyze upstream divergence, identify conflicts, assess severity."
+model: inherit

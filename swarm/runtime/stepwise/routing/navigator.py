@@ -43,6 +43,9 @@ from swarm.runtime.types import (
 )
 from swarm.runtime.stepwise._routing_legacy import generate_routing_candidates
 
+# Import from utility_candidates.py to avoid circular imports with driver.py
+# The utility_candidates module is the single source of truth for candidate generation
+from .utility_candidates import get_utility_flow_candidates as _get_utility_flow_candidates
 from .driver import RoutingOutcome
 
 if TYPE_CHECKING:
@@ -68,6 +71,9 @@ def route_via_navigator(
     flow_def: "FlowDefinition",
     spec: "RunSpec",
     run_base: Path,
+    # Utility flow detection
+    git_status: Optional[Dict[str, Any]] = None,
+    repo_root: Optional[Path] = None,
 ) -> RoutingOutcome:
     """Route using NavigationOrchestrator with candidate-set pattern.
 
@@ -89,6 +95,8 @@ def route_via_navigator(
         flow_def: The flow definition for candidate generation.
         spec: The run specification.
         run_base: Path to the run base directory.
+        git_status: Git status for utility flow detection (behind_count, diverged).
+        repo_root: Repository root path for utility flow registry.
 
     Returns:
         RoutingOutcome with the Navigator's decision and full audit trail.
@@ -186,6 +194,33 @@ def route_via_navigator(
         sidequest_options=sidequest_options,
         forensic_verdict=forensic_verdict,
     )
+
+    # =================================================================
+    # UTILITY FLOW CANDIDATES: Add inject_flow:* candidates BEFORE Navigator
+    # =================================================================
+    # This is the critical integration point: utility flow candidates must be
+    # part of the candidate set the Navigator sees, not added after the decision.
+    # The candidate-set pattern requires: Python generates → Navigator chooses.
+    utility_candidates = _get_utility_flow_candidates(
+        step_result=step_result,
+        run_state=run_state,
+        git_status=git_status,
+        repo_root=repo_root,
+    )
+
+    if utility_candidates:
+        # Add utility flow candidates to the list before Navigator sees them
+        existing_ids = {c.candidate_id for c in candidates}
+        for uf_candidate in utility_candidates:
+            if uf_candidate.candidate_id not in existing_ids:
+                candidates.append(uf_candidate)
+
+        logger.info(
+            "Added %d utility flow candidates for step %s: %s",
+            len(utility_candidates),
+            step.id,
+            [c.candidate_id for c in utility_candidates],
+        )
 
     # Convert RoutingCandidate objects to dicts for Navigator
     routing_candidates = [

@@ -1,77 +1,63 @@
-# Flow Studio Swarm
+# Flow Studio
 
-> For: Platform engineers, agent architects, and teams building industrialized agentic SDLC tooling.
-
-Stepwise orchestration for an industrialized SDLC.
+> Stepwise orchestration for an industrialized SDLC.
 
 This is not a chatbot. It's a system that executes structured flows, one step at a time, with durable state and forensic receipts.
 
+**For:** Platform engineers, agent architects, and teams building agentic SDLC tooling at scale.
+
 ---
 
-## The Core Trade
+## The Economics Shift
 
-**Compute is cheap. Reviewer attention is scarce.**
+**Code generation is faster than human review. The bottleneck is trust.**
 
-We burn tokens on adversarial loops, harsh critics, and architectural re-evaluation to buy back senior engineer time. The output isn't code—it's code plus the evidence needed to trust it.
+Open-weight models now produce junior-or-better code, faster than you can read it, cheap enough to run repeatedly. Just like programmers stopped reading assembly, developers stop grinding on first-draft implementation—the job moves up the stack.
+
+**Verification becomes the limiting reagent.** When generation is cheap and fast, the constraint shifts to: *Can I trust this output?* Flow Studio addresses this directly—every step produces forensic receipts, not just artifacts.
+
+Flow Studio uses that leverage: run many small, scoped iterations (research, plan, build, test, harden), then publish a PR cockpit—hotspots, quality events, evidence, and explicit "not measured"—that's reviewable in one sitting.
+
+The system does the repetitions. Humans do the decisions.
+
+---
+
+## What Flow Studio Is (and Isn't)
+
+**Flow Studio IS:**
+- A **flow orchestrator** that executes structured SDLC steps with durable state
+- A **PR cockpit generator** that produces reviewable evidence packages
+- A **trust-building system** that makes verification tractable through forensic receipts
+
+**Flow Studio is NOT:**
+- A code generator (it orchestrates agents that generate; it doesn't generate itself)
+- An IDE plugin (it's infrastructure that runs alongside your existing tools)
+- A CI replacement (it produces artifacts that CI consumes and validates)
 
 ---
 
 ## What Makes This Different
 
-### Forensics Over Narrative
-
-We ignore an agent's prose explanation of its work. We trust:
-- The **git diff**
-- The **test execution log**
-- The **durable receipt**
-
-If it's not on disk with evidence, it didn't happen.
-
-### PARTIAL is a Save Point
-
-Hallucination is a response to success pressure. We reward honesty: if an agent is blocked, it exits with `PARTIAL` status and a save-state. Resume later with zero data loss.
-
-### Single-Responsibility Steps
-
-Each step has one job. Tightly scoped tasks in fresh context windows ensure maximum reasoning density. No "context drunkenness" from 100k-token sessions.
-
----
-
-## Architecture
-
-The system splits into three planes:
-
-| Plane | Component | Responsibility |
-|-------|-----------|----------------|
-| **Control** | Python kernel | Manages `run_state.json` (the program counter), budgets, and atomic disk commits |
-| **Execution** | Claude Agent SDK | Autonomous agent work with full tool access in a sandbox |
-| **Projection** | DuckDB | Fast queryable index of telemetry for the UI |
-
-The Python kernel is deterministic. The agent is autonomous. The database is ephemeral (rebuildable from `events.jsonl`).
-
-### Step Lifecycle
-
-Every step follows a three-phase protocol:
-
-1. **Work**: The agent executes its task with full autonomy
-2. **Finalize**: A JIT prompt forces the agent to author a structured `handoff_envelope.json` at peak recency
-3. **Route**: A separate call analyzes the envelope and flow spec to propose the next state transition
-
-Python commits to disk only after the envelope is durable. Kill the process at any point; resume with zero data loss.
+| Principle | What it means |
+|-----------|---------------|
+| **Forensics over narrative** | We ignore prose explanations. Trust the git diff, the test log, the receipt. If it's not on disk, it didn't happen. |
+| **Verification is the product** | The output isn't code—it's code plus the evidence needed to trust it. |
+| **Steps, not sessions** | Each step has one job in a fresh context. No "context drunkenness" from 100k-token sessions. |
+| **PARTIAL is a save point** | Agents exit honestly when blocked. Resume later with zero data loss. |
 
 ---
 
 ## The Seven Flows
 
-| Flow | Purpose | Key Outputs |
-|------|---------|-------------|
-| **1. Signal** | Shape vague input into rigid AC matrix | requirements, BDD scenarios, risks |
-| **2. Plan** | Design before writing logic | ADR, contracts, work plan |
-| **3. Build** | Implement AC-by-AC with adversarial loops | code, tests, build receipt |
-| **4. Review** | Harvest feedback, apply fixes | drained worklist, ready PR |
-| **5. Gate** | Forensic audit of the diff | MERGE or BOUNCE verdict |
-| **6. Deploy** | Merge to mainline | CI verification, audit trail |
-| **7. Wisdom** | Extract learnings | feedback actions, pattern library |
+| Flow | What happens | What you get |
+|------|--------------|--------------|
+| **Signal** | Shape vague input into rigid acceptance criteria | requirements, BDD scenarios, risks |
+| **Plan** | Design before writing logic | ADR, contracts, work plan |
+| **Build** | Implement with adversarial loops | code, tests, build receipt |
+| **Review** | Harvest feedback, apply fixes | drained worklist, ready PR |
+| **Gate** | Forensic audit of the diff | MERGE or BOUNCE verdict |
+| **Deploy** | Merge to mainline | CI verification, audit trail |
+| **Wisdom** | Extract learnings | feedback actions, pattern library |
 
 ---
 
@@ -85,71 +71,120 @@ make flow-studio       # Start UI at http://localhost:5000
 
 Open: `http://localhost:5000/?run=demo-health-check&mode=operator`
 
+**What you'll see:**
+- Left sidebar: 7 flows
+- Center: Step graph for selected flow
+- Top bar: SDLC progress (all green for the demo)
+- Right panel: Agent details and artifacts
+
 ---
 
 ## Essential Commands
 
-| Task | Command |
-|------|---------|
-| Validate swarm health | `make dev-check` |
-| Fast kernel check | `make kernel-smoke` |
-| Full selftest | `make selftest` |
-| Run stepwise demo | `make stepwise-sdlc-stub` |
-| List runs | `make runs-list` |
-| Prune old runs | `make runs-prune` |
-| Show all commands | `make help` |
+```bash
+make dev-check         # Validate swarm health (run before commits)
+make selftest          # Full 16-step validation
+make kernel-smoke      # Fast kernel check (~300ms)
+make stepwise-sdlc-stub # Run stepwise demo (zero-cost stub)
+make help              # Show all commands
+```
+
+---
+
+## Architecture
+
+Three planes, cleanly separated:
+
+| Plane | Component | What it does |
+|-------|-----------|--------------|
+| **Control** | Python kernel | Manages state, budgets, atomic disk commits |
+| **Execution** | Claude Agent SDK | Autonomous agent work in a sandbox |
+| **Projection** | DuckDB | Fast queryable index for the UI |
+
+The kernel is deterministic. The agent is autonomous. The database is ephemeral (rebuildable from `events.jsonl`).
+
+> **Flow Studio is implemented in Python (kernel/runtime) and TypeScript (UI).** It orchestrates work in repos of any language.
+
+**Step lifecycle:**
+1. **Work** — Agent executes with full autonomy
+2. **Finalize** — JIT prompt forces structured `handoff_envelope.json`
+3. **Route** — Separate call proposes next state transition
+
+Kill the process at any point. Resume with zero data loss.
 
 ---
 
 ## Documentation
 
+### Start Here
+
+| Time | Document | What you'll learn |
+|------|----------|-------------------|
+| 10 min | [GETTING_STARTED.md](docs/GETTING_STARTED.md) | Run the demo, see it work |
+| 20 min | [TOUR_20_MIN.md](docs/TOUR_20_MIN.md) | Understand the full system |
+| 5 min | [MARKET_SNAPSHOT.md](docs/MARKET_SNAPSHOT.md) | Why this approach, why now |
+
+### Go Deeper
+
 | Topic | Document |
 |-------|----------|
-| Get oriented (10 min) | [GETTING_STARTED.md](docs/GETTING_STARTED.md) |
-| 20-minute tour | [TOUR_20_MIN.md](docs/TOUR_20_MIN.md) |
 | Flow Studio UI | [FLOW_STUDIO.md](docs/FLOW_STUDIO.md) |
 | Stepwise execution | [STEPWISE_BACKENDS.md](docs/STEPWISE_BACKENDS.md) |
+| Reviewing PRs | [REVIEWING_PRS.md](docs/REVIEWING_PRS.md) |
+| Quality event types | [QUALITY_EVENTS.md](docs/QUALITY_EVENTS.md) |
 | Adopt for your repo | [ADOPTION_PLAYBOOK.md](docs/ADOPTION_PLAYBOOK.md) |
 | Example runs | [GOLDEN_RUNS.md](docs/GOLDEN_RUNS.md) |
-| Claude Code integration | [CLAUDE.md](CLAUDE.md) |
+| Full reference | [CLAUDE.md](CLAUDE.md) |
 | All docs | [docs/INDEX.md](docs/INDEX.md) |
+
+### Philosophy
+
+| Topic | Document |
+|-------|----------|
+| Why this design | [WHY_DEMO_SWARM.md](docs/WHY_DEMO_SWARM.md) |
+| Full positioning | [swarm/positioning.md](swarm/positioning.md) |
+| AgOps manifesto | [AGOPS_MANIFESTO.md](docs/AGOPS_MANIFESTO.md) |
 
 ---
 
 ## Operational Invariants
 
-- **Shadow fork isolation**: Work happens in a fork to prevent "moving target" hallucinations from upstream
-- **Atomic commits**: `run_state.json` moves only after the handoff envelope is durable
-- **DB-backed UI**: TypeScript queries DuckDB, not JSONL parsing—instant even in large repos
-- **Agent-driven routing**: Next-step decisions come from agents who understand context, not regex on logs
+These aren't suggestions—they're load-bearing walls:
+
+- **Shadow fork isolation** — Work happens in a fork to prevent "moving target" hallucinations
+- **Atomic commits** — State moves only after the handoff envelope is durable
+- **DB-backed UI** — TypeScript queries DuckDB, not JSONL parsing—instant at any scale
+- **Agent-driven routing** — Next-step decisions come from agents who understand context, not regex
 
 ---
 
 ## Ready to Adopt?
 
-Before adopting this system, ensure you have:
+Before adopting, ensure you have:
 
-- [ ] Read the [ADOPTION_PLAYBOOK.md](docs/ADOPTION_PLAYBOOK.md)
-- [ ] Reviewed the [GOLDEN_RUNS.md](docs/GOLDEN_RUNS.md) examples
-- [ ] Run `make dev-check` and confirmed a green build
-- [ ] Understood the [STEPWISE_BACKENDS.md](docs/STEPWISE_BACKENDS.md) execution model
+- [ ] Run `make dev-check` and confirmed green
+- [ ] Read [GETTING_STARTED.md](docs/GETTING_STARTED.md)
+- [ ] Reviewed [GOLDEN_RUNS.md](docs/GOLDEN_RUNS.md) examples
+- [ ] Understood [STEPWISE_BACKENDS.md](docs/STEPWISE_BACKENDS.md)
 
-See the [ADOPTION_PLAYBOOK](docs/ADOPTION_PLAYBOOK.md) for the complete readiness checklist.
+See [ADOPTION_PLAYBOOK.md](docs/ADOPTION_PLAYBOOK.md) for the complete checklist.
 
 ---
 
 ## Related
 
-- [EffortlessMetrics/demo-swarm](https://github.com/EffortlessMetrics/demo-swarm) — Portable `.claude` pack for your own repo
+- [EffortlessMetrics/demo-swarm](https://github.com/EffortlessMetrics/demo-swarm) — Portable `.claude/` pack for your own repo
 
 ---
 
 ## Status
 
-Early re-implementation of a proven pattern. Bundled examples work; outside those, you're exploring. If something breaks, [open an issue](../../issues).
+Early re-implementation of a proven pattern. Bundled examples work; outside those, you're exploring.
+
+Something broken? [Open an issue](../../issues).
 
 ---
 
 ## License
 
-Apache-2.0
+Apache-2.0 or MIT

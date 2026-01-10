@@ -92,6 +92,9 @@ from swarm.runtime.utility_flow_injection import (
     UtilityFlowRegistry,
 )
 
+# Sentinel for unset cached value (distinguishes None from "not computed")
+_GIT_STATUS_UNSET = object()
+
 if TYPE_CHECKING:
     from swarm.runtime.navigator_integration import NavigationOrchestrator
     from swarm.runtime.preflight import PreflightResult
@@ -203,6 +206,10 @@ class StepwiseOrchestrator:
         self._utility_flow_registry = UtilityFlowRegistry(self._repo_root)
         self._injection_detector = InjectionTriggerDetector(self._utility_flow_registry)
         self._utility_flow_injector = UtilityFlowInjector(self._utility_flow_registry)
+
+        # Git status cache for utility flow detection
+        # Cache is per-run (cleared on run completion or can be invalidated)
+        self._cached_git_status: Any = _GIT_STATUS_UNSET
 
     def request_stop(self, run_id: RunId) -> bool:
         """Request graceful stop of a running run.
@@ -1167,6 +1174,9 @@ class StepwiseOrchestrator:
                 spec=spec,
                 run_base=run_base,
                 navigation_orchestrator=self._navigation_orchestrator,
+                # Utility flow detection inputs
+                repo_root=self._repo_root,
+                git_status=self._get_git_status(),
             )
 
             logger.debug(
@@ -1383,6 +1393,141 @@ class StepwiseOrchestrator:
             The UtilityFlowRegistry instance.
         """
         return self._utility_flow_registry
+
+    # =========================================================================
+    # Git Status for Utility Flow Detection
+    # =========================================================================
+
+    def _get_git_status(self) -> Optional[Dict[str, Any]]:
+        """Get git status for utility flow detection (cached per-run).
+
+        Returns the git status containing divergence information needed for
+        utility flow triggers (e.g., upstream_diverged). Results are cached
+        to avoid repeated subprocess calls.
+
+        The cache is per-process instance. For multi-run scenarios, call
+        invalidate_git_status_cache() between runs if the git state may change.
+
+        Returns:
+            Dict with git status fields, or None if unavailable:
+            - behind_count: Number of commits behind upstream
+            - diverged: Whether branch has diverged from upstream
+            - ahead_count: Number of commits ahead of upstream
+            - branch: Current branch name
+            - upstream: Upstream branch name
+        """
+        # Return cached value if already computed
+        if self._cached_git_status is not _GIT_STATUS_UNSET:
+            return self._cached_git_status
+
+        # Skip computation in DETERMINISTIC_ONLY mode (no utility flow injection)
+        if self._routing_mode == RoutingMode.DETERMINISTIC_ONLY:
+            self._cached_git_status = None
+            return None
+
+        try:
+            # Local import to avoid circular imports and keep git as optional dep
+            import subprocess
+
+            # Get current branch
+            branch_result = subprocess.run(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                capture_output=True,
+                text=True,
+                cwd=self._repo_root,
+                timeout=5,
+            )
+            if branch_result.returncode != 0:
+                logger.debug("git rev-parse failed: %s", branch_result.stderr)
+                self._cached_git_status = None
+                return None
+
+            branch = branch_result.stdout.strip()
+
+            # Get upstream tracking branch
+            upstream_result = subprocess.run(
+                ["git", "rev-parse", "--abbrev-ref", f"{branch}@{{upstream}}"],
+                capture_output=True,
+                text=True,
+                cwd=self._repo_root,
+                timeout=5,
+            )
+            if upstream_result.returncode != 0:
+                # No upstream configured - not diverged
+                self._cached_git_status = {
+                    "branch": branch,
+                    "upstream": None,
+                    "behind_count": 0,
+                    "ahead_count": 0,
+                    "diverged": False,
+                }
+                return self._cached_git_status
+
+            upstream = upstream_result.stdout.strip()
+
+            # Fetch to get latest upstream state (silent, best-effort)
+            subprocess.run(
+                ["git", "fetch", "--quiet"],
+                capture_output=True,
+                cwd=self._repo_root,
+                timeout=30,
+            )
+
+            # Get ahead/behind counts using rev-list
+            left_right_result = subprocess.run(
+                ["git", "rev-list", "--count", "--left-right", f"{upstream}...HEAD"],
+                capture_output=True,
+                text=True,
+                cwd=self._repo_root,
+                timeout=5,
+            )
+            if left_right_result.returncode != 0:
+                logger.debug("git rev-list failed: %s", left_right_result.stderr)
+                self._cached_git_status = None
+                return None
+
+            counts = left_right_result.stdout.strip().split()
+            behind_count = int(counts[0]) if len(counts) > 0 else 0
+            ahead_count = int(counts[1]) if len(counts) > 1 else 0
+
+            # Diverged = both behind AND ahead (not just behind)
+            diverged = behind_count > 0 and ahead_count > 0
+
+            self._cached_git_status = {
+                "branch": branch,
+                "upstream": upstream,
+                "behind_count": behind_count,
+                "ahead_count": ahead_count,
+                "diverged": diverged,
+            }
+
+            logger.debug(
+                "Git status: branch=%s upstream=%s behind=%d ahead=%d diverged=%s",
+                branch, upstream, behind_count, ahead_count, diverged,
+            )
+
+            return self._cached_git_status
+
+        except subprocess.TimeoutExpired:
+            logger.debug("git status check timed out")
+            self._cached_git_status = None
+            return None
+        except FileNotFoundError:
+            logger.debug("git command not found")
+            self._cached_git_status = None
+            return None
+        except Exception as e:
+            logger.debug("git status unavailable: %s", e)
+            self._cached_git_status = None
+            return None
+
+    def invalidate_git_status_cache(self) -> None:
+        """Invalidate the cached git status.
+
+        Call this between runs or when git state may have changed (e.g., after
+        user pulls/merges). The next call to _get_git_status() will recompute.
+        """
+        self._cached_git_status = _GIT_STATUS_UNSET
 
 
 # Backwards compatibility alias

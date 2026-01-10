@@ -33,11 +33,22 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
+from swarm.runtime.sidequest_catalog import SidequestCatalog, load_default_catalog
 from swarm.runtime.types import (
     RoutingDecision,
     RoutingMode,
     RoutingSignal,
     RoutingCandidate,
+)
+
+# Import from dedicated utility_candidates module to avoid circular imports
+# This module is the single source of truth for utility flow candidate generation
+from .utility_candidates import (
+    INJECT_PREFIX,
+    get_utility_flow_detector,
+    set_utility_flow_registry,
+    clear_utility_flow_caches,
+    get_utility_flow_candidates as _get_utility_flow_candidates,
 )
 
 if TYPE_CHECKING:
@@ -46,6 +57,37 @@ if TYPE_CHECKING:
     from swarm.runtime.types import RunSpec, RunState
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Module-level sidequest catalog (lazy-loaded singleton)
+# =============================================================================
+
+_sidequest_catalog: Optional[SidequestCatalog] = None
+
+
+def get_sidequest_catalog() -> SidequestCatalog:
+    """Get the module-level sidequest catalog (lazy-loaded).
+
+    Returns:
+        The default SidequestCatalog instance.
+    """
+    global _sidequest_catalog
+    if _sidequest_catalog is None:
+        _sidequest_catalog = load_default_catalog()
+    return _sidequest_catalog
+
+
+def set_sidequest_catalog(catalog: SidequestCatalog) -> None:
+    """Set a custom sidequest catalog (for testing or custom configuration).
+
+    Args:
+        catalog: The SidequestCatalog to use.
+    """
+    global _sidequest_catalog
+    _sidequest_catalog = catalog
+
+
 
 
 # =============================================================================
@@ -354,6 +396,195 @@ def _step_result_to_dict(step_result: Any) -> Dict[str, Any]:
 
 
 # =============================================================================
+# Sidequest Integration
+# =============================================================================
+
+
+def _build_sidequest_context(
+    step_result: Any,
+    loop_state: Dict[str, int],
+    step_id: str,
+) -> Dict[str, Any]:
+    """Build context dictionary for sidequest trigger evaluation.
+
+    Extracts relevant signals from step result for sidequest trigger matching:
+    - verification_passed: Whether the step passed verification
+    - failure_type: Type of failure if applicable (e.g., "environment", "test")
+    - changed_paths: List of file paths changed during the step
+    - stall_signals: Stall detection signals from progress tracking
+    - iteration: Current loop iteration count
+
+    Args:
+        step_result: The result from step execution (any type).
+        loop_state: Dictionary tracking iteration counts per microloop.
+        step_id: The current step ID.
+
+    Returns:
+        Context dictionary for sidequest trigger evaluation.
+    """
+    result_dict = _step_result_to_dict(step_result)
+
+    # Extract verification status
+    status = result_dict.get("status", "")
+    verification_passed = status.upper() == "VERIFIED"
+
+    # Extract failure type if present
+    failure_type = result_dict.get("failure_type")
+    if failure_type is None:
+        # Try to infer from error category
+        error_category = result_dict.get("error_category", "")
+        if "import" in error_category.lower() or "module" in error_category.lower():
+            failure_type = "environment"
+        elif "test" in error_category.lower():
+            failure_type = "test"
+
+    # Extract changed paths from file_changes or changed_files
+    changed_paths: List[str] = []
+    if hasattr(step_result, "changed_files"):
+        changed_paths = step_result.changed_files or []
+    elif hasattr(step_result, "file_changes"):
+        file_changes = step_result.file_changes
+        if isinstance(file_changes, dict):
+            files = file_changes.get("files", [])
+            if isinstance(files, list):
+                changed_paths = [f.get("path", f) if isinstance(f, dict) else str(f) for f in files]
+    elif "changed_files" in result_dict:
+        changed_paths = result_dict.get("changed_files", [])
+
+    # Build stall signals from loop state
+    # Count iterations for this step across all loop targets
+    stall_count = 0
+    for key, count in loop_state.items():
+        if key.startswith(f"{step_id}:"):
+            stall_count = max(stall_count, count)
+
+    # Check for same failure signature (would need progress history for full check)
+    same_failure_signature = False
+    if hasattr(step_result, "error_signature"):
+        # If we have an error signature, this could be used for stall detection
+        # For now, just note that we have one
+        pass
+
+    stall_signals = {
+        "stall_count": stall_count,
+        "same_failure_signature": same_failure_signature,
+        "is_stalled": stall_count >= 3,  # Simple threshold
+    }
+
+    # Get iteration count from loop state
+    iteration = stall_count
+
+    # Check for ambiguity signals
+    has_ambiguity = result_dict.get("has_ambiguity", False)
+    context_insufficient = result_dict.get("context_insufficient", False)
+
+    return {
+        "verification_passed": verification_passed,
+        "failure_type": failure_type,
+        "changed_paths": changed_paths,
+        "stall_signals": stall_signals,
+        "iteration": iteration,
+        "has_ambiguity": has_ambiguity,
+        "context_insufficient": context_insufficient,
+        "status": status,
+        "error_category": result_dict.get("error_category", ""),
+    }
+
+
+def _get_sidequest_candidates(
+    step_result: Any,
+    loop_state: Dict[str, int],
+    step_id: str,
+    run_id: Optional[str] = None,
+) -> List[RoutingCandidate]:
+    """Get applicable sidequests as routing candidates.
+
+    Evaluates sidequest triggers against the current context and returns
+    matching sidequests as RoutingCandidate objects with action="detour".
+
+    Args:
+        step_result: The result from step execution.
+        loop_state: Dictionary tracking iteration counts per microloop.
+        step_id: The current step ID.
+        run_id: Optional run ID for usage tracking.
+
+    Returns:
+        List of RoutingCandidate objects for applicable sidequests.
+    """
+    catalog = get_sidequest_catalog()
+
+    # Build context for sidequest evaluation
+    context = _build_sidequest_context(step_result, loop_state, step_id)
+
+    # Get applicable sidequests from catalog
+    applicable = catalog.get_applicable_sidequests(context, run_id=run_id)
+
+    # Convert to routing candidates
+    candidates: List[RoutingCandidate] = []
+    for sq in applicable:
+        station_id = sq.get_station_id()
+        candidates.append(
+            RoutingCandidate(
+                candidate_id=f"detour:{sq.sidequest_id}",
+                action="detour",
+                target_node=station_id,
+                reason=sq.description,
+                priority=sq.priority,
+                source="detour_catalog",
+                evidence_pointers=[
+                    f"trigger_mode:{sq.trigger_mode}",
+                    f"cost_hint:{sq.cost_hint}",
+                ] + [f"tag:{tag}" for tag in sq.tags[:3]],  # Include up to 3 tags
+                is_default=False,
+            )
+        )
+
+    if candidates:
+        logger.debug(
+            "Sidequest catalog: found %d applicable sidequests for step %s: %s",
+            len(candidates),
+            step_id,
+            [c.candidate_id for c in candidates],
+        )
+
+    return candidates
+
+
+def record_sidequest_selection(
+    sidequest_id: str,
+    run_id: Optional[str] = None,
+) -> None:
+    """Record that a sidequest was selected for usage tracking.
+
+    Call this when a sidequest candidate is chosen by the routing decision
+    to track usage and enforce max_uses_per_run limits.
+
+    Args:
+        sidequest_id: The ID of the selected sidequest.
+        run_id: Optional run ID for per-run tracking.
+    """
+    catalog = get_sidequest_catalog()
+    catalog.record_usage(sidequest_id, run_id=run_id)
+    logger.debug(
+        "Recorded sidequest selection: %s (run_id=%s)",
+        sidequest_id,
+        run_id,
+    )
+
+
+# =============================================================================
+# Utility Flow Injection (INJECT_FLOW candidates)
+# =============================================================================
+# Functions are imported from utility_candidates.py to avoid circular imports:
+# - INJECT_PREFIX (constant for inject_flow candidate ID prefix)
+# - _get_utility_flow_candidates (aliased from get_utility_flow_candidates)
+# - get_utility_flow_registry
+# - get_utility_flow_detector
+# - set_utility_flow_registry
+# - clear_utility_flow_caches
+
+
+# =============================================================================
 # Deterministic Routing
 # =============================================================================
 
@@ -441,6 +672,9 @@ def _try_navigator(
     spec: Optional["RunSpec"] = None,
     run_base: Optional[Path] = None,
     navigation_orchestrator: Optional[Any] = None,
+    # Utility flow detection
+    git_status: Optional[Dict[str, Any]] = None,
+    repo_root: Optional[Path] = None,
 ) -> Optional[RoutingOutcome]:
     """Try Navigator-based routing for intelligent decisions.
 
@@ -463,6 +697,8 @@ def _try_navigator(
         spec: The run specification.
         run_base: Base path for run artifacts.
         navigation_orchestrator: The Navigator orchestrator instance.
+        git_status: Git status for utility flow detection (behind_count, diverged).
+        repo_root: Repository root path for utility flow registry.
 
     Returns:
         RoutingOutcome if Navigator provides a decision, None otherwise.
@@ -516,6 +752,8 @@ def _try_navigator(
             flow_def=flow_def,
             spec=spec,
             run_base=run_base,
+            git_status=git_status,
+            repo_root=repo_root,
         )
     except Exception as e:
         # Log with explicit exception type and context for debugging
@@ -673,6 +911,203 @@ def _update_loop_state_if_looping(
 
 
 # =============================================================================
+# Sidequest Injection Helpers
+# =============================================================================
+
+
+def _enrich_outcome_with_sidequests(
+    outcome: RoutingOutcome,
+    step: "StepDefinition",
+    step_result: Any,
+    loop_state: Dict[str, int],
+    run_id: Optional[str] = None,
+) -> RoutingOutcome:
+    """Enrich routing outcome with applicable sidequest candidates.
+
+    This adds sidequest candidates to the outcome's candidate list without
+    changing the routing decision. The sidequests are available as options
+    for the Navigator or for audit trail purposes.
+
+    Args:
+        outcome: The routing outcome to enrich.
+        step: The step that was executed.
+        step_result: The result from step execution.
+        loop_state: Dictionary tracking iteration counts per microloop.
+        run_id: Optional run ID for usage tracking.
+
+    Returns:
+        The enriched RoutingOutcome (same object, mutated).
+    """
+    # Get applicable sidequest candidates
+    sidequest_candidates = _get_sidequest_candidates(
+        step_result=step_result,
+        loop_state=loop_state,
+        step_id=step.id,
+        run_id=run_id,
+    )
+
+    if sidequest_candidates:
+        # Add sidequest candidates to outcome
+        existing_ids = {c.candidate_id for c in outcome.candidates}
+        for sq_candidate in sidequest_candidates:
+            if sq_candidate.candidate_id not in existing_ids:
+                outcome.candidates.append(sq_candidate)
+
+        logger.debug(
+            "Enriched routing outcome with %d sidequest candidates for step %s",
+            len(sidequest_candidates),
+            step.id,
+        )
+
+    return outcome
+
+
+def _track_sidequest_if_selected(
+    outcome: RoutingOutcome,
+    run_id: Optional[str] = None,
+) -> None:
+    """Track sidequest usage if a sidequest was selected.
+
+    Checks if the chosen candidate is a sidequest (detour:*) and records
+    usage to enforce max_uses_per_run limits.
+
+    Args:
+        outcome: The routing outcome to check.
+        run_id: Optional run ID for per-run tracking.
+    """
+    chosen_id = outcome.chosen_candidate_id
+    if chosen_id and chosen_id.startswith("detour:"):
+        # Extract sidequest ID from candidate ID (format: "detour:<sidequest_id>")
+        sidequest_id = chosen_id[7:]  # Remove "detour:" prefix
+        record_sidequest_selection(sidequest_id, run_id=run_id)
+
+
+# =============================================================================
+# Utility Flow Injection Helpers
+# =============================================================================
+
+
+def _enrich_outcome_with_utility_flows(
+    outcome: RoutingOutcome,
+    step: "StepDefinition",
+    step_result: Any,
+    run_state: "RunState",
+    git_status: Optional[Dict[str, Any]] = None,
+    repo_root: Optional[Path] = None,
+) -> RoutingOutcome:
+    """Enrich routing outcome with applicable utility flow candidates.
+
+    This adds utility flow (INJECT_FLOW) candidates to the outcome's candidate
+    list without changing the routing decision. These are available as options
+    for the Navigator when conditions like upstream divergence are detected.
+
+    Args:
+        outcome: The routing outcome to enrich.
+        step: The step that was executed.
+        step_result: The result from step execution.
+        run_state: Current run state.
+        git_status: Optional git status information.
+        repo_root: Repository root path.
+
+    Returns:
+        The enriched RoutingOutcome (same object, mutated).
+    """
+    # Get applicable utility flow candidates
+    utility_flow_candidates = _get_utility_flow_candidates(
+        step_result=step_result,
+        run_state=run_state,
+        git_status=git_status,
+        repo_root=repo_root,
+    )
+
+    if utility_flow_candidates:
+        # Add utility flow candidates to outcome
+        existing_ids = {c.candidate_id for c in outcome.candidates}
+        for uf_candidate in utility_flow_candidates:
+            if uf_candidate.candidate_id not in existing_ids:
+                outcome.candidates.append(uf_candidate)
+
+        logger.debug(
+            "Enriched routing outcome with %d utility flow candidates for step %s",
+            len(utility_flow_candidates),
+            step.id,
+        )
+
+    return outcome
+
+
+def _track_utility_flow_if_selected(
+    outcome: RoutingOutcome,
+    run_id: Optional[str] = None,
+) -> None:
+    """Track utility flow selection if one was selected.
+
+    Checks if the chosen candidate is a utility flow (inject_flow:*) and
+    logs the selection. Audit trail is handled by the routing journal
+    (routing outcome already includes the chosen_candidate_id and candidates).
+
+    Args:
+        outcome: The routing outcome to check.
+        run_id: Optional run ID for tracking.
+    """
+    chosen_id = outcome.chosen_candidate_id
+    if chosen_id and chosen_id.startswith(INJECT_PREFIX):
+        # Extract flow ID from candidate ID (format: "inject_flow:<flow_id>")
+        flow_id = chosen_id[len(INJECT_PREFIX):]
+        logger.info(
+            "Utility flow injection selected: %s (run_id=%s)",
+            flow_id,
+            run_id,
+        )
+
+
+def _finalize_outcome(
+    outcome: RoutingOutcome,
+    step: "StepDefinition",
+    step_result: Any,
+    run_state: "RunState",
+    loop_state: Dict[str, int],
+    run_id: Optional[str] = None,
+    git_status: Optional[Dict[str, Any]] = None,
+    repo_root: Optional[Path] = None,
+) -> RoutingOutcome:
+    """Finalize routing outcome with enrichments and tracking.
+
+    This is a convenience function that applies all outcome enrichments
+    (sidequests, utility flows) and tracking in one place.
+
+    Args:
+        outcome: The routing outcome to finalize.
+        step: The step that was executed.
+        step_result: The result from step execution.
+        run_state: Current run state.
+        loop_state: Dictionary tracking iteration counts per microloop.
+        run_id: Optional run ID for tracking.
+        git_status: Optional git status for utility flow detection.
+        repo_root: Optional repository root path.
+
+    Returns:
+        The finalized RoutingOutcome.
+    """
+    # Enrich with sidequest candidates
+    _enrich_outcome_with_sidequests(outcome, step, step_result, loop_state, run_id)
+
+    # Enrich with utility flow candidates
+    _enrich_outcome_with_utility_flows(
+        outcome, step, step_result, run_state, git_status, repo_root
+    )
+
+    # Update loop state if looping
+    _update_loop_state_if_looping(outcome, step, loop_state)
+
+    # Track selections for audit trail
+    _track_sidequest_if_selected(outcome, run_id)
+    _track_utility_flow_if_selected(outcome, run_id)
+
+    return outcome
+
+
+# =============================================================================
 # Main Driver Function
 # =============================================================================
 
@@ -693,6 +1128,9 @@ def route_step(
     spec: Optional["RunSpec"] = None,
     run_base: Optional[Path] = None,
     navigation_orchestrator: Optional[Any] = None,
+    # Optional for utility flow detection
+    git_status: Optional[Dict[str, Any]] = None,
+    repo_root: Optional[Path] = None,
 ) -> "RoutingOutcome":
     """Route to next step using appropriate strategy.
 
@@ -705,6 +1143,17 @@ def route_step(
     4. Envelope fallback (legacy path)
     5. Escalate (if nothing else works)
 
+    Sidequest Integration:
+    Applicable sidequests are automatically added to the routing candidate set
+    based on step result context (verification status, failure type, changed paths,
+    stall signals). When a sidequest is selected, usage is tracked to enforce
+    max_uses_per_run limits.
+
+    Utility Flow Integration:
+    Applicable utility flows (e.g., reset when diverged) are automatically added
+    to the routing candidate set based on git status and step results. When a
+    utility flow is selected, the flow is injected via the stack-frame pattern.
+
     Args:
         step: The step that was executed.
         step_result: The result from step execution.
@@ -712,13 +1161,15 @@ def route_step(
         loop_state: Dictionary tracking iteration counts per microloop.
         iteration: Current iteration count.
         routing_mode: Controls Navigator behavior (DETERMINISTIC_ONLY, ASSIST, AUTHORITATIVE).
-        run_id: Optional run identifier (for navigator context).
+        run_id: Optional run identifier (for navigator context and sidequest tracking).
         flow_key: Optional flow key (for navigator context).
         flow_graph: Optional flow graph (for edge constraints).
         flow_def: Optional flow definition (for step lookup).
         spec: Optional run specification.
         run_base: Optional base path for run artifacts.
         navigation_orchestrator: Optional Navigator orchestrator instance.
+        git_status: Optional git status for utility flow detection (behind_count, diverged).
+        repo_root: Optional repository root path for utility flow registry.
 
     Returns:
         RoutingOutcome with the routing decision and full audit trail.
@@ -737,12 +1188,22 @@ def route_step(
         iteration,
     )
 
+    # Common finalization args for all paths
+    finalize_args = {
+        "step": step,
+        "step_result": step_result,
+        "run_state": run_state,
+        "loop_state": loop_state,
+        "run_id": run_id,
+        "git_status": git_status,
+        "repo_root": repo_root,
+    }
+
     # 1. Fast-path: Obvious deterministic cases
     outcome = _try_fast_path(step, step_result, loop_state, iteration)
     if outcome:
         logger.debug("Routing via fast-path: %s", outcome.reason)
-        _update_loop_state_if_looping(outcome, step, loop_state)
-        return outcome
+        return _finalize_outcome(outcome, **finalize_args)
 
     # 2. Deterministic fallback (required in DETERMINISTIC_ONLY mode)
     if routing_mode == RoutingMode.DETERMINISTIC_ONLY:
@@ -752,8 +1213,7 @@ def route_step(
         )
         if outcome:
             logger.debug("Routing via deterministic: %s", outcome.reason)
-            _update_loop_state_if_looping(outcome, step, loop_state)
-            return outcome
+            return _finalize_outcome(outcome, **finalize_args)
         # In DETERMINISTIC_ONLY mode, we must not use Navigator
         # Fall through to envelope fallback
 
@@ -769,18 +1229,20 @@ def route_step(
             spec=spec,
             run_base=run_base,
             navigation_orchestrator=navigation_orchestrator,
+            git_status=git_status,
+            repo_root=repo_root,
         )
         if outcome:
             logger.debug("Routing via navigator: %s", outcome.reason)
-            _update_loop_state_if_looping(outcome, step, loop_state)
-            return outcome
+            # Navigator path may already include sidequests via navigator.py
+            # But we still enrich to ensure consistency and add utility flows
+            return _finalize_outcome(outcome, **finalize_args)
 
     # 4. Envelope fallback (legacy path)
     outcome = _try_envelope_fallback(step, step_result)
     if outcome:
         logger.debug("Routing via envelope fallback: %s", outcome.reason)
-        _update_loop_state_if_looping(outcome, step, loop_state)
-        return outcome
+        return _finalize_outcome(outcome, **finalize_args)
 
     # 5. Try deterministic as final attempt before escalation
     # (for ASSIST/AUTHORITATIVE modes that didn't find Navigator route)
@@ -791,13 +1253,11 @@ def route_step(
         )
         if outcome:
             logger.debug("Routing via deterministic (final attempt): %s", outcome.reason)
-            _update_loop_state_if_looping(outcome, step, loop_state)
-            return outcome
+            return _finalize_outcome(outcome, **finalize_args)
 
     # 6. Escalate: No routing strategy could determine next step
     outcome = _escalate(
         step, step_result,
         reason="no_routing_strategy_matched",
     )
-    _update_loop_state_if_looping(outcome, step, loop_state)
-    return outcome
+    return _finalize_outcome(outcome, **finalize_args)

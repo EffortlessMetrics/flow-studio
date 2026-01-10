@@ -56,11 +56,11 @@ EXCLUDE_PATTERNS = [
 ALLOWED_VIOLATIONS: Dict[str, Dict[int, str]] = {
     # Fallback when registry import fails - acceptable since it tries registry first
     "swarm/tools/validate_swarm.py": {
-        2454: "Fallback constant when flow_registry import fails",
+        2432: "Fallback constant when flow_registry import fails",
     },
     # Fallback in _get_default_flow_sequence() when registry import fails
     "swarm/runtime/types/__init__.py": {
-        126: "Fallback constant when flow_registry import fails in _get_default_flow_sequence()",
+        127: "Fallback constant when flow_registry import fails in _get_default_flow_sequence()",
     },
     # Run plan defaults - defines example configurations
     "swarm/runtime/run_plan_api.py": {

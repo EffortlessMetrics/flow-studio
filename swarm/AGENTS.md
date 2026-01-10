@@ -5,7 +5,7 @@
 > Built-in infra agents are native to Claude Code and have no `.claude/agents` files.
 
 <!-- META:AGENT_COUNTS -->
-**Total: 65 agents** (3 built-in + 62 domain)
+**Total: 73 agents** (3 built-in + 70 domain)
 <!-- /META:AGENT_COUNTS -->
 
 ---
@@ -118,13 +118,21 @@ For now: agents are pure tool-users. Only the orchestrator coordinates multiple 
 | feedback-applier | wisdom | analytics | orange | project/user | Create issues, suggest doc updates → feedback_actions.md. |
 | traceability-auditor | wisdom | verification | blue | project/user | Run-level coherence and spec traceability → traceability_audit.md. |
 | wisdom-cleanup | wisdom | verification | blue | project/user | Finalize wisdom_receipt.json, update run index. |
+| reset-diagnose | reset | analytics | orange | project/user | Analyze upstream divergence, identify conflicts, assess severity. |
+| reset-stash-wip | reset | implementation | green | project/user | Stash work-in-progress changes safely before reset operations. |
+| reset-sync-upstream | reset | implementation | green | project/user | Fetch upstream changes without merging. Update remote tracking refs. |
+| reset-resolve-conflicts | reset | implementation | green | project/user | Resolve merge/rebase conflicts. Apply safe resolution strategies. |
+| reset-restore-wip | reset | implementation | green | project/user | Restore stashed work-in-progress after successful reset. |
+| reset-prune-branches | reset | implementation | green | project/user | Clean up old shadow branches and stale remote tracking refs. |
+| reset-archive-run | reset | verification | blue | project/user | Archive current run state before reset. Preserve audit trail. |
+| reset-verify-clean | reset | verification | blue | project/user | Verify clean state after reset. Validate repo integrity. |
 
 ---
 
 ## Summary
 
 <!-- META:AGENT_COUNTS -->
-**Total: 65 agents** (3 built-in + 62 domain)
+**Total: 73 agents** (3 built-in + 70 domain)
 <!-- /META:AGENT_COUNTS -->
 
 | Category | Count | Notes |
@@ -139,6 +147,7 @@ For now: agents are pure tool-users. Only the orchestrator coordinates multiple 
 | Flow 5 (Gate) | 6 | |
 | Flow 6 (Deploy) | 3 | |
 | Flow 7 (Wisdom) | 13 | |
+| Flow 8 (Reset) | 8 | Shadow fork reset/rebase operations |
 
 ### Agent Categories
 
@@ -203,3 +212,9 @@ For now: agents are pure tool-users. Only the orchestrator coordinates multiple 
 **Question**: What did we learn?
 **Agents**: artifact-auditor, solution-analyst, quality-analyst, maintainability-analyst, process-analyst, regression-analyst, pattern-analyst, signal-quality-analyst, flow-historian, learning-synthesizer, feedback-applier, traceability-auditor, wisdom-cleanup
 **Cross-cutting**: risk-analyst, gh-reporter
+
+### Flow 8: Reset/Rebase (8 agents)
+**Question**: How do we sync with upstream safely?
+**Agents**: reset-diagnose, reset-stash-wip, reset-sync-upstream, reset-resolve-conflicts, reset-restore-wip, reset-prune-branches, reset-archive-run, reset-verify-clean
+**Cross-cutting**: repo-operator
+**Note**: Invoked via INJECT_FLOW when shadow fork diverges from upstream

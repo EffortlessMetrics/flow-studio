@@ -2,8 +2,9 @@
 
 This document is the top-level map for **Flow Studio**—the demo harness for visualizing agentic SDLC flows.
 
-> The `.claude/` directory defines the swarm used by this demo harness.
-> For a portable `.claude` pack intended to be copied into *your* repo, use [`EffortlessMetrics/demo-swarm`](https://github.com/EffortlessMetrics/demo-swarm).
+> The `.claude/` directory defines the swarm used by Flow Studio.
+> For a portable `.claude/` pack to use in your own repo, see our sister repo:
+> [`EffortlessMetrics/demo-swarm`](https://github.com/EffortlessMetrics/demo-swarm).
 
 This is not a complete manual; it points you to the right artifacts.
 
@@ -526,6 +527,7 @@ Read `swarm/positioning.md` for the full philosophy. Browse `swarm/examples/heal
 | v3.0 Architecture | [ARCHITECTURE.md](./ARCHITECTURE.md) |
 | Routing Protocol v3 | [docs/ROUTING_PROTOCOL.md](./docs/ROUTING_PROTOCOL.md) |
 | AgOps Manifesto | [docs/AGOPS_MANIFESTO.md](./docs/AGOPS_MANIFESTO.md) |
+| Market snapshot (economics context) | [docs/MARKET_SNAPSHOT.md](./docs/MARKET_SNAPSHOT.md) |
 | Lexicon (canonical vocabulary) | [docs/LEXICON.md](./docs/LEXICON.md) |
 | v3.0 Roadmap | [docs/ROADMAP_3_0.md](./docs/ROADMAP_3_0.md) |
 | v2.4 Roadmap (archived) | [docs/archive/ROADMAP_2_4.md](./docs/archive/ROADMAP_2_4.md) |
@@ -534,6 +536,9 @@ Read `swarm/positioning.md` for the full philosophy. Browse `swarm/examples/heal
 | Validation walkthrough | [docs/VALIDATION_WALKTHROUGH.md](./docs/VALIDATION_WALKTHROUGH.md) |
 | Agent operations | [docs/AGENT_OPS.md](./docs/AGENT_OPS.md) |
 | Selftest system | [swarm/SELFTEST_SYSTEM.md](./swarm/SELFTEST_SYSTEM.md) |
+| **PR & Quality** | |
+| Reviewing PRs | [docs/REVIEWING_PRS.md](./docs/REVIEWING_PRS.md) |
+| Quality event types | [docs/QUALITY_EVENTS.md](./docs/QUALITY_EVENTS.md) |
 | **Flow Studio & UI** | |
 | Flow Studio | [docs/FLOW_STUDIO.md](./docs/FLOW_STUDIO.md) |
 | Flow profiles | [docs/FLOW_PROFILES.md](./docs/FLOW_PROFILES.md) |

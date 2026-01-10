@@ -56,7 +56,7 @@ from ..models import (
 from .cli_runner import run_step_cli
 
 # Import from specialized modules
-from .prompt_builder import build_prompt
+from .prompt_builder import build_prompt_auto
 from .router import route_step_stub
 from .sdk_runner import (
     finalize_step_async,
@@ -299,9 +299,16 @@ class ClaudeStepEngine(LifecycleCapableEngine):
     ) -> Tuple[str, Optional[HistoryTruncationInfo], Optional[str]]:
         """Build a context-aware prompt for a step.
 
-        Delegates to prompt_builder module.
+        Uses build_prompt_auto which automatically selects between:
+        - SpecCompiler-based building (default, USE_SPEC_COMPILER=true)
+        - Legacy file-based building (fallback, or USE_SPEC_COMPILER=false)
+
+        When SpecCompiler fails (missing specs), it falls back to legacy building.
         """
-        return build_prompt(ctx, self.repo_root, self._profile_id)
+        result = build_prompt_auto(ctx, self.repo_root, self._profile_id)
+        # build_prompt_auto returns (prompt, truncation_info, system_append_or_persona, prompt_plan)
+        # We return the first three elements for backwards compatibility
+        return result[0], result[1], result[2]
 
     # =========================================================================
     # PUBLIC LIFECYCLE METHODS

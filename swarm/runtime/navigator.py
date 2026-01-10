@@ -69,6 +69,7 @@ class RouteIntent(str, Enum):
     PAUSE = "pause"  # Request human intervention
     TERMINATE = "terminate"  # Flow complete
     EXTEND_GRAPH = "extend_graph"  # Propose edge not in graph (map gap)
+    INJECT_FLOW = "inject_flow"  # Inject utility flow (e.g., reset when diverged)
 
 
 class SignalLevel(str, Enum):
@@ -268,6 +269,29 @@ class DetourRequest:
 
 
 @dataclass
+class UtilityFlowRequest:
+    """Request to inject a utility flow (e.g., reset when diverged).
+
+    Utility flows are complete flows (not single-step sidequests) that are
+    injected via the stack-frame pattern. On completion, they return to
+    the interrupted flow.
+
+    Attributes:
+        flow_id: ID of the utility flow to inject (e.g., "reset").
+        reason: Why this utility flow is being injected.
+        priority: Priority score (higher = more urgent).
+        resume_at: Node to resume at after utility flow completes.
+        pass_artifacts: Artifacts from utility flow to pass back.
+    """
+
+    flow_id: str
+    reason: str
+    priority: int = 80  # Higher default than detours
+    resume_at: Optional[str] = None
+    pass_artifacts: List[str] = field(default_factory=list)
+
+
+@dataclass
 class NavigatorSignals:
     """Signals emitted by Navigator for observability."""
 
@@ -300,6 +324,7 @@ class NavigatorOutput:
     next_step_brief: NextStepBrief
     signals: NavigatorSignals = field(default_factory=NavigatorSignals)
     detour_request: Optional[DetourRequest] = None
+    utility_flow_request: Optional[UtilityFlowRequest] = None  # For INJECT_FLOW intent
     proposed_edge: Optional[ProposedEdge] = None  # For EXTEND_GRAPH intent
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 

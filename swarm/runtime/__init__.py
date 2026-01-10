@@ -6,15 +6,26 @@
 #   - storage: Disk I/O for run metadata and events
 #   - backends: Abstract RunBackend + concrete implementations
 #   - service: RunService singleton for orchestration
+#   - state_builder: RunState rebuilder from events.jsonl (crash recovery)
 #
 # Usage:
 #     from swarm.runtime import RunService
 #     service = RunService.get_instance()
 #     run_id = service.start_run(spec)
 #     summary = service.get_run(run_id)
+#
+# State recovery:
+#     from swarm.runtime import rebuild_run_state, recover_run_state
+#     state = recover_run_state(run_id)  # Uses stored state if available
+#     state = rebuild_run_state(run_id)  # Always rebuilds from events
 
 from typing import TYPE_CHECKING
 
+from .state_builder import (
+    rebuild_run_state,
+    recover_run_state,
+    verify_run_state,
+)
 from .storage import (
     RUNS_DIR,
     get_run_path,
@@ -56,6 +67,10 @@ __all__ = [
     "get_run_path",
     "run_exists",
     "list_runs",
+    # State Builder (crash recovery)
+    "rebuild_run_state",
+    "recover_run_state",
+    "verify_run_state",
     # Service (imported lazily at runtime, statically available for type checking)
     "RunService",
     "get_run_service",

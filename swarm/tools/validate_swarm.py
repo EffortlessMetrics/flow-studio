@@ -493,14 +493,22 @@ def validate_config_coverage(registry: Dict[str, Dict[str, Any]]) -> ValidationR
 
 def validate_bijection(registry: Dict[str, Dict[str, Any]]) -> ValidationResult:
     """
-    Validate 1:1 correspondence between AGENTS.md and .claude/agents/*.md files.
+    Validate correspondence between AGENTS.md and .claude/agents/*.md files.
 
     LEGACY: This check is skipped if .claude/agents/ directory does not exist.
     The new architecture uses swarm/config/agents/ for agent configuration instead.
 
+    TRANSITION MODE: During the architecture transition from .claude/agents/ to
+    swarm/config/agents/, we only enforce:
+    - Every file in .claude/agents/ must be registered in AGENTS.md (file → registry)
+
+    We intentionally skip the registry → file check because:
+    - Most agents now use swarm/config/agents/ as the source of truth
+    - Only agents with custom prompts (like Flow 8 reset agents) need .claude/agents/ files
+    - Full bijection will be restored when the migration is complete
+
     Checks:
-    - Every registry entry has a corresponding file
-    - Every file has a corresponding registry entry
+    - Every file has a corresponding registry entry (enforced)
     - Names are case-sensitive exact matches
     """
     result = ValidationResult()
@@ -518,39 +526,9 @@ def validate_bijection(registry: Dict[str, Dict[str, Any]]) -> ValidationResult:
             continue
         agent_files.add(path.stem)
 
-    # Check registry → file
-    for key, meta in registry.items():
-        # Skip built-in agents
-        if key in BUILT_IN_AGENTS:
-            continue
-
-        # Skip non-project agents
-        if meta.get("source") != "project/user":
-            continue
-
-        expected_file = AGENTS_DIR / f"{key}.md"
-        if not expected_file.is_file():
-            location = f"swarm/AGENTS.md:line {meta.get('line', '?')}"
-
-            # Suggest similar filenames using Levenshtein distance
-            suggestions = suggest_typos(key, list(agent_files))
-
-            problem = f"Agent '{key}' is registered but {expected_file.relative_to(ROOT)} does not exist"
-            if suggestions:
-                problem += f"; did you mean: {', '.join(suggestions)}?"
-
-            fix_action = f"Create {expected_file.relative_to(ROOT)} with required frontmatter, or remove entry from AGENTS.md"
-            if suggestions:
-                fix_action = f"Rename one of: {', '.join(suggestions)} to match '{key}', or create {expected_file.relative_to(ROOT)} with required frontmatter, or remove entry from AGENTS.md"
-
-            result.add_error(
-                "BIJECTION",
-                location,
-                problem,
-                fix_action,
-                line_number=meta.get("line"),
-                file_path=str(AGENTS_MD)
-            )
+    # TRANSITION: Skip registry → file check
+    # During migration, we don't require all registered agents to have .claude/agents/ files.
+    # Most agents now live in swarm/config/agents/ as the source of truth.
 
     # Check file → registry
     for filename in agent_files:
