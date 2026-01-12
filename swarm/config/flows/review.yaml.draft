@@ -1,0 +1,290 @@
+# Flow 4 - Draft → Ready (Review)
+# Source of truth for review flow ordering and agent roles
+
+key: review
+title: "Flow 4 - Draft → Ready (Review)"
+description: "Harvest PR feedback, cluster into actionable items, apply fixes, flip Draft to Ready when complete."
+
+charter:
+  goal: "Resolve all blocking PR feedback and transition Draft PR to Ready for merge"
+  exit_criteria:
+    - "All CRITICAL and MAJOR work items resolved"
+    - "PR feedback processed and clustered into review_worklist.json"
+    - "pending_blocking count is 0"
+    - "Draft PR flipped to Ready (or documented reason why not)"
+    - "review_receipt.json produced with resolution summary"
+  non_goals:
+    - "Adding features not requested in feedback"
+    - "Fundamental design changes (bounce to Flow 2 if needed)"
+    - "Refactoring beyond what feedback explicitly requests"
+    - "Addressing INFO-level items if CRITICAL/MAJOR remain"
+  offroad_policy:
+    justified:
+      - "DETOUR to run additional tests when feedback questions coverage"
+      - "DETOUR to lint-fix when style feedback is clustered"
+      - "INJECT_NODES for targeted security fix if reviewer flags vulnerability"
+      - "Loop back to harvest step when new feedback arrives mid-resolution"
+    not_justified:
+      - "INJECT_FLOW to wisdom before review is complete"
+      - "Design changes without explicit reviewer request and Flow 2 bounce"
+      - "Expanding scope to address nice-to-have suggestions"
+      - "Ignoring blocking feedback to accelerate merge"
+
+teaching:
+  title: "Draft to Ready: The Finishing School"
+  summary: "Flow 3 built the house. Flow 4 does the punch list. Harvest all PR feedback (bots + humans), cluster into Work Items, apply fixes, checkpoint often, and flip Draft PR to Ready when review is complete."
+
+steps:
+  - id: run_prep
+    agents:
+      - run-prep
+    role: "Establish run directory and .runs/<run-id>/review/ infrastructure."
+    routing:
+      kind: linear
+      next: branch
+    teaching_notes:
+      inputs:
+        - "RUN_BASE/build/build_receipt.json (optional)"
+        - "RUN_BASE/run_meta.json (optional)"
+      outputs:
+        - "RUN_BASE/review/flow_plan.md"
+      emphasizes:
+        - "establish run directory structure"
+        - "create flow_plan.md checklist"
+      constraints:
+        - "idempotent on rerun"
+
+  - id: branch
+    agents:
+      - repo-operator
+    role: "Ensure run branch run/<run-id> exists and is current."
+    routing:
+      kind: linear
+      next: pr_create
+    teaching_notes:
+      inputs:
+        - "RUN_BASE/run_meta.json"
+      outputs:
+        - "RUN_BASE/review/git_status.md"
+      emphasizes:
+        - "ensure run branch exists"
+        - "verify working tree is clean"
+      constraints:
+        - "no force operations"
+        - "no destructive git commands"
+
+  - id: pr_create
+    agents:
+      - pr-creator
+    role: "Ensure Draft PR exists; create if missing → pr_creation_status.md."
+    routing:
+      kind: linear
+      next: harvest
+    teaching_notes:
+      inputs:
+        - "RUN_BASE/run_meta.json"
+        - "RUN_BASE/build/pr_creation_status.md (optional)"
+      outputs:
+        - "RUN_BASE/review/pr_creation_status.md"
+      emphasizes:
+        - "create Draft PR if none exists"
+        - "capture PR number for downstream agents"
+      constraints:
+        - "idempotent: skip if PR already exists"
+
+  - id: harvest
+    agents:
+      - pr-feedback-harvester
+    role: "Pull all bot/human feedback from PR → pr_feedback.md, pr_feedback_raw.json."
+    teaching_note: "Non-blocking: grab what's available now, including partial CI failures. Re-harvest during checkpoints."
+    teaching_highlight: true
+    routing:
+      kind: linear
+      next: cluster
+    teaching_notes:
+      inputs:
+        - "RUN_BASE/review/pr_creation_status.md"
+        - "RUN_BASE/run_meta.json"
+      outputs:
+        - "RUN_BASE/review/pr_feedback.md"
+        - "RUN_BASE/review/pr_feedback_raw.json (optional)"
+      emphasizes:
+        - "grab all available feedback immediately"
+        - "include partial CI failures if already failing"
+        - "do not wait for pending checks"
+      constraints:
+        - "non-blocking: return what's available"
+
+  - id: cluster
+    agents:
+      - review-worklist-writer
+    role: "Cluster feedback into actionable Work Items → review_worklist.md, review_worklist.json."
+    teaching_note: "50 comments → 5-10 Work Items. Stable RW-NNN IDs. Markdown nits grouped into RW-MD-SWEEP."
+    teaching_highlight: true
+    routing:
+      kind: linear
+      next: worklist_loop
+    teaching_notes:
+      inputs:
+        - "RUN_BASE/review/pr_feedback.md"
+        - "RUN_BASE/review/pr_feedback_raw.json (optional)"
+      outputs:
+        - "RUN_BASE/review/review_worklist.md"
+        - "RUN_BASE/review/review_worklist.json"
+      emphasizes:
+        - "cluster by file/theme, not individual comments"
+        - "assign stable RW-NNN IDs"
+        - "group markdown nits into single RW-MD-SWEEP"
+        - "categorize by severity (CRITICAL/MAJOR/MINOR/INFO)"
+      constraints:
+        - "actionable items only, not narrative"
+
+  - id: worklist_loop
+    agents:
+      - review-worklist-writer
+      - test-author
+      - code-implementer
+      - fixer
+      - doc-writer
+      - design-optioneer
+      - test-executor
+    role: "Unbounded microloop: pull next batch, route to fix-lane agent, update worklist, checkpoint, repeat until complete."
+    teaching_note: "The core of Flow 4. Iteratively resolve Work Items. Workers report naturally; worklist-writer parses and updates status."
+    teaching_highlight: true
+    routing:
+      kind: microloop
+      loop_target: worklist_loop
+      loop_condition_field: pending_blocking
+      loop_success_values:
+        - "0"
+      max_iterations: 50
+      next: close_pr
+    teaching_notes:
+      inputs:
+        - "RUN_BASE/review/review_worklist.json"
+        - "RUN_BASE/plan/adr.md (for design issues)"
+        - "RUN_BASE/plan/ac_matrix.md (for design issues)"
+      outputs:
+        - "RUN_BASE/review/review_worklist.json (updated)"
+        - "RUN_BASE/review/review_actions.md"
+        - "RUN_BASE/review/style_sweep.md (if RW-MD-SWEEP processed)"
+      emphasizes:
+        - "worklist-writer reads JSON, picks batch, returns routing"
+        - "fix-lane agents (test-author, code-implementer, fixer, doc-writer) fix and report naturally"
+        - "worklist-writer parses worker response and updates JSON"
+        - "checkpoint routine: stage → secrets-sanitizer → commit/push → re-harvest → refresh worklist"
+        - "design-optioneer for fundamental design feedback"
+        - "test-executor to verify fixes"
+      constraints:
+        - "exit when pending_blocking == 0"
+        - "exit on context exhaustion (checkpoint first)"
+        - "exit on stuck_signal: true (checkpoint first)"
+
+  - id: close_pr
+    agents:
+      - pr-commenter
+      - pr-status-manager
+    role: "Post resolution checklist to PR, flip Draft to Ready if complete."
+    routing:
+      kind: linear
+      next: cleanup
+    teaching_notes:
+      inputs:
+        - "RUN_BASE/review/review_worklist.json"
+        - "RUN_BASE/review/review_actions.md"
+      outputs:
+        - "RUN_BASE/review/pr_comment_status.md"
+        - "RUN_BASE/review/pr_status.md"
+      emphasizes:
+        - "pr-commenter: post idempotent summary comment"
+        - "pr-status-manager: flip Draft → Ready if review complete"
+      constraints:
+        - "idempotent comment updates"
+        - "keep Draft if incomplete"
+
+  - id: cleanup
+    agents:
+      - review-cleanup
+      - build-cleanup
+    role: "Write review_receipt.json, reseal build receipt, update index."
+    routing:
+      kind: linear
+      next: sanitize
+    teaching_notes:
+      inputs:
+        - "RUN_BASE/review/review_worklist.json"
+        - "RUN_BASE/review/review_actions.md"
+        - "RUN_BASE/build/build_receipt.json (optional)"
+      outputs:
+        - "RUN_BASE/review/review_receipt.json"
+        - "RUN_BASE/review/cleanup_report.md"
+      emphasizes:
+        - "write review_receipt.json"
+        - "reseal build receipt if code changed"
+        - "update run index"
+      constraints:
+        - "finalize artifacts before publish gate"
+
+  - id: sanitize
+    agents:
+      - secrets-sanitizer
+    role: "Publish gate: scan for secrets/hygiene → secrets_scan.md, secrets_status.json."
+    routing:
+      kind: linear
+      next: commit
+    teaching_notes:
+      inputs:
+        - "RUN_BASE/review/ (all artifacts)"
+      outputs:
+        - "RUN_BASE/review/secrets_scan.md"
+        - "RUN_BASE/review/secrets_status.json"
+      emphasizes:
+        - "scan staged surface for secrets"
+        - "emit Gate Result (safe_to_commit, safe_to_publish, proceed_to_github_ops)"
+      constraints:
+        - "always scan before commit/push"
+
+  - id: commit
+    agents:
+      - repo-operator
+    role: "Commit and push changes (gated on secrets-sanitizer)."
+    routing:
+      kind: linear
+      next: gh_update
+    teaching_notes:
+      inputs:
+        - "RUN_BASE/review/secrets_status.json"
+      outputs:
+        - "RUN_BASE/review/git_status.md"
+      emphasizes:
+        - "commit if safe_to_commit: true"
+        - "push if safe_to_publish: true"
+      constraints:
+        - "gated on Gate Result"
+        - "no force operations"
+
+  - id: gh_update
+    agents:
+      - gh-issue-manager
+      - gh-reporter
+    role: "Update issue board, post summary to GitHub (gated on proceed_to_github_ops)."
+    routing:
+      kind: linear
+    teaching_notes:
+      inputs:
+        - "RUN_BASE/review/secrets_status.json"
+        - "RUN_BASE/review/review_receipt.json"
+      outputs:
+        - "RUN_BASE/review/gh_issue_status.md"
+        - "RUN_BASE/review/github_report.md"
+        - "RUN_BASE/review/gh_report_status.md"
+      emphasizes:
+        - "update issue board if proceed_to_github_ops: true"
+        - "post summary to GitHub if allowed"
+      constraints:
+        - "gated on proceed_to_github_ops"
+
+cross_cutting:
+  - policy-analyst
+  - risk-analyst
+  - clarifier

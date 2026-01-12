@@ -514,6 +514,9 @@ def validate_bijection(registry: Dict[str, Dict[str, Any]]) -> ValidationResult:
     - Only agents with custom prompts (like Flow 8 reset agents) need .claude/agents/ files
     - Full bijection will be restored when the migration is complete
 
+    LEGACY: This check is skipped if .claude/agents/ directory does not exist.
+    The new architecture uses swarm/config/agents/ for agent configuration instead.
+
     Checks:
     - Every file has a corresponding registry entry (enforced)
     - Names are case-sensitive exact matches
