@@ -12,9 +12,17 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from swarm.runtime.routing_helpers import (
+    MicroloopState,
+    check_microloop_termination as shared_check_microloop_termination,
+    exit_reason_needs_human_review,
+    exit_reason_to_confidence,
+    should_exit_microloop,
+)
 from swarm.runtime.routing_utils import parse_routing_decision
 from swarm.runtime.types import (
     DecisionMetrics,
@@ -34,6 +42,65 @@ from swarm.spec.types import RoutingConfig, RoutingKind
 from ..models import RoutingContext, StepContext
 
 logger = logging.getLogger(__name__)
+
+
+def _extract_json_from_response(
+    response: str, log: Optional[logging.Logger] = None
+) -> Optional[Dict[str, Any]]:
+    """Extract JSON from response, handling both plain JSON and markdown fences.
+
+    Tries in order:
+    1. Plain JSON (entire response is valid JSON)
+    2. JSON in ```json fence
+    3. JSON in ``` fence (no language specifier)
+    4. First { to last } extraction (fallback)
+
+    NOTE: This fallback parsing is for backward compatibility.
+    New code should use output_format for structured responses.
+
+    Args:
+        response: The raw response string from the LLM.
+        log: Optional logger for warnings.
+
+    Returns:
+        Parsed JSON dict if found, None otherwise.
+    """
+    response = response.strip()
+
+    # Try plain JSON first
+    try:
+        return json.loads(response)
+    except json.JSONDecodeError:
+        pass
+
+    # Try markdown fence with json specifier
+    fence_match = re.search(r"```json\s*([\s\S]*?)\s*```", response)
+    if fence_match:
+        try:
+            return json.loads(fence_match.group(1))
+        except json.JSONDecodeError:
+            pass
+
+    # Try plain markdown fence
+    fence_match = re.search(r"```\s*([\s\S]*?)\s*```", response)
+    if fence_match:
+        try:
+            return json.loads(fence_match.group(1))
+        except json.JSONDecodeError:
+            pass
+
+    # Fallback: find first { to last }
+    start = response.find("{")
+    end = response.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        try:
+            return json.loads(response[start : end + 1])
+        except json.JSONDecodeError:
+            pass
+
+    if log:
+        log.warning("Could not extract JSON from response: %s...", response[:100])
+    return None
 
 
 def _create_deterministic_routing_signal(
@@ -275,10 +342,9 @@ def check_microloop_termination(
 ) -> Optional[RoutingSignal]:
     """Check if microloop should terminate based on resolver spec logic.
 
-    This implements the microloop termination logic from routing_signal.md:
-    1. Check if loop_target reached with success_values
-    2. Check if max_iterations exhausted
-    3. Check if can_further_iteration_help is false in handoff
+    Delegates to shared helper for the actual decision logic.
+    This function remains for backward compatibility and to construct
+    the RoutingSignal return type.
 
     Args:
         handoff_data: The handoff JSON from JIT finalization.
@@ -288,22 +354,23 @@ def check_microloop_termination(
     Returns:
         RoutingSignal if termination condition met, None to continue looping.
     """
-    # Extract routing configuration
-    # Note: loop_target is defined in routing config but routing uses success_values + max_iterations
-    success_values = routing_config.get("loop_success_values", ["VERIFIED"])
-    max_iterations = routing_config.get("max_iterations", 3)
+    # Delegate to shared helper for exit decision
+    exit_reason = shared_check_microloop_termination(
+        handoff=handoff_data,
+        routing_config=routing_config,
+        iteration=current_iteration,
+    )
+
+    if exit_reason is None:
+        return None
+
+    # Construct RoutingSignal from exit reason
     loop_condition_field = routing_config.get("loop_condition_field", "status")
-
-    # Get the current status from handoff
     current_status = handoff_data.get(loop_condition_field, "").upper()
+    max_iterations = routing_config.get("max_iterations", 3)
 
-    # Check can_further_iteration_help from handoff (explicit signal from critic)
-    can_further_help = handoff_data.get("can_further_iteration_help", True)
-    if isinstance(can_further_help, str):
-        can_further_help = can_further_help.lower() in ("yes", "true", "1")
-
-    # Condition 1: Success status reached - exit loop with ADVANCE
-    if current_status in [s.upper() for s in success_values]:
+    # Map exit reason to appropriate signal parameters
+    if exit_reason == "status_verified":
         return _create_deterministic_routing_signal(
             decision=RoutingDecision.ADVANCE,
             next_step_id=None,  # Orchestrator determines next step
@@ -312,35 +379,40 @@ def check_microloop_termination(
             exit_condition_met=True,
             loop_count=current_iteration,
         )
-
-    # Condition 2: Max iterations exhausted - exit loop with ADVANCE
-    if current_iteration >= max_iterations:
+    elif exit_reason == "max_iterations_reached":
         return _create_deterministic_routing_signal(
             decision=RoutingDecision.ADVANCE,
             next_step_id=None,
             reason=f"Max iterations reached ({current_iteration}/{max_iterations}), exiting with documented concerns",
             source="microloop_termination",
-            confidence=0.7,
-            needs_human=True,  # Human should review incomplete work
+            confidence=exit_reason_to_confidence(exit_reason),
+            needs_human=exit_reason_needs_human_review(exit_reason),
             loop_count=current_iteration,
             exit_condition_met=True,
         )
-
-    # Condition 3: can_further_iteration_help is false - exit loop
-    if not can_further_help:
+    elif exit_reason == "no_further_help":
         return _create_deterministic_routing_signal(
             decision=RoutingDecision.ADVANCE,
             next_step_id=None,
             reason="Critic indicated no further iteration can help, exiting loop",
             source="microloop_termination",
-            confidence=0.8,
-            needs_human=True,  # Human should review why iteration was not helpful
+            confidence=exit_reason_to_confidence(exit_reason),
+            needs_human=exit_reason_needs_human_review(exit_reason),
             loop_count=current_iteration,
             exit_condition_met=True,
         )
 
-    # No termination condition met - return None to continue looping
-    return None
+    # Unknown exit reason - should not happen, but handle gracefully
+    return _create_deterministic_routing_signal(
+        decision=RoutingDecision.ADVANCE,
+        next_step_id=None,
+        reason=f"Unknown exit reason: {exit_reason}",
+        source="microloop_termination",
+        confidence=0.5,
+        needs_human=True,
+        loop_count=current_iteration,
+        exit_condition_met=True,
+    )
 
 
 async def run_router_session(
@@ -473,26 +545,12 @@ current_iteration: {template_vars["current_iteration"]}
 
         logger.debug("Router session complete, parsing response")
 
-        # Parse JSON from response (may be wrapped in markdown)
-        json_match = None
-        if "```json" in router_response:
-            start = router_response.find("```json") + 7
-            end = router_response.find("```", start)
-            if end > start:
-                json_match = router_response[start:end].strip()
-        elif "```" in router_response:
-            start = router_response.find("```") + 3
-            end = router_response.find("```", start)
-            if end > start:
-                json_match = router_response[start:end].strip()
-        else:
-            json_match = router_response.strip()
-
-        if not json_match:
+        # NOTE: This fallback parsing is for backward compatibility.
+        # New code should use output_format for structured responses.
+        routing_data = _extract_json_from_response(router_response, logger)
+        if routing_data is None:
             logger.warning("Router response contained no parseable JSON")
             return None
-
-        routing_data = json.loads(json_match)
 
         # Map decision string to enum using centralized parsing
         decision_str = routing_data.get("decision", "advance")
@@ -710,36 +768,44 @@ def route_from_routing_config(
             source="spec_routing",
         )
 
-    # Handle microloop routing - checks success, max iterations, or loops back
+    # Handle microloop routing - uses shared helper for exit decision
     if routing_config.kind == RoutingKind.MICROLOOP:
-        # Normalize success values for comparison
-        success_values_upper = tuple(v.upper() for v in routing_config.loop_success_values)
+        # Build MicroloopState for shared helper
+        # Note: can_further_iteration_help is not available here, so defaults to True
+        state = MicroloopState(
+            current_iteration=iteration_count,
+            max_iterations=routing_config.max_iterations,
+            status=normalized_status,
+            can_further_iteration_help=True,  # Not available in this API
+            success_values=list(routing_config.loop_success_values),
+        )
 
-        # Check if success condition met
-        if normalized_status in success_values_upper:
-            return _create_deterministic_routing_signal(
-                decision=RoutingDecision.ADVANCE,
-                next_step_id=routing_config.next,
-                reason="spec_microloop_verified",
-                source="spec_routing",
-                exit_condition_met=True,
-                loop_count=iteration_count,
-            )
+        should_exit, exit_reason = should_exit_microloop(state)
 
-        # Check if max iterations reached
-        if iteration_count >= routing_config.max_iterations:
-            return _create_deterministic_routing_signal(
-                decision=RoutingDecision.ADVANCE,
-                next_step_id=routing_config.next,
-                reason="spec_microloop_max_iterations",
-                source="spec_routing",
-                confidence=0.7,
-                needs_human=True,  # Human should review incomplete work
-                exit_condition_met=True,
-                loop_count=iteration_count,
-            )
+        if should_exit:
+            if exit_reason == "status_verified":
+                return _create_deterministic_routing_signal(
+                    decision=RoutingDecision.ADVANCE,
+                    next_step_id=routing_config.next,
+                    reason="spec_microloop_verified",
+                    source="spec_routing",
+                    exit_condition_met=True,
+                    loop_count=iteration_count,
+                )
+            elif exit_reason == "max_iterations_reached":
+                return _create_deterministic_routing_signal(
+                    decision=RoutingDecision.ADVANCE,
+                    next_step_id=routing_config.next,
+                    reason="spec_microloop_max_iterations",
+                    source="spec_routing",
+                    confidence=exit_reason_to_confidence(exit_reason),
+                    needs_human=exit_reason_needs_human_review(exit_reason),
+                    exit_condition_met=True,
+                    loop_count=iteration_count,
+                )
+            # Note: "no_further_help" cannot occur here since we set can_further_iteration_help=True
 
-        # Loop back to target
+        # Continue looping
         return _create_deterministic_routing_signal(
             decision=RoutingDecision.LOOP,
             next_step_id=routing_config.loop_target,
@@ -884,132 +950,136 @@ def smart_route(
             ),
         )
 
-    # Priority 2: Check microloop success condition
+    # Priority 2: Check microloop using shared helper for exit decision
     if routing_config.kind == RoutingKind.MICROLOOP:
-        success_values_upper = tuple(v.upper() for v in routing_config.loop_success_values)
+        # Use shared helper to determine exit decision
+        state = MicroloopState(
+            current_iteration=iteration_count,
+            max_iterations=routing_config.max_iterations,
+            status=normalized_status,
+            can_further_iteration_help=handoff_data.get("can_further_iteration_help", True),
+            success_values=list(routing_config.loop_success_values),
+        )
 
-        if normalized_status in success_values_upper:
+        should_exit, exit_reason = should_exit_microloop(state)
+
+        if should_exit:
             elapsed_ms = int((time.time() - start_time) * 1000)
-            # Mark loop edge as eliminated
-            for e in edges_considered:
-                if e.edge_type == "loop":
-                    elimination_log.append(
-                        Elimination(
-                            edge_id=e.edge_id,
-                            reason_code="exit_condition_met",
-                            detail=f"Status {normalized_status} matches success values",
+
+            # Map exit reason to elimination log entry
+            if exit_reason == "status_verified":
+                for e in edges_considered:
+                    if e.edge_type == "loop":
+                        elimination_log.append(
+                            Elimination(
+                                edge_id=e.edge_id,
+                                reason_code="exit_condition_met",
+                                detail=f"Status {normalized_status} matches success values",
+                            )
                         )
-                    )
-                else:
-                    e.evaluated_result = True
-                    e.score = 1.0
+                    else:
+                        e.evaluated_result = True
+                        e.score = 1.0
 
-            return _create_deterministic_routing_signal(
-                decision=RoutingDecision.ADVANCE,
-                next_step_id=routing_config.next,
-                reason="spec_microloop_verified",
-                source="smart_route",
-                exit_condition_met=True,
-                loop_count=iteration_count,
-                explanation=RoutingExplanation(
-                    decision_type=DecisionType.EXIT_CONDITION,
-                    selected_target=routing_config.next or "",
-                    timestamp=datetime.now(timezone.utc),
-                    confidence=1.0,
-                    reasoning_summary=f"Microloop exit: status {normalized_status} matches success condition",
-                    available_edges=edges_considered,
-                    elimination_log=elimination_log,
-                    microloop_context=microloop_ctx,
-                    metrics=DecisionMetrics(
-                        total_time_ms=elapsed_ms,
-                        edges_total=len(edges_considered),
-                        edges_eliminated=len(elimination_log),
+                return _create_deterministic_routing_signal(
+                    decision=RoutingDecision.ADVANCE,
+                    next_step_id=routing_config.next,
+                    reason="spec_microloop_verified",
+                    source="smart_route",
+                    exit_condition_met=True,
+                    loop_count=iteration_count,
+                    explanation=RoutingExplanation(
+                        decision_type=DecisionType.EXIT_CONDITION,
+                        selected_target=routing_config.next or "",
+                        timestamp=datetime.now(timezone.utc),
+                        confidence=1.0,
+                        reasoning_summary=f"Microloop exit: status {normalized_status} matches success condition",
+                        available_edges=edges_considered,
+                        elimination_log=elimination_log,
+                        microloop_context=microloop_ctx,
+                        metrics=DecisionMetrics(
+                            total_time_ms=elapsed_ms,
+                            edges_total=len(edges_considered),
+                            edges_eliminated=len(elimination_log),
+                        ),
                     ),
-                ),
-            )
+                )
 
-        # Check max iterations
-        if iteration_count >= routing_config.max_iterations:
-            elapsed_ms = int((time.time() - start_time) * 1000)
-            for e in edges_considered:
-                if e.edge_type == "loop":
-                    elimination_log.append(
-                        Elimination(
-                            edge_id=e.edge_id,
-                            reason_code="max_iterations",
-                            detail=f"Iteration {iteration_count + 1} >= max {routing_config.max_iterations}",
+            elif exit_reason == "max_iterations_reached":
+                for e in edges_considered:
+                    if e.edge_type == "loop":
+                        elimination_log.append(
+                            Elimination(
+                                edge_id=e.edge_id,
+                                reason_code="max_iterations",
+                                detail=f"Iteration {iteration_count + 1} >= max {routing_config.max_iterations}",
+                            )
                         )
-                    )
 
-            return _create_deterministic_routing_signal(
-                decision=RoutingDecision.ADVANCE,
-                next_step_id=routing_config.next,
-                reason="spec_microloop_max_iterations",
-                source="smart_route",
-                confidence=0.7,
-                needs_human=True,
-                exit_condition_met=True,
-                loop_count=iteration_count,
-                explanation=RoutingExplanation(
-                    decision_type=DecisionType.EXIT_CONDITION,
-                    selected_target=routing_config.next or "",
-                    timestamp=datetime.now(timezone.utc),
-                    confidence=0.7,
-                    reasoning_summary=f"Max iterations reached ({iteration_count + 1}/{routing_config.max_iterations})",
-                    available_edges=edges_considered,
-                    elimination_log=elimination_log,
-                    microloop_context=microloop_ctx,
-                    metrics=DecisionMetrics(
-                        total_time_ms=elapsed_ms,
-                        edges_total=len(edges_considered),
-                        edges_eliminated=len(elimination_log),
+                return _create_deterministic_routing_signal(
+                    decision=RoutingDecision.ADVANCE,
+                    next_step_id=routing_config.next,
+                    reason="spec_microloop_max_iterations",
+                    source="smart_route",
+                    confidence=exit_reason_to_confidence(exit_reason),
+                    needs_human=exit_reason_needs_human_review(exit_reason),
+                    exit_condition_met=True,
+                    loop_count=iteration_count,
+                    explanation=RoutingExplanation(
+                        decision_type=DecisionType.EXIT_CONDITION,
+                        selected_target=routing_config.next or "",
+                        timestamp=datetime.now(timezone.utc),
+                        confidence=exit_reason_to_confidence(exit_reason),
+                        reasoning_summary=f"Max iterations reached ({iteration_count + 1}/{routing_config.max_iterations})",
+                        available_edges=edges_considered,
+                        elimination_log=elimination_log,
+                        microloop_context=microloop_ctx,
+                        metrics=DecisionMetrics(
+                            total_time_ms=elapsed_ms,
+                            edges_total=len(edges_considered),
+                            edges_eliminated=len(elimination_log),
+                        ),
                     ),
-                ),
-            )
+                )
 
-        # Check can_further_iteration_help
-        can_help = handoff_data.get("can_further_iteration_help", True)
-        if isinstance(can_help, str):
-            can_help = can_help.lower() in ("yes", "true", "1")
-        if not can_help:
-            elapsed_ms = int((time.time() - start_time) * 1000)
-            for e in edges_considered:
-                if e.edge_type == "loop":
-                    elimination_log.append(
-                        Elimination(
-                            edge_id=e.edge_id,
-                            reason_code="status_mismatch",
-                            detail="Critic indicated no further iteration can help",
+            elif exit_reason == "no_further_help":
+                for e in edges_considered:
+                    if e.edge_type == "loop":
+                        elimination_log.append(
+                            Elimination(
+                                edge_id=e.edge_id,
+                                reason_code="status_mismatch",
+                                detail="Critic indicated no further iteration can help",
+                            )
                         )
-                    )
 
-            return _create_deterministic_routing_signal(
-                decision=RoutingDecision.ADVANCE,
-                next_step_id=routing_config.next,
-                reason="spec_microloop_no_further_help",
-                source="smart_route",
-                confidence=0.8,
-                needs_human=True,
-                exit_condition_met=True,
-                loop_count=iteration_count,
-                explanation=RoutingExplanation(
-                    decision_type=DecisionType.EXIT_CONDITION,
-                    selected_target=routing_config.next or "",
-                    timestamp=datetime.now(timezone.utc),
-                    confidence=0.8,
-                    reasoning_summary="Critic judged no further iteration can help",
-                    available_edges=edges_considered,
-                    elimination_log=elimination_log,
-                    microloop_context=microloop_ctx,
-                    metrics=DecisionMetrics(
-                        total_time_ms=elapsed_ms,
-                        edges_total=len(edges_considered),
-                        edges_eliminated=len(elimination_log),
+                return _create_deterministic_routing_signal(
+                    decision=RoutingDecision.ADVANCE,
+                    next_step_id=routing_config.next,
+                    reason="spec_microloop_no_further_help",
+                    source="smart_route",
+                    confidence=exit_reason_to_confidence(exit_reason),
+                    needs_human=exit_reason_needs_human_review(exit_reason),
+                    exit_condition_met=True,
+                    loop_count=iteration_count,
+                    explanation=RoutingExplanation(
+                        decision_type=DecisionType.EXIT_CONDITION,
+                        selected_target=routing_config.next or "",
+                        timestamp=datetime.now(timezone.utc),
+                        confidence=exit_reason_to_confidence(exit_reason),
+                        reasoning_summary="Critic judged no further iteration can help",
+                        available_edges=edges_considered,
+                        elimination_log=elimination_log,
+                        microloop_context=microloop_ctx,
+                        metrics=DecisionMetrics(
+                            total_time_ms=elapsed_ms,
+                            edges_total=len(edges_considered),
+                            edges_eliminated=len(elimination_log),
+                        ),
                     ),
-                ),
-            )
+                )
 
-        # Continue looping
+        # Continue looping (shared helper returned should_exit=False)
         elapsed_ms = int((time.time() - start_time) * 1000)
         for e in edges_considered:
             if e.edge_type != "loop":

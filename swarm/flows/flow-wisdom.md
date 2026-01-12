@@ -1,4 +1,4 @@
-# Flow 6 - Prod → Wisdom
+# Wisdom — Prod → Learnings
 
 **Goal:** Analyze artifacts, detect regressions, extract learnings,
 close feedback loops—treat receipts as observability.

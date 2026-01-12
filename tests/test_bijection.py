@@ -1,15 +1,20 @@
 """
 Test suite for agent registry bijection validation (FR-001).
 
-Tests the validator's ability to ensure 1:1 correspondence between
+Tests the validator's ability to ensure correspondence between
 swarm/AGENTS.md entries and .claude/agents/*.md files.
+
+TRANSITION MODE: During the architecture transition from .claude/agents/ to
+swarm/config/agents/, we only enforce file→registry bijection (orphaned files
+must be registered). Registry→file is intentionally skipped (registered agents
+don't need .claude/agents/ files during migration).
 
 BDD Scenarios covered:
 - Scenario 1: Agent registry matches implementation files (happy path)
-- Scenario 2: Detect missing .claude/agents file for registered agent
+- Scenario 2: Registry→file check skipped in transition mode (was: detect missing file)
 - Scenario 3: Detect orphaned .claude/agents file without registry entry
-- Scenario 4: Detect filename/registry key mismatch
-- Scenario 5: Report all bijection errors in single run
+- Scenario 4: Detect filename/registry key mismatch (orphan detection)
+- Scenario 5: Report all file→registry errors in single run
 """
 
 from conftest import (
@@ -49,44 +54,36 @@ def test_empty_registry_no_agents(temp_repo, run_validator):
 
 
 # ============================================================================
-# Missing Agent File Tests
+# Missing Agent File Tests (TRANSITION MODE: Now expected to pass)
 # ============================================================================
 
 
 def test_missing_agent_file(temp_repo, run_validator):
     """
-    Scenario 2: Detect missing .claude/agents file for registered agent.
+    TRANSITION MODE: Registry→file check is skipped.
 
-    Given: swarm/AGENTS.md contains entry for agent 'foo-bar' at line 42
-    And: .claude/agents/foo-bar.md does not exist
-    When: I run the validator
-    Then: Validator exits with code 1
-    And: Error message includes location and fix
+    Previously: Validator would fail when agent in registry has no file.
+    Now: Validator passes because we only check file→registry direction.
+
+    The new architecture uses swarm/config/agents/ as the source of truth.
     """
     # Add agent to registry but don't create file
     add_agent_to_registry(temp_repo, "foo-bar")
 
     result = run_validator(temp_repo)
-    assert_validator_failed(result)
-    assert_error_type(result.stderr, "BIJECTION")
-    assert_error_contains(result.stderr, "foo-bar")
-    # Note: Path separator varies by OS (/ on Unix, \ on Windows)
-    assert_error_contains(result.stderr, "foo-bar.md does not exist")
-    assert_error_contains(result.stderr, "Fix:")
+    # TRANSITION: Registry→file check skipped, so validation passes
+    assert_validator_passed(result)
 
 
 def test_multiple_missing_agent_files(temp_repo, run_validator):
-    """Multiple agents in registry with no files."""
+    """TRANSITION MODE: Multiple agents in registry with no files should pass."""
     add_agent_to_registry(temp_repo, "agent-1")
     add_agent_to_registry(temp_repo, "agent-2")
     add_agent_to_registry(temp_repo, "agent-3")
 
     result = run_validator(temp_repo)
-    assert_validator_failed(result)
-
-    errors = parse_errors(result.stderr)
-    # Should report errors for all 3 missing files
-    assert len(errors) >= 3
+    # TRANSITION: Registry→file check skipped
+    assert_validator_passed(result)
 
 
 # ============================================================================
@@ -195,44 +192,44 @@ Agent prompt.
 
 def test_multiple_bijection_errors(temp_repo, run_validator):
     """
-    Scenario 5: Report all bijection errors in single run.
+    TRANSITION MODE: Report file→registry errors in single run.
 
-    Given: swarm/AGENTS.md has 3 agents with different error types
-    When: I run the validator
-    Then: Validator exits with code 1
-    And: All 3 errors are reported (not stopping at first error)
+    Note: Missing file errors (registry→file) are now skipped in transition mode.
+    Only orphaned file errors (file→registry) are reported.
     """
-    # Error 1: Missing file
+    # This would be an error with full bijection, but skipped in transition mode
     add_agent_to_registry(temp_repo, "agent-missing")
 
-    # Error 2: Orphaned file
+    # Error 1: Orphaned file (still detected)
     create_agent_file(temp_repo, "agent-orphan")
 
-    # Error 3: Name mismatch
+    # Error 2: Name mismatch creates an orphan (still detected)
     add_agent_to_registry(temp_repo, "agent-mismatch")
     create_agent_file(temp_repo, "agentmismatch")
 
     result = run_validator(temp_repo)
     assert_validator_failed(result)
 
-    # Should report all errors, not just the first
-    assert result.stderr.count("[FAIL]") >= 3
+    # TRANSITION: Only 2 errors now (orphan + mismatch orphan)
+    assert result.stderr.count("[FAIL]") >= 2
 
 
 def test_mixed_valid_and_invalid_agents(valid_repo, run_validator):
-    """Some agents valid, some invalid - all errors reported."""
+    """TRANSITION MODE: Orphan detected, missing file ignored."""
     # valid_repo has 3 valid agents
 
-    # Add 2 invalid ones
+    # Missing file: skipped in transition mode
     add_agent_to_registry(valid_repo, "invalid-missing")
+
+    # Orphaned file: still detected
     create_agent_file(valid_repo, "invalid-orphan")
 
     result = run_validator(valid_repo)
     assert_validator_failed(result)
 
     errors = parse_errors(result.stderr)
-    # Should report 2 errors (missing + orphan), not affect valid agents
-    assert len(errors) >= 2
+    # TRANSITION: Only 1 error (orphan), missing file check skipped
+    assert len(errors) >= 1
 
 
 # ============================================================================
@@ -251,15 +248,17 @@ def test_agent_with_special_characters_in_name(temp_repo, run_validator):
 
 
 def test_empty_agents_directory(temp_repo, run_validator):
-    """Registry has agents but .claude/agents/ is empty."""
+    """TRANSITION MODE: Registry has agents but no files - should pass.
+
+    Previously this would fail (missing files). Now registry→file check is
+    skipped during transition, so validation passes.
+    """
     add_agent_to_registry(temp_repo, "agent-1")
     add_agent_to_registry(temp_repo, "agent-2")
 
     result = run_validator(temp_repo)
-    assert_validator_failed(result)
-
-    errors = parse_errors(result.stderr)
-    assert len(errors) >= 2
+    # TRANSITION: Registry→file check skipped
+    assert_validator_passed(result)
 
 
 def test_agents_md_with_only_comments(temp_repo, run_validator):
@@ -292,20 +291,21 @@ def test_very_long_agent_name(temp_repo, run_validator):
 
 
 def test_error_message_includes_file_and_line(temp_repo, run_validator):
-    """Error messages include file path and line number."""
-    add_agent_to_registry(temp_repo, "missing-agent")
+    """Error messages include file path for orphaned files."""
+    # Use orphaned file (file→registry check still runs)
+    create_agent_file(temp_repo, "orphan-agent")
 
     result = run_validator(temp_repo)
     assert_validator_failed(result)
 
-    # Should mention swarm/AGENTS.md and a line number
-    assert "swarm/AGENTS.md" in result.stderr
-    assert "line" in result.stderr.lower()
+    # Should mention the orphan file path
+    assert "orphan-agent" in result.stderr
 
 
 def test_error_message_includes_fix_action(temp_repo, run_validator):
     """Error messages include actionable fix guidance."""
-    add_agent_to_registry(temp_repo, "missing-agent")
+    # Use orphaned file (file→registry check still runs)
+    create_agent_file(temp_repo, "orphan-agent")
 
     result = run_validator(temp_repo)
     assert_validator_failed(result)

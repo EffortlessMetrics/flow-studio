@@ -1,0 +1,239 @@
+# Flow 8 - Reset (Utility)
+# Source of truth for reset/rebase flow ordering and agent roles
+#
+# This is a UTILITY FLOW - not part of the core SDLC sequence.
+# It is injected via INJECT_FLOW when work branch diverges from upstream.
+# Uses stack-frame pattern: on completion, returns to the interrupted flow.
+
+key: reset
+title: "Flow 8 - Reset (Utility)"
+description: "Branch synchronization, cleanup, and run archiving. Injected when work branch diverges from upstream."
+
+# Utility flow metadata
+is_utility: true
+is_sdlc: false
+
+# Injection configuration
+injection:
+  trigger: upstream_diverged
+  on_complete:
+    next_flow: "return"  # Stack-frame pattern - resume interrupted flow
+    reason: "Branch synchronized with upstream"
+  on_failure:
+    next_flow: "pause"  # Human intervention required on failure
+  pass_artifacts:
+    - "RUN_BASE/reset/sync_report.md"
+    - "RUN_BASE/reset/conflict_resolution.md"
+
+charter:
+  goal: "Safely synchronize work branch with upstream, preserving WIP and resolving conflicts"
+  exit_criteria:
+    - "Upstream changes fetched and integrated"
+    - "All conflicts resolved (manually or automatically)"
+    - "WIP changes preserved and restored"
+    - "Repository in clean, consistent state"
+    - "Stale branches pruned"
+    - "Run artifacts archived if needed"
+  non_goals:
+    - "Making design decisions during conflict resolution"
+    - "Implementing new features"
+    - "Modifying code beyond conflict resolution"
+    - "Skipping conflict resolution"
+  offroad_policy:
+    justified:
+      - "DETOUR to lint-fix after conflict resolution"
+      - "INJECT_NODES for additional manual conflict resolution guidance"
+    not_justified:
+      - "INJECT_FLOW to another utility flow during reset"
+      - "Skipping verification step"
+      - "Force-pushing over remote changes"
+
+teaching:
+  title: "Reset: Safe Branch Synchronization"
+  summary: "This utility flow safely synchronizes your work branch with upstream when divergence is detected. It uses a stash-sync-restore pattern to preserve your work while integrating upstream changes."
+
+steps:
+  - id: diagnose
+    agents:
+      - reset-diagnose
+    role: "Analyze upstream divergence, identify conflicts, assess severity."
+    routing:
+      kind: linear
+      next: stash_wip
+    teaching_notes:
+      inputs:
+        - "git status"
+        - "git log --oneline HEAD..origin/main"
+        - "git diff --stat origin/main"
+      outputs:
+        - "RUN_BASE/reset/divergence_report.md"
+      emphasizes:
+        - "identify commit count behind upstream"
+        - "detect potential conflict files"
+        - "assess risk level of sync"
+      constraints:
+        - "read-only analysis"
+        - "no git mutations"
+
+  - id: stash_wip
+    agents:
+      - reset-stash-wip
+    role: "Stash WIP changes before sync/rebase operations."
+    routing:
+      kind: linear
+      next: sync_upstream
+    teaching_notes:
+      inputs:
+        - "RUN_BASE/reset/divergence_report.md"
+        - "git status (working tree)"
+      outputs:
+        - "RUN_BASE/reset/stash_manifest.md"
+      emphasizes:
+        - "preserve uncommitted work"
+        - "record what was stashed"
+        - "handle untracked files"
+      constraints:
+        - "no commits"
+        - "only stash operations"
+
+  - id: sync_upstream
+    agents:
+      - reset-sync-upstream
+    role: "Fetch upstream changes without merging. Update remote tracking refs."
+    routing:
+      kind: linear
+      next: resolve_conflicts
+    teaching_notes:
+      inputs:
+        - "RUN_BASE/reset/divergence_report.md"
+      outputs:
+        - "RUN_BASE/reset/sync_report.md"
+      emphasizes:
+        - "fetch, don't pull"
+        - "update tracking refs"
+        - "prepare for merge/rebase"
+      constraints:
+        - "no force operations"
+        - "no destructive commands"
+
+  - id: resolve_conflicts
+    agents:
+      - reset-resolve-conflicts
+    role: "Resolve merge conflicts. May require multiple passes."
+    teaching_note: "CONDITIONAL: This step may iterate if conflicts are complex. Uses deterministic resolution strategies first, then documents remaining conflicts for manual review."
+    teaching_highlight: true
+    routing:
+      kind: microloop
+      loop_target: resolve_conflicts
+      loop_condition_field: status
+      loop_success_values:
+        - "VERIFIED"
+        - "verified"
+        - "NO_CONFLICTS"
+      next: restore_wip
+      max_iterations: 3
+    teaching_notes:
+      inputs:
+        - "RUN_BASE/reset/sync_report.md"
+        - "git status (conflict markers)"
+      outputs:
+        - "RUN_BASE/reset/conflict_resolution.md"
+      emphasizes:
+        - "deterministic resolution first"
+        - "document manual intervention needed"
+        - "preserve semantic intent"
+      constraints:
+        - "no design decisions"
+        - "minimal changes beyond resolution"
+        - "clear documentation of choices"
+
+  - id: restore_wip
+    agents:
+      - reset-restore-wip
+    role: "Restore stashed WIP after sync completes."
+    routing:
+      kind: linear
+      next: prune_branches
+    teaching_notes:
+      inputs:
+        - "RUN_BASE/reset/stash_manifest.md"
+        - "RUN_BASE/reset/conflict_resolution.md"
+      outputs:
+        - "RUN_BASE/reset/restore_report.md"
+      emphasizes:
+        - "restore stashed changes"
+        - "handle stash conflicts"
+        - "verify working tree"
+      constraints:
+        - "don't drop stash until verified"
+        - "document restore failures"
+
+  - id: prune_branches
+    agents:
+      - reset-prune-branches
+    role: "Clean up stale/deleted branches from tracking."
+    routing:
+      kind: linear
+      next: archive_run
+    teaching_notes:
+      inputs:
+        - "git branch -a"
+        - "git remote prune --dry-run origin"
+      outputs:
+        - "RUN_BASE/reset/prune_report.md"
+      emphasizes:
+        - "identify stale branches"
+        - "prune deleted remotes"
+        - "clean local tracking refs"
+      constraints:
+        - "only prune gone branches"
+        - "don't delete local work branches"
+
+  - id: archive_run
+    agents:
+      - reset-archive-run
+    role: "Archive run artifacts before cleanup."
+    routing:
+      kind: linear
+      next: verify_clean
+    teaching_notes:
+      inputs:
+        - "RUN_BASE/**"
+      outputs:
+        - "RUN_BASE/reset/archive_manifest.md"
+      emphasizes:
+        - "preserve audit trail"
+        - "compress older runs"
+        - "maintain run history"
+      constraints:
+        - "don't delete current run"
+        - "preserve active artifacts"
+
+  - id: verify_clean
+    agents:
+      - reset-verify-clean
+    role: "Verify clean state after reset. Validate repo integrity."
+    routing:
+      kind: linear
+      # Final step - no next, flow is complete
+    teaching_notes:
+      inputs:
+        - "RUN_BASE/reset/sync_report.md"
+        - "RUN_BASE/reset/conflict_resolution.md"
+        - "RUN_BASE/reset/restore_report.md"
+        - "git status"
+      outputs:
+        - "RUN_BASE/reset/reset_receipt.json"
+        - "RUN_BASE/reset/verification_report.md"
+      emphasizes:
+        - "verify clean working tree"
+        - "confirm upstream sync"
+        - "validate WIP restoration"
+        - "produce audit receipt"
+      constraints:
+        - "read-only verification"
+        - "clear pass/fail determination"
+
+cross_cutting:
+  - clarifier
+  - repo-operator

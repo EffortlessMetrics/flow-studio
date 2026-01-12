@@ -244,30 +244,47 @@ def load_flow_cached(flow_id: str, repo_root_str: str) -> FlowSpec:
     return load_flow(flow_id, Path(repo_root_str) if repo_root_str else None)
 
 
-def list_flows(repo_root: Optional[Path] = None) -> List[str]:
+def list_flows(repo_root: Optional[Path] = None, include_graph_format: bool = False) -> List[str]:
     """List all available flow IDs.
 
     Combines flows from both JSON (swarm/specs/) and YAML (swarm/spec/) stores.
-    JSON files take precedence if both exist.
+
+    By default, only returns flows in the step-based format (with 'steps' key).
+    Graph-format flows (with 'nodes'/'edges' keys) are skipped unless
+    include_graph_format=True.
 
     Args:
         repo_root: Optional repository root path.
+        include_graph_format: If True, include graph-format flows from swarm/specs/.
 
     Returns:
         List of flow IDs (without extension).
     """
     flow_ids = set()
 
-    # Check JSON store first (runtime truth)
+    # Check JSON store (runtime truth)
     specs_root = get_specs_root(repo_root)
     json_flows_dir = specs_root / "flows"
     if json_flows_dir.exists():
         for p in json_flows_dir.glob("*.json"):
-            # Skip UI files (flow.ui.json)
-            if not p.name.startswith("_") and not p.name.endswith(".ui.json"):
-                flow_ids.add(p.stem)
+            # Skip UI files (flow.ui.json) and hidden files
+            if p.name.startswith("_") or p.name.endswith(".ui.json"):
+                continue
 
-    # Also check YAML store (legacy)
+            if include_graph_format:
+                flow_ids.add(p.stem)
+            else:
+                # Check if this is a step-based flow or graph-based flow
+                try:
+                    data = _load_json_file(p)
+                    # Graph-format flows have 'nodes' key, step-format have 'steps'
+                    if "steps" in data and "nodes" not in data:
+                        flow_ids.add(p.stem)
+                except (json.JSONDecodeError, ValueError):
+                    # Skip invalid files
+                    pass
+
+    # Also check YAML store (legacy) - always step-based format
     spec_root = get_spec_root(repo_root)
     yaml_flows_dir = spec_root / "flows"
     if yaml_flows_dir.exists():

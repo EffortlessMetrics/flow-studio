@@ -101,7 +101,7 @@ docs-check:
 	@for f in $(SPINE_DOCS); do \
 		test -f "$$f" || { echo "ERROR: Operator spine doc $$f missing"; exit 1; }; \
 	done
-	@echo "  ✓ All spine docs exist"
+	@echo "  OK All spine docs exist"
 	@echo "  Running structure tests..."
 	@uv run pytest tests/test_docs_structure.py -v --tb=short
 	@echo "  Checking doc invariants (count references)..."
@@ -118,6 +118,17 @@ gen-doc-meta:
 gen-doc-meta-check:
 	@echo "Checking if docs have up-to-date metadata..."
 	uv run python swarm/tools/generate_meta_docs.py --check
+
+# Capability registry documentation generator
+.PHONY: gen-capabilities-doc
+gen-capabilities-doc:
+	@echo "Generating CAPABILITIES.md from specs/capabilities.yaml..."
+	uv run swarm/tools/gen_capabilities_doc.py
+
+.PHONY: check-capabilities-doc
+check-capabilities-doc:
+	@echo "Checking if CAPABILITIES.md is up-to-date..."
+	uv run swarm/tools/gen_capabilities_doc.py --check
 
 .PHONY: show-meta
 show-meta:
@@ -264,7 +275,7 @@ flowstudio-smoke-strict-negative:
 		uv run swarm/tools/flowstudio_smoke.py
 
 # Flow Studio TypeScript targets
-# Contract A: Compiled JS is committed for "clone → run" reliability.
+# Contract A: Compiled JS is committed for "clone -> run" reliability.
 # TypeScript sources in src/, compiled JS in js/ - checked for drift in CI.
 .PHONY: ts-check
 ts-check:
@@ -275,7 +286,7 @@ ts-check:
 ts-build:
 	@echo "Building Flow Studio TypeScript..."
 	@cd swarm/tools/flow_studio_ui && npm run ts-build --silent
-	@echo "✓ TypeScript compiled to js/"
+	@echo "OK TypeScript compiled to js/"
 
 .PHONY: ts-watch
 ts-watch:
@@ -294,12 +305,12 @@ check-ui-drift: ts-build
 		git ls-files --others --exclude-standard swarm/tools/flow_studio_ui/js/; \
 		exit 1; \
 	fi
-	@echo "✓ Compiled JS matches repo (no drift, no untracked files)"
+	@echo "OK Compiled JS matches repo (no drift, no untracked files)"
 
 .PHONY: dump-openapi-schema
 dump-openapi-schema:
 	@echo "Dumping OpenAPI schema from FastAPI app..."
-	@uv run python -c "from swarm.tools.flow_studio_fastapi import app; import json; from pathlib import Path; schema = app.openapi(); out = Path('docs/flowstudio-openapi.json'); out.write_text(json.dumps(schema, indent=2)); print(f'✓ Schema dumped to {out}')"
+	@uv run python -c "from swarm.tools.flow_studio_fastapi import app; import json; from pathlib import Path; schema = app.openapi(); out = Path('docs/flowstudio-openapi.json'); out.write_text(json.dumps(schema, indent=2), encoding='utf-8'); print(f'OK Schema dumped to {out}')"
 
 .PHONY: validate-openapi-schema
 validate-openapi-schema:
@@ -315,7 +326,7 @@ check-openapi-breaking-changes:
 .PHONY: diff-openapi-schema
 diff-openapi-schema: dump-openapi-schema
 	@echo "Comparing current schema against git baseline..."
-	@git diff --color-words docs/flowstudio-openapi.json || echo "✓ No changes detected"
+	@git diff --color-words docs/flowstudio-openapi.json || echo "OK No changes detected"
 
 .PHONY: flow-studio-docs
 flow-studio-docs:
@@ -535,7 +546,7 @@ override-list:
 runs-clean:
 	@echo "Cleaning ephemeral runs under swarm/runs/..."
 	@rm -rf swarm/runs/run-*
-	@echo "✓ Cleaned run-* directories."
+	@echo "OK Cleaned run-* directories."
 	@echo ""
 	@echo "Note: Golden examples (demo-health-check, stepwise-stub) are preserved."
 	@echo "      To regenerate: make demo-run or make stepwise-sdlc-stub"
@@ -616,15 +627,15 @@ wisdom-cycle:
 	@if [ -z "$(RUN_ID)" ]; then \
 		echo "Step 1: Aggregating wisdom from all existing runs..."; \
 		uv run swarm/tools/wisdom_aggregate_runs.py --markdown > wisdom_report.md; \
-		echo "✓ Generated wisdom_report.md"; \
+		echo "OK Generated wisdom_report.md"; \
 	else \
 		echo "Step 1: Generating wisdom summary for run $(RUN_ID)..."; \
 		uv run swarm/tools/wisdom_summarizer.py "$(RUN_ID)"; \
-		echo "✓ Generated wisdom_summary.json for $(RUN_ID)"; \
+		echo "OK Generated wisdom_summary.json for $(RUN_ID)"; \
 		echo ""; \
 		echo "Step 2: Aggregating across all runs..."; \
 		uv run swarm/tools/wisdom_aggregate_runs.py --markdown > wisdom_report.md; \
-		echo "✓ Generated wisdom_report.md"; \
+		echo "OK Generated wisdom_report.md"; \
 	fi
 	@echo ""
 	@echo "Step 3: Preview runs eligible for cleanup..."
@@ -650,7 +661,7 @@ wisdom-examples:
 		fi; \
 	done; \
 	echo ""; \
-	echo "✓ Wisdom summaries updated"; \
+	echo "OK Wisdom summaries updated"; \
 	echo ""; \
 	echo "Summary:"; \
 	find swarm/examples -name "wisdom_summary.json" 2>/dev/null | wc -l | xargs printf "  %s examples have wisdom_summary.json\n"
@@ -662,11 +673,11 @@ demo-run:
 	@mkdir -p swarm/runs
 	@cp -r swarm/examples/health-check swarm/runs/demo-health-check
 	@echo ""
-	@echo "✓ Demo run created at swarm/runs/demo-health-check/"
+	@echo "OK Demo run created at swarm/runs/demo-health-check/"
 	@echo ""
 	@echo "Next steps:"
 	@echo "  - Explore artifacts: ls -R swarm/runs/demo-health-check/"
-	@echo "  - View in Flow Studio: make flow-studio → http://localhost:5000"
+	@echo "  - View in Flow Studio: make flow-studio -> http://localhost:5000"
 	@echo "  - Read the guide: DEMO_RUN.md"
 
 .PHONY: demo-flow-studio
@@ -675,11 +686,11 @@ demo-flow-studio:
 	@echo ""
 	@echo "Step 1: Syncing dependencies…"
 	@uv sync --extra dev > /dev/null 2>&1
-	@echo "✓ Dependencies synced"
+	@echo "OK Dependencies synced"
 	@echo ""
 	@echo "Step 2: Populating demo run from health-check example…"
 	@$(MAKE) demo-run > /dev/null 2>&1
-	@echo "✓ Demo run populated"
+	@echo "OK Demo run populated"
 	@echo ""
 	@echo "Step 3: Starting Flow Studio…"
 	@echo ""
@@ -710,14 +721,14 @@ demo-swarm:
 	@echo ""
 	@echo "Step 1: Running validation (dev-check)…"
 	@$(MAKE) dev-check 2>&1 | tail -10
-	@echo "✓ Validation passed"
+	@echo "OK Validation passed"
 	@echo ""
 	@echo "Step 2: Previewing run cleanup…"
 	@$(MAKE) runs-prune-dry 2>&1 | tail -5 || echo "  (no stale runs)"
 	@echo ""
 	@echo "Step 3: Running stepwise SDLC stub demo…"
 	@$(MAKE) stepwise-sdlc-stub 2>&1 | tail -10
-	@echo "✓ Stepwise demo run created"
+	@echo "OK Stepwise demo run created"
 	@echo ""
 	@echo "Step 4: Starting Flow Studio…"
 	@echo ""
@@ -942,6 +953,7 @@ dev-precheck:
 	@$(MAKE) check-flow-constants
 	@$(MAKE) check-index-html
 	@$(MAKE) validate-swarm
+	@$(MAKE) check-capabilities-doc
 	@$(MAKE) ts-check
 	@$(MAKE) docs-check
 	@echo ""
@@ -959,14 +971,14 @@ dev-check:
 	@echo "  SWARM CHECKS SUMMARY"
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo ""
-	@echo "  ✓ Adapters generated (FR-002, FR-OP-001)"
-	@echo "  ✓ Flows generated (FR-003, FR-005)"
-	@echo "  ✓ Flow constants generated (TypeScript)"
-	@echo "  ✓ Index HTML generated (from fragments)"
-	@echo "  ✓ Validator (FR-001..005) PASS"
-	@echo "  ✓ TypeScript (Flow Studio UI) PASS"
-	@echo "  ✓ Selftest (16 steps: KERNEL + GOVERNANCE + OPTIONAL) PASS"
-	@echo "  ✓ Acceptance tests PASS"
+	@echo "  [OK] Adapters generated (FR-002, FR-OP-001)"
+	@echo "  [OK] Flows generated (FR-003, FR-005)"
+	@echo "  [OK] Flow constants generated (TypeScript)"
+	@echo "  [OK] Index HTML generated (from fragments)"
+	@echo "  [OK] Validator (FR-001..005) PASS"
+	@echo "  [OK] TypeScript (Flow Studio UI) PASS"
+	@echo "  [OK] Selftest (16 steps: KERNEL + GOVERNANCE + OPTIONAL) PASS"
+	@echo "  [OK] Acceptance tests PASS"
 	@echo ""
 	@echo "  Golden state: ready to develop or merge."
 	@echo ""
@@ -990,14 +1002,14 @@ dev-check-fast:
 	@echo "  SWARM CHECKS SUMMARY (fast mode)"
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo ""
-	@echo "  ✓ Adapters generated (FR-002, FR-OP-001)"
-	@echo "  ✓ Flows generated (FR-003, FR-005)"
-	@echo "  ✓ Flow constants generated (TypeScript)"
-	@echo "  ✓ Index HTML generated (from fragments)"
-	@echo "  ✓ Validator (FR-001..005) PASS"
-	@echo "  ✓ TypeScript (Flow Studio UI) PASS"
-	@echo "  ✓ Selftest (flowstudio-smoke skipped for speed) PASS"
-	@echo "  ✓ Acceptance tests PASS"
+	@echo "  [OK] Adapters generated (FR-002, FR-OP-001)"
+	@echo "  [OK] Flows generated (FR-003, FR-005)"
+	@echo "  [OK] Flow constants generated (TypeScript)"
+	@echo "  [OK] Index HTML generated (from fragments)"
+	@echo "  [OK] Validator (FR-001..005) PASS"
+	@echo "  [OK] TypeScript (Flow Studio UI) PASS"
+	@echo "  [OK] Selftest (flowstudio-smoke skipped for speed) PASS"
+	@echo "  [OK] Acceptance tests PASS"
 	@echo ""
 	@echo "  Note: Run 'make dev-check' for full verification before merge."
 	@echo ""
@@ -1023,10 +1035,10 @@ release-verify:
 	@echo "  RELEASE GATE: PASSED"
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo ""
-	@echo "  ✓ FastAPI-only backend: verified"
-	@echo "  ✓ OpenAPI baseline: stable"
-	@echo "  ✓ Flask quarantine: enforced"
-	@echo "  ✓ All gates passed: safe to tag release"
+	@echo "  [OK] FastAPI-only backend: verified"
+	@echo "  [OK] OpenAPI baseline: stable"
+	@echo "  [OK] Flask quarantine: enforced"
+	@echo "  [OK] All gates passed: safe to tag release"
 	@echo ""
 
 .PHONY: selftest-core-build

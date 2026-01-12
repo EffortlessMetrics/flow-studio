@@ -8,17 +8,25 @@ This document defines the operational philosophy for **Flow Studio**—a Python 
 
 ---
 
-## 1. The Core Economic Thesis: Attention Economics
+## 1. The Core Economic Thesis: Developer Enablement
 
-**"Compute is a Utility; Attention is the Asset."**
+**"Code generation is fast, good, and cheap. The bottleneck is trust."**
 
-- **The Old Logic:** Optimize prompt engineering to save tokens and reduce API costs.
-- **The AgOps Logic:** Intentionally "waste" compute to buy back human time.
-  - We run redundant verification steps.
-  - We let agents loop 50 times to fix a dependency.
-  - We spin up separate "Architect" sessions just to route traffic.
+Models now deliver Sonnet-level reasoning at 1,000+ tokens/second with reasonable pricing. The question isn't "can the LLM write code"—it's "can a human review and trust the output in 30 minutes instead of spending a week doing it themselves."
 
-**The Math:** Spending $2.00 on a background run is infinitely better than spending 20 minutes of a Senior Engineer's time debugging a "halting" agent.
+**The Shift:**
+
+| Old Way | AgOps Way |
+|---------|-----------|
+| Spend a week implementing | System spends 4 hours iterating |
+| Review by reading every line | Review via inspection report + hotspots |
+| Hope tests are meaningful | Mutation testing proves coverage depth |
+| "It works on my machine" | Receipts prove what happened and why |
+| Developer time = implementation | Developer time = planning + architecture + review |
+
+**The Math:** Spending ~$30 on a background run that produces a reviewable PR with evidence is infinitely better than spending 5 days of a developer's time producing something worse.
+
+**The Posture:** This isn't "AI vs. developers." It's developers doing more, better, by offloading the grind to systems that iterate tirelessly and produce proof.
 
 ---
 
@@ -37,13 +45,15 @@ Do not anthropomorphize the AI as a "Co-Pilot" or a "Partner." View the system a
 
 ## 3. The Operational Laws (The Physics)
 
-### Law 1: The Amnesia Protocol (Context Hygiene)
+### Law 1: Context Reset + Rehydration (Session Hygiene)
 
-**"Intelligence degrades as history grows."**
+**"Intelligence degrades as irrelevant history grows."**
 
 - **The Rule:** Never pass raw chat history between steps.
-- **The Fix:** Every step starts with a **Fresh Session**.
+- **The Fix:** Every step starts **fresh** (Context Reset), then receives only what's relevant (Rehydration).
 - **The Mechanism:** The **ContextPack**. The Kernel curates a specific "Briefing Case" (Summaries + File Pointers + Scent Trail) for the next agent. This ensures "Peak Reasoning Density" at every stage.
+
+> **Canonical terms:** See "Scoped Focus", "Session Boundary", "Context Reset", and "Rehydration" in [LEXICON.md](./LEXICON.md).
 
 ### Law 2: Forensics Over Narrative (Trust No One)
 
@@ -148,7 +158,7 @@ To operate this swarm, you must understand the psychology of the model (Claude) 
 
 | Weakness | Mitigation | Mechanism |
 |----------|------------|-----------|
-| Context Drunkenness | Amnesia Protocol | Session Amnesia + curated ContextPack |
+| Context Drunkenness | Context Reset + Rehydration | Fresh session + curated ContextPack |
 | Success Pressure | `PARTIAL` is a Win | Explicit prompt: "If stuck, write status PARTIAL. This is successful." |
 | Rabbit Holing | Navigator Agent | "Senior Architect" routes between sprints; junior only executes |
 
@@ -306,11 +316,28 @@ The system is working when:
 1. You can drop a GitHub Issue URL into the UI.
 2. You click "Run."
 3. You walk away.
-4. The system grinds for 5 hours, looping, detouring, and fixing itself.
-5. You return to find a **PR** that is green, verified, and architecturally sound.
-6. If the system crashes, you type `--resume` and it picks up exactly where it left off.
+4. The system grinds for 4 hours, looping, detouring, and fixing itself.
+5. You return to find a **PR** with:
+   - A bounded change (what changed, where, and why)
+   - An evidence pack (tests, diffs, receipts, checks)
+   - Quality events (interface locks, complexity caps, verification depth, security airbags)
+   - Known limits (what isn't proven / what's deferred)
+6. You review in 30 minutes instead of spending a week doing it yourself.
+7. If the system crashes, you type `--resume` and it picks up exactly where it left off.
 
-**This is not a tool for writing code. It is an infrastructure for manufacturing logic.**
+**This is not a tool for writing code. It is an infrastructure for manufacturing logic with proof.**
+
+### The Review Contract
+
+A reviewer should be able to answer these questions in 2-5 minutes:
+
+1. **Where did behavior change?** (hotspots + surface deltas)
+2. **What boundaries were enforced?** (interface lock / deps / layering)
+3. **What proof exists?** (tests, mutation, security, receipts)
+4. **What is not measured / still risky?** (explicit unknowns)
+5. **Where should I escalate verification if doubt exists?** (3-8 files max)
+
+The PR body is the "review cockpit." Receipts are the audit truth. When doubt exists, escalate verification (more tests, mutation testing, targeted scans)—not manual code reading.
 
 ---
 
@@ -354,18 +381,76 @@ You have designed a system where **Time is on your side.** The longer you use Fl
 
 ---
 
+## 14. Meta-Learnings & Emergent Physics
+
+Building this system taught us lessons that weren't in the original design. These emergent truths are now documented:
+
+### The Trust Compiler Insight
+
+> **AgOps isn't a code generator. It's a trust compiler whose primary artifact is a trustworthy evidence surface.**
+
+The system's job isn't to produce code—it's to produce **reviewable trust bundles** that minimize attention cost. The verification stack—receipts, forensic scanners, evidence contracts—is the durable asset that outlasts any particular implementation. Code can be regenerated cheaply; evidence contracts and the discipline they encode cannot. This is why we invest heavily in the evidence surface: it's the only part that actually accumulates value over time. See [TRUST_COMPILER.md](./explanation/TRUST_COMPILER.md) for the full treatment.
+
+### The 12 Emergent Laws
+
+Through implementation, we discovered constraints that behave like physical laws:
+
+1. **Scarcity Inversion** - Generation is cheap; review attention is expensive. *Optimize for reviewer throughput, not generation speed.*
+2. **Mold-Stamping Risk** - Bad patterns replicate at machine speed. *One unreviewed defect becomes a thousand.*
+3. **Existence Over Claims** - Absence is the default failure mode. *If the file doesn't exist, the claim is false.*
+4. **Truth Hierarchy** - Physics > Receipts > Narrative. *Exit codes trump prose explanations.*
+5. **Session Amnesia** - Disk is memory; context resets. *Every step starts fresh; artifacts persist.*
+6. **Narrow Trust** - Scope × Evidence × Verification. *Small scope with strong evidence beats broad scope with weak evidence.*
+7. **Boundary Physics** - Autonomy inside; gates at exits. *Full freedom in the sandbox; strict checks at publish.*
+8. **Internal Gates Are Routing** - Only publish boundaries matter. *Mid-flow reviews are just navigation, not approval.*
+9. **Panel Defense** - Multi-metric panels resist gaming. *Optimizing one metric should hurt another in the same panel.*
+10. **Non-Determinism as Signal** - Variation reveals underconstrained specs. *If outputs differ across runs, requirements are ambiguous.*
+11. **Validator Supremacy** - Pack-check is the constitution. *What the validator rejects doesn't ship, regardless of narrative.*
+12. **Verification as Asset** - The verification stack is the crown jewel. *Tests, contracts, and evidence schemas are more valuable than code.*
+
+### The Three Questions
+
+Every reviewer should ask these questions before approving:
+
+1. **Does evidence exist and is it fresh?** — Receipts must exist and come from this commit, not a stale cache. If evidence is missing, the claim is unverified.
+2. **Does the panel of metrics agree?** — High coverage with low mutation score means weak tests. Fast review with no evidence means rubber-stamping. Contradictions within a panel reveal problems.
+3. **Where would I escalate verification if I had doubt?** — The hotspots list should guide you to 3-8 files maximum. When doubt exists, the answer is deeper verification (targeted tests, mutation testing, fuzz testing), not manual code reading. If you can't identify what to check, the PR summary failed its job.
+
+These questions operationalize the "Forensics Over Narrative" principle. If you can't answer them from the PR body and receipts alone, the system hasn't done its job.
+
+### Further Reading
+
+For the complete treatment of meta-learnings and physics:
+
+| Document | Purpose |
+|----------|---------|
+| [META_LEARNINGS.md](./explanation/META_LEARNINGS.md) | 15 implementation lessons |
+| [EMERGENT_PHYSICS.md](./explanation/EMERGENT_PHYSICS.md) | 12 laws that emerged |
+| [PHYSICS_PRINCIPLES.md](./explanation/PHYSICS_PRINCIPLES.md) | Index with enforcement links |
+| [TRUST_COMPILER.md](./explanation/TRUST_COMPILER.md) | The synthesis |
+| [VALIDATOR_AS_LAW.md](./explanation/VALIDATOR_AS_LAW.md) | Why validators are the constitution |
+| [REVIEW_AS_PILOTING.md](./explanation/REVIEW_AS_PILOTING.md) | The new review skill |
+| [GOVERNANCE_EVOLUTION.md](./explanation/GOVERNANCE_EVOLUTION.md) | How rules improve |
+| [SCENT_TRAIL.md](./explanation/SCENT_TRAIL.md) | Decision breadcrumbs |
+| [NAVIGATOR_PROTOCOL.md](./explanation/NAVIGATOR_PROTOCOL.md) | Routing intelligence |
+| [CONTEXT_DISCIPLINE.md](./explanation/CONTEXT_DISCIPLINE.md) | Session amnesia |
+
+---
+
 ## Summary
 
 | Principle | Implementation |
 |-----------|----------------|
+| Developer Enablement | 4 hours of system work → 30 min of human review |
+| Quality First | Interface locks, complexity caps, test depth, security airbags |
 | Compute over Attention | Let agents iterate; review receipts, not steps |
 | High Trust Model | Golden Path + documented deviations, not button allowlists |
 | Goal-Aligned Routing | Navigator asks "Does this help the objective?" + Blocking Dependency Test |
 | Context Sharding | Steps own logic; subagents handle mechanics |
 | Suggested vs. Mandated | Detours are brochures, not walls; orchestrator can go off-road |
 | Structural Learning | Ad-hoc deviations evolve into SOP via Wisdom |
-| Session Hygiene | Amnesia Protocol + ContextPack |
+| Session Hygiene | Context Reset + Rehydration |
 | Trust with Verification | `bypassPermissions` + Forensic Scanners |
 | Isolation | Shadow Fork + orderly shutdown + resume |
 
-**You stop being a Coder. You become the Plant Manager.**
+**You stop grinding on implementation. You start architecting, planning, and reviewing—the work that actually needs your judgment.**

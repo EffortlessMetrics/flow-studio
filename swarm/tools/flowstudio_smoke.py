@@ -398,7 +398,7 @@ def main() -> int:
             # 200-299 is success, 404 is acceptable for some endpoints
             passed = 200 <= code < 300
 
-            status_icon = "✓" if passed else "✗"
+            status_icon = "[OK]" if passed else "[FAIL]"
             print(f"  {status_icon} {method} {path}: {code} ({elapsed_ms:.0f}ms)")
 
             if not passed:
@@ -455,7 +455,7 @@ def main() -> int:
             "-" * 40,
         ]
         for r in results:
-            icon = "✓" if r["passed"] else "✗"
+            icon = "[OK]" if r["passed"] else "[FAIL]"
             summary_lines.append(
                 f"  {icon} {r['method']} {r['path']}: {r['status']} ({r['ms']:.0f}ms)"
             )
@@ -464,9 +464,9 @@ def main() -> int:
 
         print()
         if all_passed:
-            print(f"✅ Flow Studio smoke PASSED ({passed_count}/{total} endpoints)")
+            print(f"[PASS] Flow Studio smoke PASSED ({passed_count}/{total} endpoints)")
         else:
-            print(f"❌ Flow Studio smoke FAILED ({failed_count}/{total} endpoints failed)")
+            print(f"[FAIL] Flow Studio smoke FAILED ({failed_count}/{total} endpoints failed)")
 
         print(f"   Artifacts: {ART_DIR}")
         return 0 if all_passed else 1

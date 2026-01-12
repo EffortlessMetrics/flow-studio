@@ -1,0 +1,9 @@
+# Auto-bootstrapped from swarm/AGENTS.md
+key: build-cleanup
+flows:
+  - review
+category: verification
+color: blue
+source: project/user
+short_role: "Reseal build receipt if code changed during review. Update checksums."
+model: inherit

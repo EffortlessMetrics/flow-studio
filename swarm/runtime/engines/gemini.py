@@ -40,6 +40,11 @@ from swarm.runtime.path_helpers import (
     transcript_path as make_transcript_path,
 )
 from swarm.runtime.types import RunEvent
+from swarm.runtime.types.tool_call import (
+    NormalizedToolCall,
+    from_gemini_events,
+    truncate_output,
+)
 
 from .base import StepEngine
 from .models import HistoryTruncationInfo, StepContext, StepResult
@@ -439,6 +444,10 @@ class GeminiStepEngine(StepEngine):
         full_assistant_text: List[str] = []
         token_counts: Dict[str, int] = {"prompt": 0, "completion": 0, "total": 0}
 
+        # Track tool calls for normalized receipts
+        tool_calls: List[NormalizedToolCall] = []
+        pending_tool_use: Optional[Dict[str, Any]] = None
+
         if process.stdout:
             for line in process.stdout:
                 line = line.strip()
@@ -459,6 +468,31 @@ class GeminiStepEngine(StepEngine):
                             content = event_data.get("content", "")
                             if content:
                                 full_assistant_text.append(content)
+
+                    # Track tool calls for normalized receipts
+                    if event_type == "tool_use":
+                        # Store pending tool_use to match with result
+                        pending_tool_use = event_data
+                    elif event_type == "tool_result":
+                        # Create normalized tool call from pending use + result
+                        if pending_tool_use is not None:
+                            tool_call = from_gemini_events(
+                                pending_tool_use,
+                                event_data,
+                            )
+                            tool_calls.append(tool_call)
+                            pending_tool_use = None
+                        else:
+                            # tool_result without matching tool_use
+                            # Create a tool call with just the result info
+                            tool_call = from_gemini_events(
+                                {
+                                    "name": event_data.get("tool") or event_data.get("name") or "unknown",
+                                    "args": {},
+                                },
+                                event_data,
+                            )
+                            tool_calls.append(tool_call)
 
                     # Extract token counts if available (standard format)
                     if "usage" in event_data:
@@ -515,6 +549,7 @@ class GeminiStepEngine(StepEngine):
             status,
             token_counts,
             truncation_info,
+            tool_calls,
         )
 
         # Build the actual assistant output text
@@ -562,6 +597,7 @@ class GeminiStepEngine(StepEngine):
         status: str,
         token_counts: Dict[str, int],
         truncation_info: Optional[HistoryTruncationInfo] = None,
+        tool_calls: Optional[List[NormalizedToolCall]] = None,
     ) -> Path:
         """Write receipt JSON to RUN_BASE/receipts/<step_id>-<agent_key>.json.
 
@@ -573,6 +609,7 @@ class GeminiStepEngine(StepEngine):
             status: Execution status.
             token_counts: Token usage counts.
             truncation_info: Optional history truncation metadata for context budgets.
+            tool_calls: Optional list of normalized tool calls observed during execution.
 
         Returns:
             Path to the receipt file.
@@ -606,6 +643,10 @@ class GeminiStepEngine(StepEngine):
         # Add context truncation info if provided
         if truncation_info:
             receipt["context_truncation"] = truncation_info.to_dict()
+
+        # Add normalized tool calls if any were observed
+        if tool_calls:
+            receipt["tool_calls"] = [tc.to_dict() for tc in tool_calls]
 
         with r_path.open("w", encoding="utf-8") as f:
             json.dump(receipt, f, indent=2)

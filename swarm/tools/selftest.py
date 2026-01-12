@@ -402,19 +402,19 @@ class SelfTestRunner:
             # Add actionable hints for failures
             print("\nHints for resolution:")
             if self.kernel_failed:
-                print("  ⚠ KERNEL failure(s): This blocks all merges")
+                print("  [!] KERNEL failure(s): This blocks all merges")
                 for step_id in self.kernel_failed:
                     print(f"    Run: uv run swarm/tools/selftest.py --step {step_id}")
             if self.governance_failed:
                 if self.kernel_failed:
                     print()
-                print("  💡 GOVERNANCE failure(s): Run any of:")
+                print("  [*] GOVERNANCE failure(s): Run any of:")
                 for step_id in self.governance_failed:
                     print(f"    Run: uv run swarm/tools/selftest.py --step {step_id}")
                 if not self.kernel_failed:
-                    print("  💡 Or try: uv run swarm/tools/selftest.py --degraded to work around governance failures")
-            print("  📖 See: docs/SELFTEST_SYSTEM.md for more information")
-            print("  🔍 Run: uv run swarm/tools/selftest.py --plan to see all steps")
+                    print("  [*] Or try: uv run swarm/tools/selftest.py --degraded to work around governance failures")
+            print("  [>] See: docs/SELFTEST_SYSTEM.md for more information")
+            print("  [>] Run: uv run swarm/tools/selftest.py --plan to see all steps")
 
         total_ms = sum(r.duration_ms for r in self.results)
         print(f"\nTotal time: {total_ms / 1000:.2f}s")

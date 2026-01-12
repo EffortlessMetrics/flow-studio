@@ -127,8 +127,61 @@
         }
       }
     },
+    "review": {
+      "title": "Flow 4 - Review",
+      "decision_artifact": "review_receipt.json",
+      "steps": {
+        "run_prep": {
+          "required": ["flow_plan.md"],
+          "optional": []
+        },
+        "branch": {
+          "required": [],
+          "optional": ["git_status.md"],
+          "note": "Git operation only"
+        },
+        "pr_create": {
+          "required": ["pr_creation_status.md"],
+          "optional": []
+        },
+        "harvest": {
+          "required": ["pr_feedback.md"],
+          "optional": ["pr_feedback_raw.json"]
+        },
+        "cluster": {
+          "required": ["review_worklist.md", "review_worklist.json"],
+          "optional": []
+        },
+        "worklist_loop": {
+          "required": ["review_actions.md"],
+          "optional": ["style_sweep.md"]
+        },
+        "close_pr": {
+          "required": ["pr_comment_status.md", "pr_status.md"],
+          "optional": []
+        },
+        "cleanup": {
+          "required": ["review_receipt.json"],
+          "optional": ["cleanup_report.md"]
+        },
+        "sanitize": {
+          "required": ["secrets_scan.md", "secrets_status.json"],
+          "optional": []
+        },
+        "commit": {
+          "required": [],
+          "optional": ["git_status.md"],
+          "note": "Git operation only"
+        },
+        "gh_update": {
+          "required": [],
+          "optional": ["gh_issue_status.md", "github_report.md", "gh_report_status.md"],
+          "note": "Posts to GitHub, no required file output"
+        }
+      }
+    },
     "gate": {
-      "title": "Flow 4 - Gate",
+      "title": "Flow 5 - Gate",
       "decision_artifact": "merge_recommendation.md",
       "steps": {
         "receipt": {
@@ -159,7 +212,7 @@
       }
     },
     "deploy": {
-      "title": "Flow 5 - Deploy",
+      "title": "Flow 6 - Deploy",
       "decision_artifact": "deployment_decision.md",
       "steps": {
         "decide": {
@@ -187,7 +240,7 @@
       }
     },
     "wisdom": {
-      "title": "Flow 6 - Wisdom",
+      "title": "Flow 7 - Wisdom",
       "decision_artifact": "learnings.md",
       "steps": {
         "audit": {

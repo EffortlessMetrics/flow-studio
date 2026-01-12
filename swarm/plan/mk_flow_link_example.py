@@ -16,6 +16,13 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import urlencode
 
+# Add repo root to path for imports
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from swarm.config.flow_registry import get_flow_order
+
 
 # Mock for example - would use real YAML loader in implementation
 def _load_flow_config(flow_key: str) -> dict:
@@ -49,7 +56,7 @@ class FlowStudioLinkGenerator:
         - tab: tab in step details (e.g., "spec", "run", "artifacts") (requires step)
     """
 
-    VALID_FLOWS = ["signal", "plan", "build", "gate", "deploy", "wisdom"]
+    VALID_FLOWS = get_flow_order()
     VALID_MODES = ["author", "operator"]
     VALID_VIEWS = ["agents", "artifacts"]
 

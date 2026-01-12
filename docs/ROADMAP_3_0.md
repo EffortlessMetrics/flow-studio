@@ -35,7 +35,7 @@ These components are built and integrated:
 | Static flow execution | Dynamic graph traversal with detours |
 | Manual context building | ContextPack curation per step |
 | Hope-based verification | Forensic scanners (DiffScanner, TestParser) |
-| Session history accumulation | Amnesia Protocol (fresh sessions, handoffs) |
+| Session history accumulation | Context Reset + Rehydration (fresh sessions, curated handoffs) |
 | Fixed flow specs | Self-healing via Wisdom patches |
 
 ### V3 GitHub Lifecycle (Synchronous Model)

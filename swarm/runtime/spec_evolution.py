@@ -925,6 +925,221 @@ def load_evolution_proposals(run_base: Path) -> List[GraphEvolutionProposal]:
         return []
 
 
+# =============================================================================
+# Routing-Time Proposal Persistence
+# =============================================================================
+
+
+def persist_routing_proposal(
+    run_base: Path,
+    flow_key: str,
+    step_id: str,
+    proposed_edge: Any,
+    why_now: Optional[Dict[str, Any]] = None,
+    routing_reason: str = "",
+) -> Path:
+    """Persist an EXTEND_GRAPH proposal at routing decision time.
+
+    Unlike save_evolution_proposal (which saves to wisdom/evolution/ post-hoc),
+    this function persists proposals immediately when the routing decision
+    is made, at: RUN_BASE/<flow>/routing/proposals/<proposal_id>.json
+
+    This ensures EXTEND_GRAPH decisions produce durable artifacts that can be:
+    - Referenced in route_decision event payloads
+    - Included in envelope routing_signal.proposal_path
+    - Analyzed by Wisdom without depending on events.jsonl parsing
+
+    Args:
+        run_base: Path to the run base directory (RUN_BASE).
+        flow_key: The flow where the decision was made.
+        step_id: The step that triggered the decision.
+        proposed_edge: The ProposedEdge object from Navigator.
+        why_now: Optional WhyNow justification.
+        routing_reason: Human-readable reason for the proposal.
+
+    Returns:
+        Path to the written proposal file.
+    """
+    # Ensure routing/proposals directory exists
+    proposals_dir = run_base / flow_key / "routing" / "proposals"
+    proposals_dir.mkdir(parents=True, exist_ok=True)
+
+    # Generate proposal ID
+    timestamp = datetime.now(timezone.utc)
+    proposal_id = f"RP-{timestamp.strftime('%Y%m%d-%H%M%S')}-{step_id[:8]}"
+
+    # Extract edge data
+    edge_data: Dict[str, Any] = {}
+    if proposed_edge is not None:
+        if hasattr(proposed_edge, "to_node"):
+            edge_data = {
+                "from_node": getattr(proposed_edge, "from_node", step_id),
+                "to_node": proposed_edge.to_node,
+                "edge_type": getattr(proposed_edge, "edge_type", "sequence"),
+                "priority": getattr(proposed_edge, "priority", 50),
+                "is_return": getattr(proposed_edge, "is_return", False),
+                "why": getattr(proposed_edge, "why", routing_reason),
+            }
+            # Include proposed node if present
+            if hasattr(proposed_edge, "proposed_node") and proposed_edge.proposed_node:
+                pn = proposed_edge.proposed_node
+                edge_data["proposed_node"] = {
+                    "node_id": getattr(pn, "node_id", None),
+                    "station_id": getattr(pn, "station_id", None),
+                    "template_id": getattr(pn, "template_id", None),
+                    "objective": getattr(pn, "objective", None),
+                }
+        elif isinstance(proposed_edge, dict):
+            edge_data = proposed_edge
+
+    # Build proposal record
+    proposal = {
+        "schema_version": "routing_proposal_v1",
+        "proposal_id": proposal_id,
+        "decision_type": "EXTEND_GRAPH",
+        "flow_key": flow_key,
+        "step_id": step_id,
+        "timestamp": timestamp.isoformat(),
+        "proposed_edge": edge_data,
+        "why_now": why_now,
+        "routing_reason": routing_reason,
+        "status": "recorded",
+        # JSON Patch suggestion (placeholder for UI)
+        "suggested_patch": _generate_extend_graph_patch(edge_data),
+    }
+
+    # Write proposal file
+    proposal_path = proposals_dir / f"{proposal_id}.json"
+    with open(proposal_path, "w", encoding="utf-8") as f:
+        json.dump(proposal, f, indent=2, ensure_ascii=False)
+
+    logger.info(
+        "Persisted routing proposal %s to %s",
+        proposal_id,
+        proposal_path,
+    )
+
+    # Also append to the decisions ledger
+    _append_to_routing_ledger(run_base, flow_key, proposal)
+
+    return proposal_path
+
+
+def _generate_extend_graph_patch(edge_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Generate JSON Patch operations from edge data.
+
+    Args:
+        edge_data: The proposed edge data.
+
+    Returns:
+        List of RFC 6902 JSON Patch operations.
+    """
+    patches: List[Dict[str, Any]] = []
+
+    # Add node if proposed
+    if edge_data.get("proposed_node"):
+        node = edge_data["proposed_node"]
+        patches.append({
+            "op": "add",
+            "path": "/nodes/-",
+            "value": {
+                "node_id": node.get("node_id") or f"suggested-{edge_data.get('to_node')}",
+                "template_id": node.get("template_id") or edge_data.get("to_node"),
+                "station_id": node.get("station_id"),
+                "params": {
+                    "objective": node.get("objective", ""),
+                },
+            },
+        })
+
+    # Add edge
+    patches.append({
+        "op": "add",
+        "path": "/edges/-",
+        "value": {
+            "edge_id": f"suggested-{edge_data.get('from_node', 'unknown')}-{edge_data.get('to_node', 'unknown')}",
+            "from": edge_data.get("from_node", "unknown"),
+            "to": edge_data.get("to_node", "unknown"),
+            "type": edge_data.get("edge_type", "sequence"),
+            "priority": edge_data.get("priority", 50),
+        },
+    })
+
+    return patches
+
+
+def _append_to_routing_ledger(
+    run_base: Path,
+    flow_key: str,
+    proposal: Dict[str, Any],
+) -> None:
+    """Append a routing proposal to the decisions ledger.
+
+    The ledger is an append-only JSONL file at:
+    RUN_BASE/<flow>/routing/decisions.jsonl
+
+    Args:
+        run_base: Path to the run base directory.
+        flow_key: The flow key.
+        proposal: The proposal record to append.
+    """
+    routing_dir = run_base / flow_key / "routing"
+    routing_dir.mkdir(parents=True, exist_ok=True)
+
+    ledger_path = routing_dir / "decisions.jsonl"
+
+    ledger_entry = {
+        "event_type": "extend_graph_proposal",
+        "proposal_id": proposal["proposal_id"],
+        "step_id": proposal["step_id"],
+        "timestamp": proposal["timestamp"],
+        "decision": "EXTEND_GRAPH",
+        "target": proposal.get("proposed_edge", {}).get("to_node"),
+        "proposal_path": str(run_base / flow_key / "routing" / "proposals" / f"{proposal['proposal_id']}.json"),
+    }
+
+    with open(ledger_path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(ledger_entry, ensure_ascii=False) + "\n")
+
+
+def load_routing_proposals(
+    run_base: Path,
+    flow_key: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """Load routing proposals from disk.
+
+    Args:
+        run_base: Path to the run base directory.
+        flow_key: Optional flow key to filter by. If None, loads from all flows.
+
+    Returns:
+        List of proposal dictionaries.
+    """
+    proposals: List[Dict[str, Any]] = []
+
+    if flow_key:
+        flow_dirs = [run_base / flow_key]
+    else:
+        # Scan all flow directories
+        flow_dirs = [d for d in run_base.iterdir() if d.is_dir() and (d / "routing" / "proposals").exists()]
+
+    for flow_dir in flow_dirs:
+        proposals_dir = flow_dir / "routing" / "proposals"
+        if not proposals_dir.exists():
+            continue
+
+        for proposal_file in proposals_dir.glob("*.json"):
+            try:
+                with open(proposal_file, "r", encoding="utf-8") as f:
+                    proposal = json.load(f)
+                    proposal["_file_path"] = str(proposal_file)
+                    proposals.append(proposal)
+            except (json.JSONDecodeError, OSError) as e:
+                logger.warning("Failed to load proposal %s: %s", proposal_file, e)
+
+    return proposals
+
+
 def update_proposal_status(
     run_base: Path,
     proposal_id: str,

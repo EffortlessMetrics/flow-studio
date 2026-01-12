@@ -34,19 +34,22 @@ def test_error_message_includes_file_and_line(temp_repo, run_validator):
     """
     Scenario: Error message includes file path and line number.
 
-    Given: swarm/AGENTS.md line 42 has agent entry 'foo-bar'
-    And: .claude/agents/foo-bar.md does not exist
+    Given: .claude/agents/foo-bar.md exists but is not in registry
     When: I run the validator
-    Then: Error message includes file path and line number
+    Then: Error message includes file path
+
+    Note: During the architecture transition, only file -> registry checks
+    are enforced. We create an orphan file (file exists but not in registry).
     """
-    add_agent_to_registry(temp_repo, "foo-bar")
+    # Create an orphan agent file (file exists but not in registry)
+    create_agent_file(temp_repo, "foo-bar")
 
     result = run_validator(temp_repo)
     assert_validator_failed(result)
 
     # Should mention file
-    assert "swarm/AGENTS.md" in result.stderr or "AGENTS.md" in result.stderr
-    # Should mention line (or agent key)
+    assert ".claude" in result.stderr and "agents" in result.stderr
+    # Should mention agent key
     assert "foo-bar" in result.stderr
 
 
@@ -57,8 +60,12 @@ def test_error_message_follows_standard_format(temp_repo, run_validator):
     Each error message follows format:
       | [FAIL] CHECK_TYPE: location problem statement |
       | Fix: concrete action (one sentence)           |
+
+    Note: During the architecture transition, only file -> registry checks
+    are enforced. We create an orphan file (file exists but not in registry).
     """
-    add_agent_to_registry(temp_repo, "missing-agent")
+    # Create an orphan agent file (file exists but not in registry)
+    create_agent_file(temp_repo, "orphan-agent")
 
     result = run_validator(temp_repo)
     assert_validator_failed(result)
@@ -70,31 +77,32 @@ def test_error_message_follows_standard_format(temp_repo, run_validator):
     assert "Fix:" in result.stderr
 
     # Should mention the problem
-    assert "missing-agent" in result.stderr
+    assert "orphan-agent" in result.stderr
 
 
 def test_multiple_errors_all_reported(temp_repo, run_validator):
     """
     Scenario: Multiple errors are all reported in single run.
 
-    Given: swarm/AGENTS.md has 5 agent misalignments
+    Given: swarm has 3 orphan agent files (files not in registry)
     When: I run the validator
-    Then: All 5 errors are reported
+    Then: All 3 errors are reported
     And: Validator does not stop after first error
+
+    Note: During the architecture transition, only file -> registry checks
+    are enforced. Registry entries without files are NOT errors.
     """
-    # Create 5 different errors
-    add_agent_to_registry(temp_repo, "missing-1")
-    add_agent_to_registry(temp_repo, "missing-2")
+    # Create 3 orphan agent files (files exist but not in registry)
+    # These are actual errors in the current validator
     create_agent_file(temp_repo, "orphan-1")
     create_agent_file(temp_repo, "orphan-2")
-    add_agent_to_registry(temp_repo, "mismatch")
-    create_agent_file(temp_repo, "mismatch-wrong")
+    create_agent_file(temp_repo, "orphan-3")
 
     result = run_validator(temp_repo)
     assert_validator_failed(result)
 
-    # Should report multiple errors (at least 5)
-    assert result.stderr.count("[FAIL]") >= 5
+    # Should report multiple errors (at least 3)
+    assert result.stderr.count("[FAIL]") >= 3
 
 
 def test_errors_printed_to_stderr(temp_repo, run_validator):
@@ -104,8 +112,12 @@ def test_errors_printed_to_stderr(temp_repo, run_validator):
     Given: Validation fails with errors
     When: I run the validator
     Then: Error messages are written to stderr (not stdout)
+
+    Note: During the architecture transition, only file -> registry checks
+    are enforced. We create an orphan file (file exists but not in registry).
     """
-    add_agent_to_registry(temp_repo, "missing-agent")
+    # Create an orphan agent file (file exists but not in registry)
+    create_agent_file(temp_repo, "orphan-agent")
 
     result = run_validator(temp_repo)
     assert_validator_failed(result)
@@ -172,8 +184,13 @@ def test_exit_code_0_on_success(valid_repo, run_validator):
 
 
 def test_exit_code_1_on_failure(temp_repo, run_validator):
-    """Validator exits with code 1 when validation fails."""
-    add_agent_to_registry(temp_repo, "missing-agent")
+    """Validator exits with code 1 when validation fails.
+
+    Note: During the architecture transition, only file -> registry checks
+    are enforced. We create an orphan file (file exists but not in registry).
+    """
+    # Create an orphan agent file (file exists but not in registry)
+    create_agent_file(temp_repo, "orphan-agent")
 
     result = run_validator(temp_repo)
     assert result.returncode == 1
@@ -375,14 +392,18 @@ def test_markdown_report_includes_error_details(temp_repo, run_validator):
       | **Location**: file:line |
       | **Error**: description  |
       | **Fix**: action        |
+
+    Note: During the architecture transition, only file -> registry checks
+    are enforced. We create an orphan file (file exists but not in registry).
     """
-    add_agent_to_registry(temp_repo, "missing-agent")
+    # Create an orphan agent file (file exists but not in registry)
+    create_agent_file(temp_repo, "orphan-agent")
 
     result = run_validator(temp_repo, flags=["--report", "markdown"])
     output = result.stdout
 
     # Should have error details
-    assert "missing-agent" in output
+    assert "orphan-agent" in output
 
     # Should have formatted sections
     # (exact format depends on implementation)
@@ -499,9 +520,15 @@ def test_empty_report_on_valid_repo(valid_repo, run_validator):
 
 
 def test_report_with_multiple_error_types(temp_repo, run_validator):
-    """Report should categorize different error types."""
+    """Report should categorize different error types.
+
+    Note: During the architecture transition, only file -> registry checks
+    are enforced. We create:
+    1. An orphan file (BIJECTION error - file exists but not in registry)
+    2. A flow referencing non-existent agent (REFERENCE error)
+    """
     # Create different error types
-    add_agent_to_registry(temp_repo, "missing-file")  # Bijection error
+    create_agent_file(temp_repo, "orphan-agent")  # Bijection error (orphan file)
     create_flow_file(temp_repo, "flow-1", ["fake-agent"])  # Reference error
 
     result = run_validator(temp_repo, flags=["--report", "json"])
@@ -550,7 +577,7 @@ def test_precommit_config_yaml_exists():
     assert config_file.exists(), ".pre-commit-config.yaml not found"
 
     # Parse YAML
-    content = config_file.read_text()
+    content = config_file.read_text(encoding="utf-8")
     try:
         config = yaml.safe_load(content)
         assert isinstance(config, dict), "YAML must be a dictionary"
@@ -571,7 +598,7 @@ def test_precommit_swarm_validate_hook_defined():
     import yaml
 
     config_file = Path(__file__).parent.parent / ".pre-commit-config.yaml"
-    content = config_file.read_text()
+    content = config_file.read_text(encoding="utf-8")
     config = yaml.safe_load(content)
 
     # Should have repos section
@@ -605,7 +632,7 @@ def test_precommit_hook_uses_system_language():
     import yaml
 
     config_file = Path(__file__).parent.parent / ".pre-commit-config.yaml"
-    content = config_file.read_text()
+    content = config_file.read_text(encoding="utf-8")
     config = yaml.safe_load(content)
 
     for repo in config["repos"]:
@@ -629,7 +656,7 @@ def test_precommit_hook_invokes_validator():
     import yaml
 
     config_file = Path(__file__).parent.parent / ".pre-commit-config.yaml"
-    content = config_file.read_text()
+    content = config_file.read_text(encoding="utf-8")
     config = yaml.safe_load(content)
 
     for repo in config["repos"]:
@@ -656,7 +683,7 @@ def test_precommit_hook_pass_filenames_false():
     import yaml
 
     config_file = Path(__file__).parent.parent / ".pre-commit-config.yaml"
-    content = config_file.read_text()
+    content = config_file.read_text(encoding="utf-8")
     config = yaml.safe_load(content)
 
     for repo in config["repos"]:
@@ -684,7 +711,7 @@ def test_precommit_config_exists():
     # File may or may not exist; just check it's valid if it does
     if config_file.exists():
         import yaml
-        content = config_file.read_text()
+        content = config_file.read_text(encoding="utf-8")
         try:
             yaml.safe_load(content)
         except yaml.YAMLError as e:

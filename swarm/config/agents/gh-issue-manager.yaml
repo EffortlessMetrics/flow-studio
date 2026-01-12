@@ -1,0 +1,9 @@
+# Auto-bootstrapped from swarm/AGENTS.md
+key: gh-issue-manager
+flows:
+  - review
+category: reporter
+color: pink
+source: project/user
+short_role: "Update GitHub issue board. Link PRs to issues, update labels and status."
+model: inherit

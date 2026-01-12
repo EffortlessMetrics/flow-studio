@@ -1,0 +1,9 @@
+# Flow 8: Reset/Rebase agent
+key: reset-resolve-conflicts
+flows:
+  - reset
+category: implementation
+color: green
+source: project/user
+short_role: "Resolve merge/rebase conflicts. Apply safe resolution strategies."
+model: inherit

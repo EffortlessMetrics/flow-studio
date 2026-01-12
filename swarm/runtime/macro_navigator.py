@@ -72,6 +72,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from swarm.config.flow_registry import get_sdlc_flow_keys
 from swarm.runtime.types import (
     FlowOutcome,
     FlowResult,
@@ -1156,7 +1157,7 @@ def create_autopilot_navigator() -> MacroNavigator:
         MacroNavigator configured for autopilot mode.
     """
     run_plan = RunPlanSpec(
-        flow_sequence=["signal", "plan", "build", "gate", "deploy", "wisdom"],
+        flow_sequence=get_sdlc_flow_keys(),  # From registry, includes review
         macro_policy=MacroPolicy.default(),
         human_policy=HumanPolicy.autopilot(),
         constraints=[
@@ -1175,7 +1176,7 @@ def create_supervised_navigator() -> MacroNavigator:
         MacroNavigator configured for supervised mode with pauses.
     """
     run_plan = RunPlanSpec(
-        flow_sequence=["signal", "plan", "build", "gate", "deploy", "wisdom"],
+        flow_sequence=get_sdlc_flow_keys(),  # From registry, includes review
         macro_policy=MacroPolicy.default(),
         human_policy=HumanPolicy.supervised(),
         constraints=[

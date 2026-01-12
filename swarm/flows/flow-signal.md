@@ -1,4 +1,4 @@
-# Flow 1 - Signal → Spec
+# Signal — Input → Spec
 
 **Goal:** Transform raw input into testable requirements—shape the problem, identify stakeholders, flag early risks, estimate scope.
 

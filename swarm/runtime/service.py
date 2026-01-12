@@ -30,6 +30,7 @@ from .backends import (
     RunBackend,
 )
 from .storage import EXAMPLES_DIR
+from ..config.flow_registry import get_flow_order
 from .types import (
     BackendCapabilities,
     BackendId,
@@ -244,9 +245,9 @@ class RunService:
         if not run_path.exists():
             return None
 
-        # Detect which flows have artifacts
+        # Detect which flows have artifacts (from registry, includes review)
         flow_keys = []
-        for flow_dir in ["signal", "plan", "build", "gate", "deploy", "wisdom"]:
+        for flow_dir in get_flow_order():
             if (run_path / flow_dir).exists():
                 flow_keys.append(flow_dir)
 

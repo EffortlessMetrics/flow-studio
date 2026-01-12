@@ -1,4 +1,4 @@
-# Flow 5 - Artifact → Prod (Deploy)
+# Deploy — Artifact → Prod
 
 **Goal:** Move an approved artifact from "ready to merge" to "deployed"—execute deployment, verify health, create audit trail.
 

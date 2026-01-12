@@ -519,7 +519,7 @@ class TestEvolutionArtifacts:
             summary_path = wisdom_dir / "evolution_summary.json"
             assert summary_path.exists()
 
-            summary = json.loads(summary_path.read_text())
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
             assert summary["policy"] == "suggest_only"
             assert len(summary["suggestions"]) == 1
             assert summary["suggestions"][0]["patch_id"] == "RECORD-001"
@@ -559,7 +559,7 @@ class TestEvolutionArtifacts:
             marker = wisdom_dir / ".suggested_MARKER-001"
             assert marker.exists()
 
-            marker_data = json.loads(marker.read_text())
+            marker_data = json.loads(marker.read_text(encoding="utf-8"))
             assert marker_data["patch_id"] == "MARKER-001"
             assert marker_data["policy"] == "suggest_only"
 

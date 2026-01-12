@@ -423,7 +423,7 @@ class TestInstallScript:
 
     def test_script_has_set_options(self, install_script):
         """Install script should have safety options (set -e, set -u, set -o pipefail)."""
-        content = install_script.read_text()
+        content = install_script.read_text(encoding="utf-8")
         # Check for either combined or individual set options
         has_safety = (
             "set -euo pipefail" in content or
@@ -433,17 +433,17 @@ class TestInstallScript:
 
     def test_script_has_help_option(self, install_script):
         """Install script should have --help option."""
-        content = install_script.read_text()
+        content = install_script.read_text(encoding="utf-8")
         assert "--help" in content, "Script should support --help option"
 
     def test_script_has_dry_run_option(self, install_script):
         """Install script should have --dry-run option."""
-        content = install_script.read_text()
+        content = install_script.read_text(encoding="utf-8")
         assert "--dry-run" in content, "Script should support --dry-run option"
 
     def test_script_has_kubernetes_option(self, install_script):
         """Install script should have --kubernetes option."""
-        content = install_script.read_text()
+        content = install_script.read_text(encoding="utf-8")
         assert "--kubernetes" in content, "Script should support --kubernetes option"
 
 

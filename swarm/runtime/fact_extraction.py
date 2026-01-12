@@ -43,6 +43,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Pattern
 
+from swarm.config.flow_registry import get_flow_order
+
 logger = logging.getLogger(__name__)
 
 
@@ -459,8 +461,8 @@ def extract_facts_from_run(
         result.errors.append(f"Run directory not found: {run_base}")
         return result
 
-    # Known flow keys
-    flow_keys = ["signal", "plan", "build", "gate", "deploy", "wisdom"]
+    # Known flow keys from registry (includes review)
+    flow_keys = get_flow_order()
 
     for flow_key in flow_keys:
         flow_path = run_base / flow_key

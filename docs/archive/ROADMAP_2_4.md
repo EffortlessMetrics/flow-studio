@@ -1,5 +1,7 @@
 # v2.4 Roadmap
 
+> **Archived:** This v2.4 roadmap is superseded by [ROADMAP_3_0.md](../ROADMAP_3_0.md). Kept for historical reference.
+
 > **Status:** Draft — Shaping ideas for the next iteration.
 > **Baseline:** v2.3.2 (Stepwise SDLC harness, context budgets, Flow Studio, 16-step selftest)
 

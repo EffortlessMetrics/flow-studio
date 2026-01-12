@@ -18,6 +18,7 @@ This document provides a comprehensive reference for all validation rules enforc
 | FR-005 | Flows | RUN_BASE Paths | `validate_runbase_paths()` | ERROR |
 | FR-006 | Agents | Prompt Sections | `validate_prompt_sections()` | WARN (ERROR with --strict) |
 | FR-006a | All | Microloop Phrases | `validate_microloop_phrases()` | ERROR |
+| FR-007 | Specs | Capability Registry | `validate_capability_registry()` | ERROR |
 | FR-CONF | Agents | Config Coverage | `validate_config_coverage()` | ERROR |
 | FR-FLOWS | Flows | Flow Invariants | `validate_flow_*()` | ERROR |
 
@@ -296,6 +297,65 @@ MICROLOOP Errors (1):
 ======================================================================
 x MICROLOOP: swarm/flows/flow-signal.md:line 55: uses banned microloop phrase 'restat' (old iteration logic)
   Fix: Replace with explicit 'can_further_iteration_help: yes/no' or Status-based exit logic
+```
+
+---
+
+### FR-007: Capability Registry
+
+**Scope**: Specs (`specs/capabilities.yaml`, `features/*.feature`)
+
+**Description**: Validates the capability registry for evidence discipline. Ensures capability claims have code and test evidence, and that BDD `@cap:<id>` tags reference valid capabilities.
+
+**What It Checks**:
+- `specs/capabilities.yaml` parses correctly
+- `implemented` capabilities have ≥1 test evidence pointer
+- `implemented` capabilities have ≥1 code evidence pointer
+- `@cap:<id>` tags in BDD scenarios reference capabilities that exist in registry
+- `supported` capabilities have code evidence (tests optional)
+- `aspirational` capabilities don't require evidence
+
+**Status Meanings**:
+
+| Status | Meaning | Evidence Required |
+|--------|---------|-------------------|
+| `implemented` | Has code + test evidence; safe to claim | code + tests |
+| `supported` | Has code but incomplete tests | code only |
+| `aspirational` | Design only; NOT shipped | none (design docs optional) |
+
+**Example FAIL Output (missing test evidence)**:
+```
+CAPABILITY Errors (1):
+======================================================================
+x CAPABILITY: specs/capabilities.yaml:receipts.required_fields: capability 'receipts.required_fields' is 'implemented' but has no test evidence
+  Fix: Add 'tests' evidence pointers or change status to 'supported'
+```
+
+**Example FAIL Output (missing code evidence)**:
+```
+x CAPABILITY: specs/capabilities.yaml:routing.microloop_exit: capability 'routing.microloop_exit' is 'implemented' but has no code evidence
+  Fix: Add 'code' evidence pointers with path and symbol
+```
+
+**Example FAIL Output (invalid BDD tag)**:
+```
+x CAPABILITY: selftest.feature:line 26: @cap:selftest.nonexistent references capability not in registry
+  Fix: Add 'selftest.nonexistent' to specs/capabilities.yaml or fix tag
+```
+
+**Example WARN Output (registry not found)**:
+```
+! CAPABILITY: specs/capabilities.yaml: capability registry not found (optional file)
+  Fix: Create specs/capabilities.yaml to track capability claims with evidence
+```
+
+**Related Commands**:
+```bash
+# Regenerate CAPABILITIES.md from registry
+make gen-capabilities-doc
+
+# Check if doc is up-to-date
+make check-capabilities-doc
 ```
 
 ---

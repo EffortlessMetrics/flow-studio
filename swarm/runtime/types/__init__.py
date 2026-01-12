@@ -53,43 +53,92 @@ Usage:
         human_policy_to_dict, human_policy_from_dict,
         run_plan_spec_to_dict, run_plan_spec_from_dict,
         macro_routing_decision_to_dict, macro_routing_decision_from_dict,
+        # Normalized tool call representation (cross-transport)
+        NormalizedToolCall, truncate_output,
+        normalized_tool_call_from_sdk_events,
+        normalized_tool_call_from_gemini_events,
+        normalized_tool_call_from_stub,
+        normalized_tool_call_from_kernel_execution,
     )
 """
 
 from __future__ import annotations
 
-import secrets
-import string
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Literal, Optional, TypedDict
 
-# Event ID generation: prefer ulid for time-ordered IDs, fall back to uuid4
-try:
-    import ulid
+# Import from submodules (these are re-exported for backwards compatibility)
+from ._ids import BackendId, RunId, _generate_event_id, generate_run_id
+from ._time import _datetime_to_iso, _iso_to_datetime
+from .routing import (
+    CELEvaluation,
+    DecisionMetrics,
+    DecisionType,
+    EdgeOption,
+    Elimination,
+    LLMReasoning,
+    MicroloopContext,
+    RoutingCandidate,
+    RoutingDecision,
+    RoutingExplanation,
+    RoutingFactor,
+    RoutingMode,
+    RoutingSignal,
+    SkipJustification,
+    StallContext,
+    WhyNowJustification,
+    WP4EliminationEntry,
+    WP4RoutingExplanation,
+    WP4RoutingMetrics,
+    routing_candidate_from_dict,
+    routing_candidate_to_dict,
+    routing_explanation_from_dict,
+    routing_explanation_to_dict,
+    routing_signal_from_dict,
+    routing_signal_to_dict,
+    wp4_routing_explanation_from_dict,
+    wp4_routing_explanation_to_dict,
+)
+from .audit import (
+    AssumptionEntry,
+    AssumptionStatus,
+    ConfidenceLevel,
+    DecisionLogEntry,
+    ObservationEntry,
+    ObservationPriority,
+    ObservationType,
+    StationOpinion,
+    StationOpinionKind,
+    assumption_entry_from_dict,
+    assumption_entry_to_dict,
+    decision_log_entry_from_dict,
+    decision_log_entry_to_dict,
+)
+from .tool_call import (
+    NormalizedToolCall,
+    from_gemini_events as normalized_tool_call_from_gemini_events,
+    from_kernel_execution as normalized_tool_call_from_kernel_execution,
+    from_sdk_events as normalized_tool_call_from_sdk_events,
+    from_stub as normalized_tool_call_from_stub,
+    truncate_output,
+)
 
-    def _generate_event_id() -> str:
-        """Generate a globally unique event ID using ULID."""
-        return str(ulid.new())
-except ImportError:
-    import uuid
 
-    def _generate_event_id() -> str:
-        """Generate a globally unique event ID using UUID4."""
-        return str(uuid.uuid4())
+def _get_default_flow_sequence() -> List[str]:
+    """Get the default SDLC flow sequence from the registry.
 
-
-# Type aliases
-RunId = str
-BackendId = Literal[
-    "claude-harness",
-    "claude-agent-sdk",
-    "claude-step-orchestrator",
-    "gemini-cli",
-    "gemini-step-orchestrator",
-    "custom-cli",
-]
+    This function is used as a default_factory for RunPlanSpec to avoid
+    hardcoding flow lists. Uses lazy import to prevent circular dependencies.
+    Returns only SDLC flows (excludes demo/test flows).
+    """
+    try:
+        from swarm.config.flow_registry import get_sdlc_flow_keys
+        return get_sdlc_flow_keys()
+    except ImportError:
+        # Fallback if registry not available
+        return ["signal", "plan", "build", "review", "gate", "deploy", "wisdom"]
 
 
 class RunStatus(str, Enum):
@@ -117,533 +166,13 @@ class SDLCStatus(str, Enum):
     PARTIAL = "partial"  # Interrupted mid-run, work is incomplete
 
 
-class RoutingDecision(str, Enum):
-    """Routing decision types for stepwise execution."""
-
-    ADVANCE = "advance"
-    LOOP = "loop"
-    TERMINATE = "terminate"
-    BRANCH = "branch"
-    SKIP = "skip"
-
-
-class DecisionType(str, Enum):
-    """How the routing decision was made - for auditability."""
-
-    EXPLICIT = "explicit"  # Step output specified next_step_id directly
-    EXIT_CONDITION = "exit_condition"  # Microloop termination (VERIFIED, max_iterations)
-    DETERMINISTIC = "deterministic"  # Single outgoing edge or edge with condition=true
-    CEL = "cel"  # Edge conditions evaluated against step context
-    LLM_TIEBREAKER = "llm_tiebreaker"  # LLM chose among valid edges
-    LLM_ANALYSIS = "llm_analysis"  # LLM performed deeper analysis
-    ERROR = "error"  # Routing failed
-
-
-class RoutingMode(str, Enum):
-    """Routing mode controlling Navigator behavior in the orchestrator.
-
-    This enum controls the balance between deterministic Python routing
-    and intelligent Navigator-based routing:
-
-    - DETERMINISTIC_ONLY: No LLM routing calls. Used for CI, debugging,
-      and reproducibility. Python fast-path handles all routing.
-
-    - ASSIST (default): Python gates + candidates, Navigator chooses.
-      Fast-path handles obvious cases. Navigator handles complex routing.
-      Python can override only via hard gates.
-
-    - AUTHORITATIVE: Navigator can propose EXTEND_GRAPH and detours
-      more freely. Python still enforces invariants and stack rules,
-      but Navigator has more latitude to innovate.
-    """
-
-    DETERMINISTIC_ONLY = "deterministic_only"
-    ASSIST = "assist"
-    AUTHORITATIVE = "authoritative"
-
-
-class ConfidenceLevel(str, Enum):
-    """Confidence level for assumptions."""
-
-    HIGH = "high"
-    MEDIUM = "medium"
-    LOW = "low"
-
-
-class AssumptionStatus(str, Enum):
-    """Status of an assumption through its lifecycle."""
-
-    ACTIVE = "active"  # Assumption is currently in effect
-    RESOLVED = "resolved"  # Assumption was confirmed or clarified
-    INVALIDATED = "invalidated"  # Assumption was proven wrong
-
-
-class ObservationType(str, Enum):
-    """Types of observations for the Wisdom Stream."""
-
-    ACTION_TAKEN = "action_taken"  # Logged for audit trail
-    ACTION_DEFERRED = "action_deferred"  # Noticed but didn't act (due to charter)
-    OPTIMIZATION_OPPORTUNITY = "optimization_opportunity"  # Suggestion for spec evolution
-    PATTERN_DETECTED = "pattern_detected"  # Recurring behavior worth codifying
-
-
-class ObservationPriority(str, Enum):
-    """Priority levels for observations."""
-
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-
-
-# Station Opinion types - non-binding witness statements for orchestrator corroboration
-StationOpinionKind = Literal[
-    "suggest_detour",
-    "suggest_repeat",
-    "suggest_subflow_injection",
-    "suggest_defer_to_wisdom",
-    "flag_concern",
-]
-
-
-class StationOpinion(TypedDict, total=False):
-    """A non-binding witness statement from a station about what it thinks should happen.
-
-    This is signal for the orchestrator to corroborate via forensics and charter
-    alignment, not executable intent. Stations express opinions; orchestrators decide.
-
-    Required keys:
-        kind: Type of opinion (suggest_detour, suggest_repeat, suggest_subflow_injection,
-              suggest_defer_to_wisdom, flag_concern).
-        suggested_action: What the station thinks should happen.
-        reason: Why the station thinks this action is appropriate.
-
-    Optional keys:
-        evidence_paths: File paths or artifact references supporting this opinion.
-        confidence: Confidence score (0-1) in this opinion.
-    """
-
-    kind: StationOpinionKind  # type: ignore[misc]
-    suggested_action: str
-    reason: str
-    evidence_paths: List[str]
-    confidence: float
-
-
-class SkipJustification(TypedDict):
-    """High-friction justification required when decision is 'skip'.
-
-    Skipping is subtractive (removing expected verification) and requires explicit
-    justification to create an audit trail. Detouring (additive) should be cheap;
-    skipping requires friction.
-
-    All fields are required to ensure proper accountability when nodes are skipped.
-
-    Attributes:
-        skip_reason: Why this node is being skipped.
-        why_not_needed_for_exit: Why this node is not needed to satisfy the
-            flow's exit criteria.
-        replacement_assurance: What replaces this node's verification (e.g., a
-            different step, pre-existing artifact, or external validation).
-    """
-
-    skip_reason: str
-    why_not_needed_for_exit: str
-    replacement_assurance: str
-
-
-@dataclass
-class WhyNowJustification:
-    """Structured justification for routing deviations (DETOUR, INJECT_FLOW, INJECT_NODES).
-
-    Required when routing goes off the golden path. Creates forensic trail for
-    Wisdom analysis and debugging.
-
-    Attributes:
-        trigger: What triggered this deviation (e.g., "Tests failed with Method Not Found").
-        relevance_to_charter: How this deviation serves the flow's charter goal.
-        analysis: Root cause analysis (optional but recommended).
-        alternatives_considered: Other options evaluated before choosing this deviation.
-        expected_outcome: What this deviation is expected to accomplish.
-    """
-
-    trigger: str
-    relevance_to_charter: str
-    analysis: Optional[str] = None
-    alternatives_considered: List[str] = field(default_factory=list)
-    expected_outcome: Optional[str] = None
-
-
-@dataclass
-class ObservationEntry:
-    """Something a station noticed during execution, part of the Wisdom Stream.
-
-    Observations capture things that may not have been acted upon but should be
-    considered by Flow 7 (Wisdom) for learning and spec evolution.
-
-    Attributes:
-        type: Type of observation (action_taken, action_deferred, optimization_opportunity, pattern_detected).
-        observation: What was observed.
-        reason: Why action was taken or deferred.
-        suggested_action: What Wisdom should consider doing with this observation.
-        target_flow: If applicable, which flow this observation is most relevant to.
-        priority: How urgently Wisdom should process this.
-    """
-
-    type: ObservationType
-    observation: str
-    reason: Optional[str] = None
-    suggested_action: Optional[str] = None
-    target_flow: Optional[str] = None
-    priority: ObservationPriority = ObservationPriority.LOW
-
-
-@dataclass
-class AssumptionEntry:
-    """A structured record of an assumption made during flow execution.
-
-    Assumptions are made when agents face ambiguity and need to proceed
-    with their best interpretation. This captures the assumption, its
-    rationale, and potential impact if wrong.
-
-    Attributes:
-        assumption_id: Unique identifier for this assumption (auto-generated if not provided).
-        flow_introduced: Flow key where this assumption was first made.
-        step_introduced: Step ID where this assumption was first made.
-        agent: Agent key that made this assumption.
-        statement: The assumption statement itself.
-        rationale: Why this assumption was made (evidence, context).
-        impact_if_wrong: What would need to change if assumption is incorrect.
-        confidence: Confidence level (high/medium/low).
-        status: Current status (active/resolved/invalidated).
-        tags: Optional categorization tags (e.g., ["architecture", "requirements"]).
-        timestamp: When this assumption was recorded.
-        resolution_note: Explanation when status changes to resolved/invalidated.
-    """
-
-    assumption_id: str
-    flow_introduced: str
-    step_introduced: str
-    agent: str
-    statement: str
-    rationale: str
-    impact_if_wrong: str
-    confidence: ConfidenceLevel = ConfidenceLevel.MEDIUM
-    status: AssumptionStatus = AssumptionStatus.ACTIVE
-    tags: List[str] = field(default_factory=list)
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    resolution_note: Optional[str] = None
-
-
-@dataclass
-class DecisionLogEntry:
-    """A structured record of a decision made during flow execution.
-
-    Decisions are significant choices made by agents that affect the
-    direction of work. This captures the decision, its context, and
-    traceability information.
-
-    Attributes:
-        decision_id: Unique identifier for this decision (auto-generated if not provided).
-        flow: Flow key where this decision was made.
-        step: Step ID where this decision was made.
-        agent: Agent key that made this decision.
-        decision_type: Category of decision (e.g., "design", "implementation", "routing").
-        subject: What the decision is about (e.g., "API design", "test strategy").
-        decision: The actual decision made.
-        rationale: Why this decision was made.
-        supporting_evidence: Evidence that supports this decision.
-        conditions: Conditions under which this decision applies.
-        assumptions_applied: IDs of assumptions that influenced this decision.
-        timestamp: When this decision was recorded.
-    """
-
-    decision_id: str
-    flow: str
-    step: str
-    agent: str
-    decision_type: str
-    subject: str
-    decision: str
-    rationale: str
-    supporting_evidence: List[str] = field(default_factory=list)
-    conditions: List[str] = field(default_factory=list)
-    assumptions_applied: List[str] = field(default_factory=list)
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-
-
-@dataclass
-class RoutingFactor:
-    """A factor considered during LLM routing analysis."""
-
-    name: str
-    impact: str  # "strongly_favors", "favors", "neutral", "against", "strongly_against"
-    evidence: Optional[str] = None
-    weight: float = 0.5
-
-
-@dataclass
-class EdgeOption:
-    """An edge option considered during routing."""
-
-    edge_id: str
-    target_node: str
-    edge_type: str = "sequence"
-    priority: int = 50
-    evaluated_result: Optional[bool] = None
-    score: Optional[float] = None  # LLM-assigned feasibility score
-
-
-@dataclass
-class Elimination:
-    """Record of why an edge was eliminated."""
-
-    edge_id: str
-    reason_code: str  # condition_false, priority_lower, exit_condition_met, etc.
-    detail: str = ""
-
-
-@dataclass
-class LLMReasoning:
-    """Structured output from LLM routing analysis."""
-
-    model_used: str = ""
-    prompt_hash: str = ""
-    response_time_ms: int = 0
-    factors_considered: List[RoutingFactor] = field(default_factory=list)
-    option_scores: Dict[str, float] = field(default_factory=dict)  # edge_id -> score
-    primary_justification: str = ""
-    risks_identified: List[Dict[str, str]] = field(default_factory=list)
-    assumptions_made: List[str] = field(default_factory=list)
-
-
-@dataclass
-class CELEvaluation:
-    """CEL expression evaluation results."""
-
-    expressions_evaluated: List[Dict[str, Any]] = field(default_factory=list)
-    context_variables: Dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class MicroloopContext:
-    """Context for microloop routing decisions.
-
-    Note: max_iterations is a safety fuse, not a steering mechanism.
-    Actual loop exit should be driven by:
-    1. VERIFIED status from critic
-    2. Stall detection via ProgressTracker (same failure signature repeating)
-    3. can_further_iteration_help == False from critic
-
-    The high default (50) ensures loops don't terminate prematurely
-    while the fuse prevents infinite loops.
-    """
-
-    iteration: int = 1
-    max_iterations: int = 50  # Safety fuse, not steering - use stall detection
-    loop_target: str = ""
-    exit_status: str = ""
-    can_further_iteration_help: bool = True
-    status_history: List[str] = field(default_factory=list)
-
-
-@dataclass
-class DecisionMetrics:
-    """Metrics about the routing decision process."""
-
-    total_time_ms: int = 0
-    edges_total: int = 0
-    edges_eliminated: int = 0
-    llm_calls: int = 0
-    cel_evaluations: int = 0
-
-
-# =============================================================================
-# WP4: Simplified Routing Explanation for Audit Trail
-# =============================================================================
-# The WP4 routing_explanation.schema.json uses a simpler format optimized for
-# audit trails. This coexists with the more detailed RoutingExplanation below.
-
-
-@dataclass
-class WP4EliminationEntry:
-    """Entry in the WP4 elimination log.
-
-    Attributes:
-        edge_id: ID of the eliminated edge.
-        reason: Why this edge was eliminated.
-        stage: At which stage the edge was eliminated.
-    """
-
-    edge_id: str
-    reason: str
-    stage: str  # "condition", "constraint", "priority", "llm_tiebreak"
-
-
-@dataclass
-class WP4RoutingMetrics:
-    """Metrics for WP4 routing explanation.
-
-    Attributes:
-        edges_considered: Total number of edges initially considered.
-        time_ms: Time taken for routing decision in milliseconds.
-        llm_tokens_used: Tokens used for LLM tiebreaker (if applicable).
-    """
-
-    edges_considered: int = 0
-    time_ms: float = 0.0
-    llm_tokens_used: int = 0
-
-
-@dataclass
-class WP4RoutingExplanation:
-    """WP4-compliant routing explanation for bounded, auditable, cheap routing.
-
-    This dataclass matches the WP4 routing_explanation.schema.json format,
-    providing a simpler structure optimized for audit trails.
-
-    Attributes:
-        decision: Human-readable summary of the routing decision.
-        method: How the decision was made (deterministic, llm_tiebreak, no_candidates).
-        selected_edge: ID of the selected edge (or empty string if flow terminates).
-        candidates_evaluated: Number of candidate edges that were evaluated.
-        elimination_log: Log of edges eliminated during routing and why.
-        llm_reasoning: LLM's explanation when llm_tiebreak was used.
-        metrics: Timing and cost metrics for the routing decision.
-    """
-
-    decision: str
-    method: str  # "deterministic", "llm_tiebreak", "no_candidates"
-    selected_edge: str
-    candidates_evaluated: int = 0
-    elimination_log: List[WP4EliminationEntry] = field(default_factory=list)
-    llm_reasoning: Optional[str] = None
-    metrics: Optional[WP4RoutingMetrics] = None
-
-
-@dataclass
-class RoutingExplanation:
-    """Structured explanation of routing decisions for auditability.
-
-    Context-efficient JSON format capturing how and why routing decisions
-    were made, including LLM reasoning when applicable.
-    """
-
-    decision_type: DecisionType
-    selected_target: str
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    confidence: float = 1.0
-    reasoning_summary: str = ""
-    available_edges: List[EdgeOption] = field(default_factory=list)
-    elimination_log: List[Elimination] = field(default_factory=list)
-    llm_reasoning: Optional[LLMReasoning] = None
-    cel_evaluation: Optional[CELEvaluation] = None
-    microloop_context: Optional[MicroloopContext] = None
-    metrics: Optional[DecisionMetrics] = None
-
-
-@dataclass
-class RoutingSignal:
-    """Normalized routing decision signal for stepwise flow execution.
-
-    Encapsulates the judgment about where to go next in a flow, providing
-    structured, machine-readable routing decisions instead of fragile receipt
-    field parsing.
-
-    Attributes:
-        decision: The routing decision (advance, loop, terminate, branch, skip).
-        next_step_id: The ID of the next step to execute (for advance/branch).
-        route: Named route identifier (for branch routing).
-        reason: Human-readable explanation for the routing decision.
-        confidence: Confidence score for this decision (0.0 to 1.0).
-        needs_human: Whether human intervention is required before proceeding.
-        next_flow: Flow key for macro-routing (flow transitions).
-        loop_count: Current iteration count for microloop tracking.
-        exit_condition_met: Whether the termination condition has been met.
-        chosen_candidate_id: ID of the candidate chosen by Navigator.
-        routing_candidates: Pre-computed candidates available for this decision.
-        routing_source: How this decision was made (navigator, fast_path, etc.).
-        skip_justification: High-friction justification required for SKIP decisions.
-            Skipping is subtractive and requires explicit audit trail.
-    """
-
-    decision: RoutingDecision
-    next_step_id: Optional[str] = None
-    route: Optional[str] = None
-    reason: str = ""
-    confidence: float = 1.0
-    needs_human: bool = False
-    # Macro-routing and microloop tracking fields
-    next_flow: Optional[str] = None
-    loop_count: int = 0
-    exit_condition_met: bool = False
-    # Candidate-set pattern fields (audit trail for Navigator decisions)
-    chosen_candidate_id: Optional[str] = None  # ID of selected candidate
-    routing_candidates: List["RoutingCandidate"] = field(default_factory=list)  # Available candidates
-    routing_source: str = "navigator"  # "navigator" | "fast_path" | "deterministic_fallback" | "config_default"
-    # Structured routing explanation (optional, for audit/debug)
-    explanation: Optional[RoutingExplanation] = None
-    # Why-now justification for off-path routing (required for DETOUR/INJECT_*)
-    why_now: Optional[WhyNowJustification] = None
-    # High-friction skip justification (required for SKIP decisions)
-    skip_justification: Optional[SkipJustification] = None
-
-
-@dataclass
-class RoutingCandidate:
-    """A candidate routing decision for the Navigator to choose from.
-
-    The candidate-set pattern: Python generates candidates from the graph,
-    Navigator intelligently chooses among them, Python validates and executes.
-
-    This keeps intelligence bounded while preserving graph constraints.
-
-    Attributes:
-        candidate_id: Unique identifier for this candidate.
-        action: The routing action (advance, loop, detour, escalate, repeat).
-        target_node: Target node ID for advance/loop/detour.
-        reason: Human-readable explanation of why this is a candidate.
-        priority: Priority score (0-100, higher = more likely default).
-        source: Where this candidate came from (graph_edge, fast_path, detour_catalog).
-        evidence_pointers: References to evidence supporting this candidate.
-        is_default: Whether this is the default/suggested choice.
-    """
-
-    candidate_id: str
-    action: str  # "advance" | "loop" | "detour" | "escalate" | "repeat" | "terminate"
-    target_node: Optional[str] = None
-    reason: str = ""
-    priority: int = 50
-    source: str = "graph_edge"  # "graph_edge" | "fast_path" | "detour_catalog" | "extend_graph"
-    evidence_pointers: List[str] = field(default_factory=list)
-    is_default: bool = False
-
-
-def routing_candidate_to_dict(candidate: RoutingCandidate) -> Dict[str, Any]:
-    """Convert RoutingCandidate to dict for serialization."""
-    return {
-        "candidate_id": candidate.candidate_id,
-        "action": candidate.action,
-        "target_node": candidate.target_node,
-        "reason": candidate.reason,
-        "priority": candidate.priority,
-        "source": candidate.source,
-        "evidence_pointers": candidate.evidence_pointers,
-        "is_default": candidate.is_default,
-    }
-
-
-def routing_candidate_from_dict(data: Dict[str, Any]) -> RoutingCandidate:
-    """Create RoutingCandidate from dict."""
-    return RoutingCandidate(
-        candidate_id=data.get("candidate_id", ""),
-        action=data.get("action", "advance"),
-        target_node=data.get("target_node"),
-        reason=data.get("reason", ""),
-        priority=data.get("priority", 50),
-        source=data.get("source", "graph_edge"),
-        evidence_pointers=data.get("evidence_pointers", []),
-        is_default=data.get("is_default", False),
-    )
+# Note: RoutingDecision, DecisionType, RoutingMode imported from .routing
+# Note: ConfidenceLevel, AssumptionStatus, ObservationType, ObservationPriority,
+# StationOpinionKind, StationOpinion, ObservationEntry, AssumptionEntry,
+# DecisionLogEntry imported from .audit
+# Note: RoutingFactor, EdgeOption, Elimination, LLMReasoning, CELEvaluation,
+# MicroloopContext, DecisionMetrics, WP4*, RoutingExplanation, RoutingSignal,
+# RoutingCandidate, routing_candidate_to/from_dict are imported from .routing
 
 
 @dataclass
@@ -842,49 +371,10 @@ class BackendCapabilities:
 
 
 # -----------------------------------------------------------------------------
-# Run ID Generation
-# -----------------------------------------------------------------------------
-
-
-def generate_run_id() -> RunId:
-    """Generate a unique run ID.
-
-    Creates IDs in the format: run-YYYYMMDD-HHMMSS-xxxxxx
-    where xxxxxx is a random 6-character alphanumeric suffix.
-
-    Returns:
-        A unique run identifier string.
-
-    Example:
-        >>> run_id = generate_run_id()
-        >>> run_id  # e.g., "run-20251208-143022-abc123"
-    """
-    now = datetime.now(timezone.utc)
-    timestamp = now.strftime("%Y%m%d-%H%M%S")
-    suffix = "".join(secrets.choice(string.ascii_lowercase + string.digits) for _ in range(6))
-    return f"run-{timestamp}-{suffix}"
-
-
-# -----------------------------------------------------------------------------
 # Serialization Helpers
 # -----------------------------------------------------------------------------
-
-
-def _datetime_to_iso(dt: Optional[datetime]) -> Optional[str]:
-    """Convert datetime to ISO format string with Z suffix."""
-    if dt is None:
-        return None
-    return dt.isoformat() + "Z" if not dt.isoformat().endswith("Z") else dt.isoformat()
-
-
-def _iso_to_datetime(iso_str: Optional[str]) -> Optional[datetime]:
-    """Parse ISO format string to datetime."""
-    if iso_str is None:
-        return None
-    # Remove Z suffix if present for parsing
-    if iso_str.endswith("Z"):
-        iso_str = iso_str[:-1]
-    return datetime.fromisoformat(iso_str)
+# Note: generate_run_id is imported from ._ids
+# Note: _datetime_to_iso, _iso_to_datetime are imported from ._time
 
 
 def run_spec_to_dict(spec: RunSpec) -> Dict[str, Any]:
@@ -1030,468 +520,11 @@ def run_event_from_dict(data: Dict[str, Any]) -> RunEvent:
     )
 
 
-# -----------------------------------------------------------------------------
-# RoutingSignal Serialization
-# -----------------------------------------------------------------------------
-
-
-def routing_explanation_to_dict(explanation: RoutingExplanation) -> Dict[str, Any]:
-    """Convert RoutingExplanation to a dictionary for serialization.
-
-    Args:
-        explanation: The RoutingExplanation to convert.
-
-    Returns:
-        Dictionary representation suitable for JSON serialization.
-    """
-    result: Dict[str, Any] = {
-        "decision_type": explanation.decision_type.value,
-        "selected_target": explanation.selected_target,
-        "timestamp": _datetime_to_iso(explanation.timestamp),
-        "confidence": explanation.confidence,
-        "reasoning_summary": explanation.reasoning_summary,
-    }
-
-    if explanation.available_edges:
-        result["available_edges"] = [
-            {
-                "edge_id": e.edge_id,
-                "target_node": e.target_node,
-                "edge_type": e.edge_type,
-                "priority": e.priority,
-                "evaluated_result": e.evaluated_result,
-                "score": e.score,
-            }
-            for e in explanation.available_edges
-        ]
-
-    if explanation.elimination_log:
-        result["elimination_log"] = [
-            {"edge_id": e.edge_id, "reason_code": e.reason_code, "detail": e.detail}
-            for e in explanation.elimination_log
-        ]
-
-    if explanation.llm_reasoning:
-        llm = explanation.llm_reasoning
-        result["llm_reasoning"] = {
-            "model_used": llm.model_used,
-            "prompt_hash": llm.prompt_hash,
-            "response_time_ms": llm.response_time_ms,
-            "factors_considered": [
-                {"name": f.name, "impact": f.impact, "evidence": f.evidence, "weight": f.weight}
-                for f in llm.factors_considered
-            ],
-            "option_scores": dict(llm.option_scores),
-            "primary_justification": llm.primary_justification,
-            "risks_identified": llm.risks_identified,
-            "assumptions_made": llm.assumptions_made,
-        }
-
-    if explanation.cel_evaluation:
-        result["cel_evaluation"] = {
-            "expressions_evaluated": explanation.cel_evaluation.expressions_evaluated,
-            "context_variables": explanation.cel_evaluation.context_variables,
-        }
-
-    if explanation.microloop_context:
-        mc = explanation.microloop_context
-        result["microloop_context"] = {
-            "iteration": mc.iteration,
-            "max_iterations": mc.max_iterations,
-            "loop_target": mc.loop_target,
-            "exit_status": mc.exit_status,
-            "can_further_iteration_help": mc.can_further_iteration_help,
-            "status_history": mc.status_history,
-        }
-
-    if explanation.metrics:
-        result["metrics"] = {
-            "total_time_ms": explanation.metrics.total_time_ms,
-            "edges_total": explanation.metrics.edges_total,
-            "edges_eliminated": explanation.metrics.edges_eliminated,
-            "llm_calls": explanation.metrics.llm_calls,
-            "cel_evaluations": explanation.metrics.cel_evaluations,
-        }
-
-    return result
-
-
-def routing_explanation_from_dict(data: Dict[str, Any]) -> RoutingExplanation:
-    """Parse RoutingExplanation from a dictionary.
-
-    Args:
-        data: Dictionary with RoutingExplanation fields.
-
-    Returns:
-        Parsed RoutingExplanation instance.
-    """
-    available_edges = [
-        EdgeOption(
-            edge_id=e.get("edge_id", ""),
-            target_node=e.get("target_node", ""),
-            edge_type=e.get("edge_type", "sequence"),
-            priority=e.get("priority", 50),
-            evaluated_result=e.get("evaluated_result"),
-            score=e.get("score"),
-        )
-        for e in data.get("available_edges", [])
-    ]
-
-    elimination_log = [
-        Elimination(
-            edge_id=e.get("edge_id", ""),
-            reason_code=e.get("reason_code", ""),
-            detail=e.get("detail", ""),
-        )
-        for e in data.get("elimination_log", [])
-    ]
-
-    llm_reasoning = None
-    if "llm_reasoning" in data:
-        llm_data = data["llm_reasoning"]
-        llm_reasoning = LLMReasoning(
-            model_used=llm_data.get("model_used", ""),
-            prompt_hash=llm_data.get("prompt_hash", ""),
-            response_time_ms=llm_data.get("response_time_ms", 0),
-            factors_considered=[
-                RoutingFactor(
-                    name=f.get("name", ""),
-                    impact=f.get("impact", "neutral"),
-                    evidence=f.get("evidence"),
-                    weight=f.get("weight", 0.5),
-                )
-                for f in llm_data.get("factors_considered", [])
-            ],
-            option_scores=dict(llm_data.get("option_scores", {})),
-            primary_justification=llm_data.get("primary_justification", ""),
-            risks_identified=llm_data.get("risks_identified", []),
-            assumptions_made=llm_data.get("assumptions_made", []),
-        )
-
-    cel_evaluation = None
-    if "cel_evaluation" in data:
-        cel_data = data["cel_evaluation"]
-        cel_evaluation = CELEvaluation(
-            expressions_evaluated=cel_data.get("expressions_evaluated", []),
-            context_variables=cel_data.get("context_variables", {}),
-        )
-
-    microloop_context = None
-    if "microloop_context" in data:
-        mc_data = data["microloop_context"]
-        microloop_context = MicroloopContext(
-            iteration=mc_data.get("iteration", 1),
-            max_iterations=mc_data.get("max_iterations", 3),
-            loop_target=mc_data.get("loop_target", ""),
-            exit_status=mc_data.get("exit_status", ""),
-            can_further_iteration_help=mc_data.get("can_further_iteration_help", True),
-            status_history=mc_data.get("status_history", []),
-        )
-
-    metrics = None
-    if "metrics" in data:
-        m_data = data["metrics"]
-        metrics = DecisionMetrics(
-            total_time_ms=m_data.get("total_time_ms", 0),
-            edges_total=m_data.get("edges_total", 0),
-            edges_eliminated=m_data.get("edges_eliminated", 0),
-            llm_calls=m_data.get("llm_calls", 0),
-            cel_evaluations=m_data.get("cel_evaluations", 0),
-        )
-
-    return RoutingExplanation(
-        decision_type=DecisionType(data.get("decision_type", "deterministic")),
-        selected_target=data.get("selected_target", ""),
-        timestamp=_iso_to_datetime(data.get("timestamp")) or datetime.now(timezone.utc),
-        confidence=data.get("confidence", 1.0),
-        reasoning_summary=data.get("reasoning_summary", ""),
-        available_edges=available_edges,
-        elimination_log=elimination_log,
-        llm_reasoning=llm_reasoning,
-        cel_evaluation=cel_evaluation,
-        microloop_context=microloop_context,
-        metrics=metrics,
-    )
-
-
-# -----------------------------------------------------------------------------
-# WP4 Routing Explanation Serialization
-# -----------------------------------------------------------------------------
-
-
-def wp4_routing_explanation_to_dict(explanation: WP4RoutingExplanation) -> Dict[str, Any]:
-    """Convert WP4RoutingExplanation to a dictionary for serialization.
-
-    Args:
-        explanation: The WP4RoutingExplanation to convert.
-
-    Returns:
-        Dictionary representation matching routing_explanation.schema.json.
-    """
-    result: Dict[str, Any] = {
-        "decision": explanation.decision,
-        "method": explanation.method,
-        "selected_edge": explanation.selected_edge,
-        "candidates_evaluated": explanation.candidates_evaluated,
-    }
-
-    if explanation.elimination_log:
-        result["elimination_log"] = [
-            {
-                "edge_id": e.edge_id,
-                "reason": e.reason,
-                "stage": e.stage,
-            }
-            for e in explanation.elimination_log
-        ]
-
-    if explanation.llm_reasoning:
-        result["llm_reasoning"] = explanation.llm_reasoning
-
-    if explanation.metrics:
-        result["metrics"] = {
-            "edges_considered": explanation.metrics.edges_considered,
-            "time_ms": explanation.metrics.time_ms,
-        }
-        if explanation.metrics.llm_tokens_used:
-            result["metrics"]["llm_tokens_used"] = explanation.metrics.llm_tokens_used
-
-    return result
-
-
-def wp4_routing_explanation_from_dict(data: Dict[str, Any]) -> WP4RoutingExplanation:
-    """Parse WP4RoutingExplanation from a dictionary.
-
-    Args:
-        data: Dictionary with WP4RoutingExplanation fields.
-
-    Returns:
-        Parsed WP4RoutingExplanation instance.
-    """
-    elimination_log = [
-        WP4EliminationEntry(
-            edge_id=e.get("edge_id", ""),
-            reason=e.get("reason", ""),
-            stage=e.get("stage", "condition"),
-        )
-        for e in data.get("elimination_log", [])
-    ]
-
-    metrics = None
-    if "metrics" in data:
-        m = data["metrics"]
-        metrics = WP4RoutingMetrics(
-            edges_considered=m.get("edges_considered", 0),
-            time_ms=m.get("time_ms", 0.0),
-            llm_tokens_used=m.get("llm_tokens_used", 0),
-        )
-
-    return WP4RoutingExplanation(
-        decision=data.get("decision", ""),
-        method=data.get("method", "deterministic"),
-        selected_edge=data.get("selected_edge", ""),
-        candidates_evaluated=data.get("candidates_evaluated", 0),
-        elimination_log=elimination_log,
-        llm_reasoning=data.get("llm_reasoning"),
-        metrics=metrics,
-    )
-
-
-# -----------------------------------------------------------------------------
-# AssumptionEntry and DecisionLogEntry Serialization
-# -----------------------------------------------------------------------------
-
-
-def assumption_entry_to_dict(entry: AssumptionEntry) -> Dict[str, Any]:
-    """Convert AssumptionEntry to a dictionary for serialization.
-
-    Args:
-        entry: The AssumptionEntry to convert.
-
-    Returns:
-        Dictionary representation suitable for JSON/JSONL serialization.
-    """
-    return {
-        "assumption_id": entry.assumption_id,
-        "flow_introduced": entry.flow_introduced,
-        "step_introduced": entry.step_introduced,
-        "agent": entry.agent,
-        "statement": entry.statement,
-        "rationale": entry.rationale,
-        "impact_if_wrong": entry.impact_if_wrong,
-        "confidence": entry.confidence.value
-        if isinstance(entry.confidence, ConfidenceLevel)
-        else entry.confidence,
-        "status": entry.status.value
-        if isinstance(entry.status, AssumptionStatus)
-        else entry.status,
-        "tags": list(entry.tags),
-        "timestamp": _datetime_to_iso(entry.timestamp),
-        "resolution_note": entry.resolution_note,
-    }
-
-
-def assumption_entry_from_dict(data: Dict[str, Any]) -> AssumptionEntry:
-    """Parse AssumptionEntry from a dictionary.
-
-    Args:
-        data: Dictionary with AssumptionEntry fields.
-
-    Returns:
-        Parsed AssumptionEntry instance.
-    """
-    confidence_value = data.get("confidence", "medium")
-    confidence = (
-        ConfidenceLevel(confidence_value) if isinstance(confidence_value, str) else confidence_value
-    )
-
-    status_value = data.get("status", "active")
-    status = AssumptionStatus(status_value) if isinstance(status_value, str) else status_value
-
-    return AssumptionEntry(
-        assumption_id=data.get("assumption_id", ""),
-        flow_introduced=data.get("flow_introduced", ""),
-        step_introduced=data.get("step_introduced", ""),
-        agent=data.get("agent", ""),
-        statement=data.get("statement", ""),
-        rationale=data.get("rationale", ""),
-        impact_if_wrong=data.get("impact_if_wrong", ""),
-        confidence=confidence,
-        status=status,
-        tags=list(data.get("tags", [])),
-        timestamp=_iso_to_datetime(data.get("timestamp")) or datetime.now(timezone.utc),
-        resolution_note=data.get("resolution_note"),
-    )
-
-
-def decision_log_entry_to_dict(entry: DecisionLogEntry) -> Dict[str, Any]:
-    """Convert DecisionLogEntry to a dictionary for serialization.
-
-    Args:
-        entry: The DecisionLogEntry to convert.
-
-    Returns:
-        Dictionary representation suitable for JSON/JSONL serialization.
-    """
-    return {
-        "decision_id": entry.decision_id,
-        "flow": entry.flow,
-        "step": entry.step,
-        "agent": entry.agent,
-        "decision_type": entry.decision_type,
-        "subject": entry.subject,
-        "decision": entry.decision,
-        "rationale": entry.rationale,
-        "supporting_evidence": list(entry.supporting_evidence),
-        "conditions": list(entry.conditions),
-        "assumptions_applied": list(entry.assumptions_applied),
-        "timestamp": _datetime_to_iso(entry.timestamp),
-    }
-
-
-def decision_log_entry_from_dict(data: Dict[str, Any]) -> DecisionLogEntry:
-    """Parse DecisionLogEntry from a dictionary.
-
-    Args:
-        data: Dictionary with DecisionLogEntry fields.
-
-    Returns:
-        Parsed DecisionLogEntry instance.
-    """
-    return DecisionLogEntry(
-        decision_id=data.get("decision_id", ""),
-        flow=data.get("flow", ""),
-        step=data.get("step", ""),
-        agent=data.get("agent", ""),
-        decision_type=data.get("decision_type", ""),
-        subject=data.get("subject", ""),
-        decision=data.get("decision", ""),
-        rationale=data.get("rationale", ""),
-        supporting_evidence=list(data.get("supporting_evidence", [])),
-        conditions=list(data.get("conditions", [])),
-        assumptions_applied=list(data.get("assumptions_applied", [])),
-        timestamp=_iso_to_datetime(data.get("timestamp")) or datetime.now(timezone.utc),
-    )
-
-
-def routing_signal_to_dict(signal: RoutingSignal) -> Dict[str, Any]:
-    """Convert RoutingSignal to a dictionary for serialization.
-
-    Args:
-        signal: The RoutingSignal to convert.
-
-    Returns:
-        Dictionary representation suitable for JSON/YAML serialization.
-    """
-    result = {
-        "decision": signal.decision.value
-        if isinstance(signal.decision, RoutingDecision)
-        else signal.decision,
-        "next_step_id": signal.next_step_id,
-        "route": signal.route,
-        "reason": signal.reason,
-        "confidence": signal.confidence,
-        "needs_human": signal.needs_human,
-        "next_flow": signal.next_flow,
-        "loop_count": signal.loop_count,
-        "exit_condition_met": signal.exit_condition_met,
-    }
-
-    if signal.explanation:
-        result["explanation"] = routing_explanation_to_dict(signal.explanation)
-
-    if signal.skip_justification:
-        result["skip_justification"] = dict(signal.skip_justification)
-
-    return result
-
-
-def routing_signal_from_dict(data: Dict[str, Any]) -> RoutingSignal:
-    """Parse RoutingSignal from a dictionary.
-
-    Args:
-        data: Dictionary with RoutingSignal fields.
-
-    Returns:
-        Parsed RoutingSignal instance.
-
-    Note:
-        Provides backwards compatibility for signals missing the new
-        next_flow, loop_count, exit_condition_met, explanation, or
-        skip_justification fields.
-    """
-    decision_value = data.get("decision", "advance")
-    decision = (
-        RoutingDecision(decision_value) if isinstance(decision_value, str) else decision_value
-    )
-
-    explanation = None
-    if "explanation" in data:
-        explanation = routing_explanation_from_dict(data["explanation"])
-
-    # Parse skip_justification if present (TypedDict, so cast from dict)
-    skip_justification: Optional[SkipJustification] = None
-    if "skip_justification" in data:
-        sj = data["skip_justification"]
-        skip_justification = SkipJustification(
-            skip_reason=sj.get("skip_reason", ""),
-            why_not_needed_for_exit=sj.get("why_not_needed_for_exit", ""),
-            replacement_assurance=sj.get("replacement_assurance", ""),
-        )
-
-    return RoutingSignal(
-        decision=decision,
-        next_step_id=data.get("next_step_id"),
-        route=data.get("route"),
-        reason=data.get("reason", ""),
-        confidence=data.get("confidence", 1.0),
-        needs_human=data.get("needs_human", False),
-        next_flow=data.get("next_flow"),
-        loop_count=data.get("loop_count", 0),
-        exit_condition_met=data.get("exit_condition_met", False),
-        explanation=explanation,
-        skip_justification=skip_justification,
-    )
+# Note: routing_explanation_to/from_dict, wp4_routing_explanation_to/from_dict
+# are imported from .routing
+# Note: assumption_entry_to/from_dict, decision_log_entry_to/from_dict
+# are imported from .audit
+# Note: routing_signal_to/from_dict are imported from .routing
 
 
 # -----------------------------------------------------------------------------
@@ -2471,7 +1504,7 @@ class RunPlanSpec:
     """
 
     flow_sequence: List[str] = field(
-        default_factory=lambda: ["signal", "plan", "build", "gate", "deploy", "wisdom"]
+        default_factory=_get_default_flow_sequence  # From registry, includes review
     )
     macro_policy: MacroPolicy = field(default_factory=MacroPolicy.default)
     human_policy: HumanPolicy = field(default_factory=HumanPolicy.autopilot)
@@ -2482,7 +1515,7 @@ class RunPlanSpec:
     def default(cls) -> "RunPlanSpec":
         """Create a default RunPlanSpec with standard SDLC configuration."""
         return cls(
-            flow_sequence=["signal", "plan", "build", "gate", "deploy", "wisdom"],
+            flow_sequence=_get_default_flow_sequence(),  # From registry, includes review
             macro_policy=MacroPolicy.default(),
             human_policy=HumanPolicy.autopilot(),
             constraints=[

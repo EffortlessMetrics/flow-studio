@@ -1,0 +1,9 @@
+# Flow 8: Reset/Rebase agent
+key: reset-restore-wip
+flows:
+  - reset
+category: implementation
+color: green
+source: project/user
+short_role: "Restore stashed work-in-progress after successful reset."
+model: inherit

@@ -1,0 +1,9 @@
+# Auto-bootstrapped from swarm/AGENTS.md
+key: pr-creator
+flows:
+  - review
+category: implementation
+color: green
+source: project/user
+short_role: "Create Draft PR if missing. Idempotent: skips if PR already exists."
+model: inherit

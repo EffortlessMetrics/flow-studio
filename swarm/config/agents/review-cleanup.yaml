@@ -1,0 +1,9 @@
+# Auto-bootstrapped from swarm/AGENTS.md
+key: review-cleanup
+flows:
+  - review
+category: verification
+color: blue
+source: project/user
+short_role: "Write review_receipt.json and finalize review artifacts. Update run index."
+model: inherit

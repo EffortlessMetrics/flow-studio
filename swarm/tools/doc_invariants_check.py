@@ -168,7 +168,7 @@ def scan_all_files(repo_root: Path) -> List[Dict[str, Any]]:
 def print_human_readable(issues: List[Dict[str, Any]], repo_root: Path) -> None:
     """Print issues in human-readable format."""
     if not issues:
-        print("✓ Doc Invariants Check")
+        print("[OK] Doc Invariants Check")
         print(f"  Scanned {len(SCAN_FILES)} files, no outdated references found")
         print()
         print("  Authoritative counts (computed from config):")
@@ -177,7 +177,7 @@ def print_human_readable(issues: List[Dict[str, Any]], repo_root: Path) -> None:
         print(f"    - Skills: {SKILLS_COUNT}")
         return
 
-    print("✗ Doc Invariants Check - FAILED")
+    print("[FAIL] Doc Invariants Check - FAILED")
     print(f"  Found {len(issues)} outdated reference(s)")
     print()
 

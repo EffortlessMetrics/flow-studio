@@ -434,7 +434,7 @@ def main() -> None:
         changed = control_plane.changed_agents()
         print(f"  Changed agents ({summary['changed_count']}):")
         for agent, (old, new) in sorted(changed.items()):
-            print(f"    {agent}: {old} → {new}")
+            print(f"    {agent}: {old} -> {new}")
 
     # Exit with appropriate code
     # check-all fails if any agent has a diff; generate-all always succeeds unless there's an error

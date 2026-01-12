@@ -584,6 +584,88 @@ Example: During Flow 3 (Build), `code-implementer` detects that upstream has div
 
 ---
 
+## 12. Routing Implementation Surface
+
+This section documents the implementation details for developers extending the routing subsystem.
+
+### Canonical Import
+
+```python
+from swarm.runtime.stepwise.routing import route_step, RoutingOutcome
+from swarm.runtime.types import RoutingMode, RoutingDecision, RoutingCandidate
+```
+
+**Deprecated:** `route_step_unified` is an alias for backwards compatibility. Use `route_step` directly.
+
+### RoutingOutcome vs RoutingSignal
+
+The routing system uses two types for routing results:
+
+| Type | Status | Use Case |
+|------|--------|----------|
+| `RoutingOutcome` | **Canonical** | New code, full audit trail |
+| `RoutingSignal` | Legacy | Step envelope fallback |
+
+`RoutingOutcome` includes all audit fields (`routing_source`, `candidates`, `timestamp`). Use `RoutingOutcome.from_signal()` to convert legacy signals.
+
+### RoutingMode Enum
+
+Controls the balance between deterministic and Navigator-based routing:
+
+```python
+class RoutingMode(str, Enum):
+    DETERMINISTIC_ONLY = "deterministic_only"  # No LLM calls; CI/debugging
+    ASSIST = "assist"                          # Default; Navigator for complex cases
+    AUTHORITATIVE = "authoritative"            # Navigator has more latitude
+```
+
+- **DETERMINISTIC_ONLY**: Fast-path handles all routing. No Navigator calls. Use for CI and reproducibility.
+- **ASSIST**: Fast-path for obvious cases, Navigator for complex routing. Python can override via hard gates.
+- **AUTHORITATIVE**: Navigator can propose EXTEND_GRAPH and detours more freely.
+
+### Priority-Based Routing Strategy
+
+The routing driver (`driver.py`) follows this fallback chain:
+
+1. **Fast-path**: Terminal steps, explicit `next_step_id`, single outgoing edge
+2. **Deterministic**: CEL evaluation, deterministic graph rules
+3. **Navigator**: LLM-based routing for complex decisions (ASSIST/AUTHORITATIVE modes)
+4. **Envelope fallback**: Legacy `RoutingSignal` from step finalization
+5. **Escalate**: Default behavior when nothing else works
+
+Each stage sets `routing_source` appropriately.
+
+### `routing_source` Values
+
+The `routing_source` field in `RoutingOutcome` documents how the decision was made:
+
+| Value | Description |
+|-------|-------------|
+| `fast_path` | Obvious deterministic case (terminal step, single edge) |
+| `deterministic` | CEL evaluation or deterministic graph traversal |
+| `navigator` | Navigator chose from candidates |
+| `navigator:detour` | Navigator chose a detour/sidequest |
+| `navigator:extend_graph` | Navigator proposed graph extension |
+| `envelope_fallback` | Legacy RoutingSignal from step output |
+| `escalate` | Last resort fallback |
+
+### Terminology Mapping
+
+Documentation uses conceptual terms that map to code enums:
+
+| Docs Term | Code Enum Value |
+|-----------|-----------------|
+| CONTINUE | `RoutingDecision.ADVANCE` |
+| DETOUR | `RoutingDecision.BRANCH` |
+| LOOP | `RoutingDecision.LOOP` |
+| TERMINATE | `RoutingDecision.TERMINATE` |
+
+### API Reference
+
+See [ROUTING_API.md](./ROUTING_API.md) for the complete code-facing API reference.
+
+---
+
 ## Appendix: Integration with Existing Systems
 
 ### Stepwise Backends

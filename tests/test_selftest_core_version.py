@@ -15,7 +15,7 @@ INIT_FILE = PACKAGES_ROOT / "src" / "selftest_core" / "__init__.py"
 
 def _get_version_from_init() -> str:
     """Extract __version__ from __init__.py without importing."""
-    content = INIT_FILE.read_text()
+    content = INIT_FILE.read_text(encoding="utf-8")
     match = re.search(r'^__version__\s*=\s*["\']([^"\']+)["\']', content, re.MULTILINE)
     if match is None:
         raise ValueError("Could not find __version__ in __init__.py")
@@ -25,7 +25,7 @@ def _get_version_from_init() -> str:
 def _get_version_from_pyproject() -> str:
     """Extract version from pyproject.toml."""
     pyproject = PACKAGES_ROOT / "pyproject.toml"
-    content = pyproject.read_text()
+    content = pyproject.read_text(encoding="utf-8")
     match = re.search(r'version\s*=\s*"([^"]+)"', content)
     if match is None:
         raise ValueError("Could not find version in pyproject.toml")
@@ -51,7 +51,7 @@ class TestVersionConsistency:
         if not changelog.exists():
             pytest.skip("CHANGELOG.md not yet created")
 
-        content = changelog.read_text()
+        content = changelog.read_text(encoding="utf-8")
         version = _get_version_from_init()
 
         assert version in content, f"Version {version} not found in CHANGELOG.md"

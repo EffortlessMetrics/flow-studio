@@ -29,8 +29,7 @@ flows:
     title: "Draft -> Ready"
     short_title: "Review"
     description: "Harvest PR feedback, cluster into actionable items, apply fixes, flip Draft to Ready"
-    is_sdlc: false  # WIP - agents not yet defined
-    is_wip: true
+is_sdlc: true
 
   - key: gate
     index: 5

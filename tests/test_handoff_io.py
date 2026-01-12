@@ -69,8 +69,8 @@ class TestWriteHandoffEnvelope:
         assert committed_path.exists()
 
         # Verify content matches
-        draft_data = json.loads(draft_path.read_text())
-        committed_data = json.loads(committed_path.read_text())
+        draft_data = json.loads(draft_path.read_text(encoding="utf-8"))
+        committed_data = json.loads(committed_path.read_text(encoding="utf-8"))
         assert draft_data["step_id"] == "test_step"
         assert committed_data["step_id"] == "test_step"
 
@@ -194,7 +194,7 @@ class TestUpdateEnvelopeRouting:
 
         # Read back from disk
         committed_path = run_base / "handoff" / "test_step.json"
-        persisted = json.loads(committed_path.read_text())
+        persisted = json.loads(committed_path.read_text(encoding="utf-8"))
         assert persisted["routing_signal"]["decision"] == "terminate"
 
 
@@ -374,7 +374,7 @@ class TestFileChangesExtraction:
         forensics_path = run_base / "forensics" / "file_changes_test_step.json"
         assert forensics_path.exists()
 
-        extracted_data = json.loads(forensics_path.read_text())
+        extracted_data = json.loads(forensics_path.read_text(encoding="utf-8"))
         assert extracted_data == large_file_changes
 
     def test_read_hydrates_extracted_file_changes(self, run_base: Path):

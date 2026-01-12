@@ -1,0 +1,9 @@
+# Auto-bootstrapped from swarm/AGENTS.md
+key: pr-commenter
+flows:
+  - review
+category: reporter
+color: pink
+source: project/user
+short_role: "Post idempotent summary comments to PR. Updates existing comments."
+model: inherit

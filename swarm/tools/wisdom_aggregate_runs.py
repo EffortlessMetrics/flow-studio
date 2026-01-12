@@ -23,6 +23,7 @@ from typing import Any, Dict, List
 # Add parent to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+from swarm.config.flow_registry import get_flow_order
 from swarm.runtime.storage import EXAMPLES_DIR, RUNS_DIR
 
 logging.basicConfig(
@@ -78,10 +79,10 @@ def aggregate_summaries(summaries: List[Dict[str, Any]]) -> Dict[str, Any]:
             "message": "No wisdom summaries found",
         }
 
-    # Initialize aggregation
+    # Initialize aggregation (from registry, includes review)
     flow_success_counts: Dict[str, Dict[str, int]] = {
         flow: {"succeeded": 0, "failed": 0, "skipped": 0}
-        for flow in ["signal", "plan", "build", "gate", "deploy", "wisdom"]
+        for flow in get_flow_order()
     }
 
     total_regressions = 0

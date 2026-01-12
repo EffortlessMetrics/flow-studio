@@ -88,13 +88,13 @@ class TestReadmeLinks:
 
     def test_readme_links_to_index(self):
         """README should link to docs/INDEX.md."""
-        readme = (REPO_ROOT / "README.md").read_text()
+        readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
         assert "docs/INDEX.md" in readme or "INDEX.md" in readme, \
             "README should link to docs/INDEX.md"
 
     def test_readme_links_to_golden_runs(self):
         """README should link to GOLDEN_RUNS.md."""
-        readme = (REPO_ROOT / "README.md").read_text()
+        readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
         assert "GOLDEN_RUNS" in readme, "README should reference GOLDEN_RUNS.md"
 
 
@@ -103,7 +103,7 @@ class TestCrossReferences:
 
     def test_index_links_valid(self):
         """All relative links in INDEX.md should resolve."""
-        index_content = (DOCS_DIR / "INDEX.md").read_text()
+        index_content = (DOCS_DIR / "INDEX.md").read_text(encoding="utf-8")
         # Find markdown links like [text](path.md) or [text](./path.md)
         link_pattern = r'\[([^\]]+)\]\(([^)]+\.md)\)'
         links = re.findall(link_pattern, index_content)
@@ -128,7 +128,7 @@ class TestAdoptionReadiness:
     def test_readme_contains_readiness_checklist(self):
         """README.md has adoption readiness checklist section."""
         readme = REPO_ROOT / "README.md"
-        content = readme.read_text()
+        content = readme.read_text(encoding="utf-8")
 
         # Check for the section header
         assert "Are You Ready to Adopt This?" in content or "Ready to Adopt" in content
@@ -142,7 +142,7 @@ class TestAdoptionReadiness:
     def test_adoption_playbook_has_readiness_checklist(self):
         """ADOPTION_PLAYBOOK.md has readiness checklist."""
         playbook = REPO_ROOT / "docs" / "ADOPTION_PLAYBOOK.md"
-        content = playbook.read_text()
+        content = playbook.read_text(encoding="utf-8")
 
         # Check for checkbox prerequisites
         assert "- [ ]" in content or "- [x]" in content

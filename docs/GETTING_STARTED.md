@@ -2,11 +2,12 @@
 
 > For: Developers wanting to try the swarm in under 30 minutes.
 
-> **Scope:** This guide is for running the **Flow Studio demo harness** in this repo.
-> For a portable `.claude` pack to use with Claude Code in your own repo, see [`EffortlessMetrics/demo-swarm`](https://github.com/EffortlessMetrics/demo-swarm).
+> **Scope:** This guide is for running **Flow Studio** in this repo.
+> For a portable `.claude/` pack to use in your own repo, see our sister repo:
+> [`EffortlessMetrics/demo-swarm`](https://github.com/EffortlessMetrics/demo-swarm).
 
-> **Version note:** This guide assumes mainline (`v2.3.0+`). If commands or UI differ,
-> check `CHANGELOG.md` or the release notes in `docs/RELEASE_NOTES_2_3_0.md`.
+> **Version note:** This guide assumes mainline (`v3.0+`). If commands or UI differ,
+> check `CHANGELOG.md` or the release notes.
 
 > **Status:** early re-implementation of a proven pattern. If what you see disagrees with this guide, trust the code and open an issue.
 
@@ -41,6 +42,57 @@ Both paths take about 10 minutes. You can do both.
 
 **Optional (for UI development / TypeScript checks):**
 - **Node.js 20+** (npm is fine; pnpm optional)
+
+---
+
+## Before You Begin: The Paradigm Shift
+
+> **Code generation is faster than human review. The bottleneck is trust.**
+
+Open-weight models now produce junior-or-better code, faster than you can read it, cheap enough to run repeatedly. Just like programmers stopped reading assembly, developers stop grinding on first-draft implementation—the job moves up the stack.
+
+**The economic math:** Spending ~$30 on a background run that produces a reviewable PR with evidence beats spending 5 days of developer time producing something worse. The cost isn't compute—it's the senior attention required to trust the output.
+
+**The trust thesis:** The bottleneck isn't generation; it's review throughput. A developer can review a well-evidenced PR in 30 minutes. That same developer might spend a week implementing the same feature manually. Flow Studio's job is to produce *reviewable trust bundles*, not just code.
+
+**What are "receipts"?** Throughout this system, you'll see references to "receipts." These are captured evidence—command outputs, test results, diff summaries—written to disk during execution. Receipts are not claims ("tests passed"); they're forensic artifacts (the actual pytest output file). This distinction matters: the system routes and gates based on receipts, not narrative.
+
+Flow Studio operates differently from ChatGPT or Copilot. Understanding this upfront prevents frustration:
+
+| Traditional | Flow Studio |
+|-------------|-------------|
+| You spend time implementing | System iterates in the background |
+| Review by reading every line | Review via inspection report + hotspots |
+| Hope tests are meaningful | Mutation testing proves coverage depth |
+| Chat with the AI | Assign tickets, audit outputs |
+| Intervene when stuck | Come back when it's ready |
+
+**The pattern:** hours of system iteration → one-sitting human review.
+
+**Key principles:**
+
+- **Forensics > Narrative**: The AI may claim success. Trust the disk—git diffs, test logs, receipts.
+- **Scoped Focus**: Each step starts fresh—clearing irrelevant prior context so reasoning stays sharp.
+- **Developer Enabler**: This isn't "AI vs. developers." It's developers doing more, better.
+
+> **Review the output, not the process.**
+> You care about the final diff, tests, and receipts—not the messy iteration.
+
+### What Makes This Different
+
+Flow Studio is built on principles that may feel unfamiliar:
+
+- **Session amnesia**: Each step starts with a fresh context, rehydrated from disk artifacts—not chat history. This prevents "context drift" where models forget instructions after long conversations.
+
+- **Adversarial loops**: Critics don't fix problems; they find them. The author-critic microloops (requirements, tests, code) create tension that surfaces issues early. Critics are harsh by design.
+
+- **Evidence discipline**: Claims require proof. "Tests passed" means nothing without the test output file. The system checks existence *and* freshness of evidence before advancing.
+
+- **Boundary physics**: Inside the working environment, agents have full autonomy. Restrictions only apply at publish boundaries (merging to upstream). This inverts traditional permission models.
+
+Keep these principles in mind as you explore. They explain why the flows are shaped the way they are.
+
+For the full philosophy, read [AGOPS_MANIFESTO.md](./AGOPS_MANIFESTO.md). For current data points, see [MARKET_SNAPSHOT.md](./MARKET_SNAPSHOT.md).
 
 ---
 
@@ -96,6 +148,8 @@ You should see:
 
 **Key insight**: The graph *is* the spec. Each flow has steps, each step executes a station. The shape tells you the story.
 
+> **Why is Flow 3 (Build) the heaviest?** This is where most iteration and risk concentrates. Build has two adversarial microloops (tests, code) that may cycle multiple times before the critic is satisfied. Planning is relatively cheap to redo; broken code is expensive. The architecture front-loads iteration where it matters most.
+
 ### What You've Seen
 
 - **Signal (Flow 1)**: Requirements loop — author ↔ critic
@@ -133,13 +187,15 @@ This shows all 16 selftest steps without running them:
 
 **Key insight**: Selftest is decomposable. You can run individual steps or whole tiers.
 
+> **Why does validation come first?** The validator is the constitution. Before agents run, before flows execute, the system must be internally consistent. Agent definitions must match the registry. Flow references must resolve. This isn't bureaucracy—it's the foundation that makes autonomous operation safe. If pack-check fails, nothing else can be trusted.
+
 ### Step 3: Run the Full Selftest (3 min)
 
 ```bash
 make selftest
 ```
 
-Watch it run through all 16 steps. Notice:
+It runs through all 16 steps. When it completes, notice:
 
 - Each step is atomic and fast (< 0.2s each)
 - Steps are independent (no cascading failures)

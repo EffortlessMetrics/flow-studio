@@ -330,7 +330,7 @@ class TestDegradationTrackedAC:
         if not log_file.exists():
             pytest.skip("selftest_degradations.log does not exist yet")
 
-        lines = log_file.read_text().strip().split("\n")
+        lines = log_file.read_text(encoding="utf-8").strip().split("\n")
         for line in lines:
             if not line.strip():
                 continue
@@ -352,7 +352,7 @@ class TestDegradationTrackedAC:
         if not log_file.exists():
             pytest.skip("selftest_degradations.log does not exist yet")
 
-        content = log_file.read_text()
+        content = log_file.read_text(encoding="utf-8")
         # Should have some structure (timestamps, step ids, messages)
         assert "[" in content or "timestamp" in content.lower() or "step" in content.lower()
 

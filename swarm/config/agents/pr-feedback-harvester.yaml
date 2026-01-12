@@ -1,0 +1,9 @@
+# Auto-bootstrapped from swarm/AGENTS.md
+key: pr-feedback-harvester
+flows:
+  - review
+category: analytics
+color: orange
+source: project/user
+short_role: "Pull all bot/human feedback from PR. Non-blocking: returns what's available now."
+model: inherit

@@ -1,10 +1,10 @@
-# Why This Demo Swarm
+# Why Flow Studio
 
-> **Context:** This document describes the **DemoSwarm pattern** as implemented by the
-> Flow Studio demo harness in this repo.
+> **Context:** This document describes the core patterns implemented by **Flow Studio**.
 >
-> Flow Studio is the UI and runtime harness; the DemoSwarm "swarm" lives in `.claude/`
-> here and in the portable pack at [`EffortlessMetrics/demo-swarm`](https://github.com/EffortlessMetrics/demo-swarm).
+> Flow Studio is the orchestration layer, UI, and runtime harness in this repo.
+> For a portable `.claude/` pack to use in your own repo, see our sister repo:
+> [`EffortlessMetrics/demo-swarm`](https://github.com/EffortlessMetrics/demo-swarm).
 
 This repo demonstrates **three core ideas** that distinguish it from typical agent demos.
 
@@ -130,21 +130,24 @@ This pattern shifts the burden from "interrupt the agent chain to ask questions"
 
 ## The Demo Philosophy
 
-**Spend tokens freely to save senior engineer attention.**
+**Code generation is faster than human review. The bottleneck is trust.**
 
-This swarm trades compute for human time:
+Open-weight models now produce junior-or-better code, faster than you can read it, cheap enough to run repeatedly. Just like programmers stopped reading assembly, developers stop grinding on first-draft implementation—the job moves up the stack.
 
+When quality is already acceptable and generation outpaces review, **verification becomes the limiting reagent**. Flow Studio uses that leverage to run research, planning, multi-pass implementation, tests, and hardening loops—then publishes a PR cockpit (quality events + hotspots + evidence) so developers can spend their time on architecture and decisions, not grind.
+
+**How this works:**
 - Let agents iterate (microloops) until tests pass and critics approve
 - Heavy upfront context loading (20–50k tokens) prevents downstream re-search
 - Harsh critics catch bugs before they reach Gate/Deploy
 - Agents never block; they document concerns and continue
 - Humans review **receipts** (structured outputs), not intermediate steps
 
-The result: **auditable, repeatable, traceable decisions**—the opposite of "vibes-based engineering."
+The result: **auditable, repeatable, traceable decisions**—the opposite of "vibes-based engineering." See [MARKET_SNAPSHOT.md](./MARKET_SNAPSHOT.md) for current data points.
 
 ---
 
-## What You Get in This Demo
+## What You Get in Flow Studio
 
 ### Runnable Swarm
 
@@ -174,25 +177,28 @@ make flow-studio      # Visualize flows (http://localhost:5000)
 
 ---
 
-## Not a Product
+## Flow Studio vs demo-swarm
 
-This is a **reference implementation**, not a product:
+**Flow Studio** (this repo) is the orchestration layer:
+- Python kernel that manages state and routing
+- Stepwise execution with durable receipts
+- Flow Studio UI for visualization
+- Steps as first-class execution units
 
-- Fork it and adapt it for your org
-- Replace agents with your specialized ones
-- Swap the agent platform (Claude Code → GitLab agents, GitHub Actions, etc.)
-- Add flows for your specific SDLC stages
-- Integrate with your infrastructure (k8s, observability, etc.)
+**demo-swarm** (sister repo) is the portable agent pack:
+- `.claude/` directory you copy into your own repo
+- Agent definitions for Claude Code
+- Works with Claude Code directly, no kernel required
 
-The core pattern—flows → specs, agents → interns, receipts → audit trail—is portable. The implementation is Claude-native.
+Flow Studio grew out of demo-swarm. If you want to add agentic SDLC to your existing repo, start with [demo-swarm](https://github.com/EffortlessMetrics/demo-swarm). If you want the full orchestration layer with stepwise execution and UI, use Flow Studio.
 
 ---
 
-## Scope and Safety: What This Demo Does (and Doesn't)
+## Scope and Safety: What Flow Studio Does (and Doesn't)
 
-This is a **demo repo**, not production infrastructure. Understanding its boundaries helps you evaluate whether to fork it and what to add.
+Flow Studio is a **reference implementation**, not production infrastructure. Understanding its boundaries helps you evaluate whether to adopt it and what to extend.
 
-### What's In This Demo
+### What's In Flow Studio
 
 **Flows 1–4: Fully Local**
 - Git + files only—no external services required
@@ -204,10 +210,11 @@ This is a **demo repo**, not production infrastructure. Understanding its bounda
 - Graceful fallback: dry-run mode when not in a GitHub context
 - Extension guides in `swarm/infrastructure/` for k8s, observability
 
-**48 Agents**
-- 3 built-in infrastructure agents (`explore`, `plan-subagent`, `general-subagent`)
-- 45 domain agents across 7 flows
-- All config-backed (`swarm/config/agents/`) with generated adapters
+**Steps and Stations**
+- 7 flows with 40+ steps total
+- Steps are the execution units; stations define the work
+- Agentic steps invoke Claude Code SDK; deterministic steps run Python
+- All config-backed (`swarm/spec/stations/`) with YAML definitions
 
 **Validation and Governance**
 - Selftest system (16 steps across KERNEL/GOVERNANCE/OPTIONAL tiers)
@@ -231,26 +238,26 @@ This is a **demo repo**, not production infrastructure. Understanding its bounda
 - No Slack/PagerDuty/incident management
 - Extension points documented in `swarm/infrastructure/flow-6-extensions.md`
 
-**Agent-to-Agent Communication**
-- Due to Claude Code limitations, domain agents cannot call other agents
-- Only the orchestrator (top-level Claude) coordinates multiple agents
-- This is a runtime constraint, not a design limitation
+**Step Isolation**
+- Each step runs in its own context (fresh Claude session or Python process)
+- The kernel manages state transitions and routing between steps
+- This isolation enables stepwise observability and resume
 
 ### Critical Invariants
 
-These invariants are non-negotiable design constraints that distinguish this swarm from typical agent systems:
+These invariants are non-negotiable design constraints that distinguish Flow Studio from typical agent systems:
 
-1. **Agents always complete flows** -- No mid-flow blocking or escalation. Document concerns in receipts; humans review at flow boundaries.
+1. **Steps always complete** -- No mid-flow blocking or escalation. Document concerns in receipts; humans review at flow boundaries.
 
 2. **Auto-remediation is out-of-band** -- Remediation executors (like `selftest_remediate_execute.py`) are separate tools that humans/CI invoke explicitly. Flows never call them inline.
 
-3. **SaaS integrations are explicitly out-of-scope** -- This demo uses only local files, git, and GitHub. Datadog, Prometheus, Slack, etc. are documented as extension patterns in `swarm/infrastructure/` but not implemented here.
+3. **SaaS integrations are explicitly out-of-scope** -- Flow Studio uses only local files, git, and GitHub. Datadog, Prometheus, Slack, etc. are documented as extension patterns in `swarm/infrastructure/` but not implemented here.
 
 > For detailed remediation architecture, see [`docs/designs/AUTO_REMEDIATION_DESIGN.md`](designs/AUTO_REMEDIATION_DESIGN.md).
 
-> For implementation details on agent behavior and flow patterns, see [`CLAUDE.md` Key Patterns](../CLAUDE.md#key-patterns).
+> For implementation details on step behavior and flow patterns, see [`CLAUDE.md` Key Patterns](../CLAUDE.md#key-patterns).
 
-### How to Fork This
+### How to Extend Flow Studio
 
 1. **Clone and validate**:
    ```bash
@@ -258,15 +265,15 @@ These invariants are non-negotiable design constraints that distinguish this swa
    make dev-check  # Ensure baseline works
    ```
 
-2. **Customize agents**: Edit `swarm/config/agents/<key>.yaml`, then `make gen-adapters`
+2. **Customize stations**: Edit `swarm/spec/stations/<key>.yaml`
 
-3. **Add your flows**: Create `swarm/flows/flow-<name>.md` + corresponding command
+3. **Add your flows**: Create flow spec in `swarm/flows/` + wire into the kernel
 
 4. **Integrate your infra**: Use `swarm/infrastructure/` guides as starting points
 
 5. **Enforce governance**: Enable `pre-commit install` and add branch protection in your org
 
-The swarm is designed to be **forked and adapted**, not used as-is.
+Flow Studio is designed to be **forked and extended**, not used as-is.
 
 ---
 
@@ -274,6 +281,7 @@ The swarm is designed to be **forked and adapted**, not used as-is.
 
 - **Full architecture**: [ARCHITECTURE.md](../ARCHITECTURE.md)
 - **Development guide**: [CLAUDE.md](../CLAUDE.md)
-- **Philosophy & axioms**: [swarm/positioning.md](../swarm/positioning.md)
-- **Agent ops**: [CLAUDE.md § Agent Ops](../CLAUDE.md#agent-ops)
-- **Selftest deep dive**: [docs/SELFTEST_SYSTEM.md](./SELFTEST_SYSTEM.md)
+- **Philosophy & positioning**: [swarm/positioning.md](../swarm/positioning.md)
+- **AgOps manifesto**: [AGOPS_MANIFESTO.md](./AGOPS_MANIFESTO.md)
+- **Selftest deep dive**: [SELFTEST_SYSTEM.md](./SELFTEST_SYSTEM.md)
+- **Sister repo (portable pack)**: [EffortlessMetrics/demo-swarm](https://github.com/EffortlessMetrics/demo-swarm)

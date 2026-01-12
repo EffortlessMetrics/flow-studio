@@ -1,0 +1,9 @@
+# Flow 8: Reset/Rebase agent
+key: reset-sync-upstream
+flows:
+  - reset
+category: implementation
+color: green
+source: project/user
+short_role: "Fetch upstream changes without merging. Update remote tracking refs."
+model: inherit

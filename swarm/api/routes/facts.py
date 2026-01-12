@@ -15,6 +15,7 @@ from typing import Dict, List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from swarm.config.flow_registry import get_flow_order
 from swarm.runtime.fact_extraction import (
     MARKER_TYPES,
     extract_facts_from_run,
@@ -164,8 +165,8 @@ async def get_facts_summary(run_id: str):
                 )
             )
 
-    # Build by_flow response
-    flow_order = ["signal", "plan", "build", "gate", "deploy", "wisdom"]
+    # Build by_flow response (from registry, includes review)
+    flow_order = get_flow_order()
     flow_counts = []
     for flow_key in flow_order:
         if flow_key in by_flow:

@@ -19,13 +19,13 @@ The routing subsystem is designed to be:
 - **Mode-aware**: Respects RoutingMode (DETERMINISTIC_ONLY, ASSIST, AUTHORITATIVE)
 
 Components:
-    driver.py - Main route_step_unified() function that orchestrates routing strategies
+    driver.py - Main route_step() function that orchestrates routing strategies
     _routing_legacy.py - Legacy routing functions (re-exported for compatibility)
 
-Usage (new unified routing):
-    from swarm.runtime.stepwise.routing import route_step_unified, RoutingOutcome
+Usage (canonical):
+    from swarm.runtime.stepwise.routing import route_step, RoutingOutcome
 
-    outcome = route_step_unified(
+    outcome = route_step(
         step=current_step,
         step_result=result,
         run_state=state,
@@ -49,14 +49,30 @@ See Also:
 
 from __future__ import annotations
 
-# Re-export everything from legacy routing module for backwards compatibility
-# This ensures existing imports like:
+# =============================================================================
+# Canonical routing API (from driver.py)
+# =============================================================================
+# The driver's route_step() is the single entry point for all routing decisions.
+# Import it as the canonical route_step function.
+from swarm.runtime.stepwise.routing.driver import (
+    RoutingOutcome,
+    route_step,  # Canonical routing function
+)
+
+# Backwards-compat alias for code that used route_step_unified
+# TODO: Deprecate in future version
+route_step_unified = route_step
+
+# =============================================================================
+# Legacy routing re-exports (backwards compatibility)
+# =============================================================================
+# These ensure existing imports like:
 #   from .routing import create_routing_signal, build_routing_context
 # continue to work unchanged.
 from swarm.runtime.stepwise._routing_legacy import (
     # Routing signal creation
     create_routing_signal,
-    route_step,  # Legacy route_step function
+    route_step as route_step_legacy,  # Renamed to avoid collision
     build_routing_context,
     ReceiptReader,
     # Elephant Protocol: Stall detection types
@@ -72,24 +88,18 @@ from swarm.runtime.stepwise._routing_legacy import (
     generate_routing_candidates,
 )
 
-# Re-export from new driver module
-# Using route_step_unified to avoid collision with legacy route_step
-from swarm.runtime.stepwise.routing.driver import (
-    RoutingOutcome,
-    route_step as route_step_unified,
-)
-
-# Convenience re-exports for RoutingOutcome construction
-# These allow: from swarm.runtime.stepwise.routing import RoutingOutcome
-# Then: outcome = RoutingOutcome.from_signal(signal, "source")
-
 __all__ = [
     # ==========================================================================
-    # Legacy exports (backwards compatibility with existing code)
+    # Canonical routing API (driver.py)
     # ==========================================================================
-    # Routing signal creation
+    "route_step",  # Canonical routing function
+    "RoutingOutcome",
+    "route_step_unified",  # Backwards-compat alias (TODO: deprecate)
+    # ==========================================================================
+    # Legacy exports (backwards compatibility)
+    # ==========================================================================
+    "route_step_legacy",  # Legacy function (for explicit legacy usage)
     "create_routing_signal",
-    "route_step",  # Legacy function
     "build_routing_context",
     "ReceiptReader",
     # Elephant Protocol: Stall detection types
@@ -103,9 +113,4 @@ __all__ = [
     "compute_error_signature",
     # Candidate-set pattern
     "generate_routing_candidates",
-    # ==========================================================================
-    # New unified routing (driver.py)
-    # ==========================================================================
-    "RoutingOutcome",
-    "route_step_unified",
 ]

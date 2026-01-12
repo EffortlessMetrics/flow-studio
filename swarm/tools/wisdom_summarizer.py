@@ -32,6 +32,8 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+from swarm.config.flow_registry import get_flow_order
+
 
 @dataclass
 class FlowSummary:
@@ -85,8 +87,8 @@ class WisdomSummarizer:
     in JSON format that captures key metrics and metadata.
     """
 
-    # Standard flow keys in execution order
-    FLOW_KEYS = ["signal", "plan", "build", "gate", "deploy", "wisdom"]
+    # Standard flow keys in execution order (from registry, includes review)
+    FLOW_KEYS = get_flow_order()
 
     # Wisdom artifacts to look for
     WISDOM_ARTIFACTS = [

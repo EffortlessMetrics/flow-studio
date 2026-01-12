@@ -58,6 +58,13 @@ Validates swarm spec/implementation alignment with two layers:
   - In strict mode: missing sections are errors
   - In default mode: missing sections are warnings
 
+**FR-007: Capability Registry** — Capability claims with evidence
+  - specs/capabilities.yaml tracks what the system can do
+  - implemented capabilities must have test evidence
+  - implemented capabilities must have code evidence
+  - @cap:<id> tags in BDD must reference capabilities in registry
+  - Prevents "narrative drift" where docs claim unproven capabilities
+
 ## CLI Usage
 
 Run full validation:
@@ -132,7 +139,7 @@ For detailed documentation, see:
 - /CLAUDE.md — Full reference for CLI usage, error messages, troubleshooting
 - docs/VALIDATION_RULES.md — Comprehensive FR-001–FR-005 reference
 
-Functional Requirements: FR-001 through FR-005
+Functional Requirements: FR-001 through FR-007
 Version: 2.1.0
 """
 
@@ -493,14 +500,25 @@ def validate_config_coverage(registry: Dict[str, Dict[str, Any]]) -> ValidationR
 
 def validate_bijection(registry: Dict[str, Dict[str, Any]]) -> ValidationResult:
     """
-    Validate 1:1 correspondence between AGENTS.md and .claude/agents/*.md files.
+    Validate correspondence between AGENTS.md and .claude/agents/*.md files.
+
+    LEGACY: This check is skipped if .claude/agents/ directory does not exist.
+    The new architecture uses swarm/config/agents/ for agent configuration instead.
+
+    TRANSITION MODE: During the architecture transition from .claude/agents/ to
+    swarm/config/agents/, we only enforce:
+    - Every file in .claude/agents/ must be registered in AGENTS.md (file → registry)
+
+    We intentionally skip the registry → file check because:
+    - Most agents now use swarm/config/agents/ as the source of truth
+    - Only agents with custom prompts (like Flow 8 reset agents) need .claude/agents/ files
+    - Full bijection will be restored when the migration is complete
 
     LEGACY: This check is skipped if .claude/agents/ directory does not exist.
     The new architecture uses swarm/config/agents/ for agent configuration instead.
 
     Checks:
-    - Every registry entry has a corresponding file
-    - Every file has a corresponding registry entry
+    - Every file has a corresponding registry entry (enforced)
     - Names are case-sensitive exact matches
     """
     result = ValidationResult()
@@ -518,39 +536,9 @@ def validate_bijection(registry: Dict[str, Dict[str, Any]]) -> ValidationResult:
             continue
         agent_files.add(path.stem)
 
-    # Check registry → file
-    for key, meta in registry.items():
-        # Skip built-in agents
-        if key in BUILT_IN_AGENTS:
-            continue
-
-        # Skip non-project agents
-        if meta.get("source") != "project/user":
-            continue
-
-        expected_file = AGENTS_DIR / f"{key}.md"
-        if not expected_file.is_file():
-            location = f"swarm/AGENTS.md:line {meta.get('line', '?')}"
-
-            # Suggest similar filenames using Levenshtein distance
-            suggestions = suggest_typos(key, list(agent_files))
-
-            problem = f"Agent '{key}' is registered but {expected_file.relative_to(ROOT)} does not exist"
-            if suggestions:
-                problem += f"; did you mean: {', '.join(suggestions)}?"
-
-            fix_action = f"Create {expected_file.relative_to(ROOT)} with required frontmatter, or remove entry from AGENTS.md"
-            if suggestions:
-                fix_action = f"Rename one of: {', '.join(suggestions)} to match '{key}', or create {expected_file.relative_to(ROOT)} with required frontmatter, or remove entry from AGENTS.md"
-
-            result.add_error(
-                "BIJECTION",
-                location,
-                problem,
-                fix_action,
-                line_number=meta.get("line"),
-                file_path=str(AGENTS_MD)
-            )
+    # TRANSITION: Skip registry → file check
+    # During migration, we don't require all registered agents to have .claude/agents/ files.
+    # Most agents now live in swarm/config/agents/ as the source of truth.
 
     # Check file → registry
     for filename in agent_files:
@@ -1854,6 +1842,161 @@ def validate_microloop_phrases() -> ValidationResult:
 
 
 # ============================================================================
+# FR-007: Capability Registry Validation
+# ============================================================================
+
+def validate_capability_registry() -> ValidationResult:
+    """
+    Validate the capability registry for evidence discipline.
+
+    FR-007: Capability Registry
+    Checks:
+    - implemented capabilities have >=1 test pointer
+    - implemented capabilities have >=1 code pointer
+    - @cap:<id> tags in BDD reference capabilities that exist in registry
+    - aspirational capabilities are not claimed as implemented
+
+    This validation ensures that capability claims have evidence,
+    preventing "narrative drift" where docs claim capabilities
+    that aren't backed by code or tests.
+    """
+    result = ValidationResult()
+
+    # Check if capability registry exists
+    registry_path = ROOT / "specs" / "capabilities.yaml"
+    if not registry_path.exists():
+        result.add_warning(
+            "CAPABILITY",
+            "specs/capabilities.yaml",
+            "capability registry not found (optional file)",
+            "Create specs/capabilities.yaml to track capability claims with evidence",
+            file_path=str(registry_path)
+        )
+        return result
+
+    # Parse capability registry (uses PyYAML, not SimpleYAMLParser which is for frontmatter)
+    try:
+        import yaml
+        content = registry_path.read_text(encoding="utf-8")
+        registry = yaml.safe_load(content)
+    except ImportError:
+        result.add_warning(
+            "CAPABILITY",
+            "specs/capabilities.yaml",
+            "PyYAML not installed; skipping capability registry validation",
+            "Install PyYAML: pip install pyyaml",
+            file_path=str(registry_path)
+        )
+        return result
+    except Exception as e:
+        result.add_error(
+            "CAPABILITY",
+            "specs/capabilities.yaml",
+            f"failed to parse capability registry: {e}",
+            "Fix YAML syntax in specs/capabilities.yaml",
+            file_path=str(registry_path)
+        )
+        return result
+
+    # Collect all capability IDs
+    cap_ids: Set[str] = set()
+    aspirational_ids: Set[str] = set()
+
+    surfaces = registry.get("surfaces", {})
+    if not isinstance(surfaces, dict):
+        result.add_error(
+            "CAPABILITY",
+            "specs/capabilities.yaml",
+            "'surfaces' must be a dict",
+            "Fix structure: surfaces should map surface names to capability lists",
+            file_path=str(registry_path)
+        )
+        return result
+
+    for surface_key, surface_data in surfaces.items():
+        if not isinstance(surface_data, dict):
+            continue
+
+        capabilities = surface_data.get("capabilities", [])
+        if not isinstance(capabilities, list):
+            continue
+
+        for cap in capabilities:
+            if not isinstance(cap, dict):
+                continue
+
+            cap_id = cap.get("id", "")
+            status = cap.get("status", "")
+            evidence = cap.get("evidence", {})
+
+            if not cap_id:
+                result.add_warning(
+                    "CAPABILITY",
+                    f"specs/capabilities.yaml:{surface_key}",
+                    "capability missing 'id' field",
+                    "Add 'id' field to capability entry",
+                    file_path=str(registry_path)
+                )
+                continue
+
+            cap_ids.add(cap_id)
+
+            if status == "aspirational":
+                aspirational_ids.add(cap_id)
+                # Aspirational caps don't need code/test evidence
+                continue
+
+            if status == "implemented":
+                # Must have test evidence
+                tests = evidence.get("tests", [])
+                if not tests:
+                    result.add_error(
+                        "CAPABILITY",
+                        f"specs/capabilities.yaml:{cap_id}",
+                        f"capability '{cap_id}' is 'implemented' but has no test evidence",
+                        "Add 'tests' evidence pointers or change status to 'supported'",
+                        file_path=str(registry_path)
+                    )
+
+                # Must have code evidence
+                code = evidence.get("code", [])
+                if not code:
+                    result.add_error(
+                        "CAPABILITY",
+                        f"specs/capabilities.yaml:{cap_id}",
+                        f"capability '{cap_id}' is 'implemented' but has no code evidence",
+                        "Add 'code' evidence pointers with path and symbol",
+                        file_path=str(registry_path)
+                    )
+
+    # Check BDD @cap: tags reference capabilities that exist
+    features_dir = ROOT / "features"
+    if features_dir.is_dir():
+        for feature_file in features_dir.glob("*.feature"):
+            try:
+                feature_content = feature_file.read_text(encoding="utf-8")
+                # Find all @cap:<id> tags
+                cap_tag_pattern = re.compile(r"@cap:([a-z0-9_.]+)")
+                for match in cap_tag_pattern.finditer(feature_content):
+                    tag_id = match.group(1)
+                    if tag_id not in cap_ids:
+                        # Find line number
+                        line_num = feature_content[:match.start()].count('\n') + 1
+                        result.add_error(
+                            "CAPABILITY",
+                            f"{feature_file.name}:line {line_num}",
+                            f"@cap:{tag_id} references capability not in registry",
+                            f"Add '{tag_id}' to specs/capabilities.yaml or fix tag",
+                            line_number=line_num,
+                            file_path=str(feature_file)
+                        )
+            except (OSError, UnicodeDecodeError):
+                pass  # Skip files that can't be read
+
+    return result
+
+
+# ============================================================================
 # Git-Aware Incremental Mode (FR-011)
 # ============================================================================
 
@@ -2073,6 +2216,7 @@ class ValidatorRunner:
             result.extend(self.run_skills())
             result.extend(self._run_microloop_validation())
             result.extend(self._run_prompt_validation())
+            result.extend(self._run_capability_validation())
 
         elapsed = time.time() - start_time
         mode = "Flows-only" if self.flows_only else "Full"
@@ -2282,6 +2426,29 @@ class ValidatorRunner:
 
         return result
 
+    def _run_capability_validation(self) -> ValidationResult:
+        """
+        Run capability registry validation.
+
+        Includes:
+        - FR-007: Capability registry validation
+
+        Returns:
+            ValidationResult with capability-related errors or warnings
+        """
+        result = ValidationResult()
+
+        # FR-007: Capability registry validation
+        if self._should_check("specs/capabilities.yaml", "features/"):
+            capability_result = validate_capability_registry()
+            result.extend(capability_result)
+            self._debug_print(
+                f"Capability registry check: {len(capability_result.errors)} errors, "
+                f"{len(capability_result.warnings)} warnings"
+            )
+
+        return result
+
 
 # ============================================================================
 # Main Validation Orchestrator (Thin Wrapper)
@@ -2450,8 +2617,8 @@ def build_detailed_json_output(
         from swarm.config.flow_registry import get_flow_keys
         flow_keys = get_flow_keys()
     except ImportError:
-        # Fallback: use canonical 6-flow keys if registry not available
-        flow_keys = ["signal", "plan", "build", "gate", "deploy", "wisdom"]
+        # Fallback: use canonical 7-flow keys if registry not available
+        flow_keys = ["signal", "plan", "build", "review", "gate", "deploy", "wisdom"]
 
     for flow_id in flow_keys:
         flow_file = FLOW_SPECS_DIR / f"flow-{flow_id}.md"

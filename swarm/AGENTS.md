@@ -5,7 +5,7 @@
 > Built-in infra agents are native to Claude Code and have no `.claude/agents` files.
 
 <!-- META:AGENT_COUNTS -->
-**Total: 57 agents** (3 built-in + 54 domain)
+**Total: 73 agents** (3 built-in + 70 domain)
 <!-- /META:AGENT_COUNTS -->
 
 ---
@@ -62,6 +62,17 @@ For now: agents are pure tool-users. Only the orchestrator coordinates multiple 
 | swarm-ops | (utility) | infra | cyan | project/user | Guide for agent operations: model changes, adding agents, inspecting flows. |
 | ux-critic | (utility) | critic | red | project/user | Inspect Flow Studio screens and produce structured JSON critiques. |
 | ux-implementer | (utility) | implementation | green | project/user | Apply UX critique fixes to Flow Studio code and run tests. |
+| run-prep | review | implementation | green | project/user | Establish run directory and flow infrastructure. Creates RUN_BASE/<flow>/ structure. |
+| pr-creator | review | implementation | green | project/user | Create Draft PR if missing. Idempotent: skips if PR already exists. |
+| pr-feedback-harvester | review | analytics | orange | project/user | Pull all bot/human feedback from PR. Non-blocking: returns what's available now. |
+| review-worklist-writer | review | shaping | yellow | project/user | Cluster PR feedback into actionable Work Items with stable RW-NNN IDs. |
+| test-executor | review | verification | blue | project/user | Execute test suites to verify fixes. Uses test-runner skill. |
+| pr-commenter | review | reporter | pink | project/user | Post idempotent summary comments to PR. Updates existing comments. |
+| pr-status-manager | review | implementation | green | project/user | Flip Draft PR to Ready when review complete. Keeps Draft if incomplete. |
+| review-cleanup | review | verification | blue | project/user | Write review_receipt.json and finalize review artifacts. Update run index. |
+| build-cleanup | review | verification | blue | project/user | Reseal build receipt if code changed during review. Update checksums. |
+| secrets-sanitizer | review | verification | blue | project/user | Scan staged surface for secrets. Emit Gate Result (safe_to_commit, safe_to_publish). |
+| gh-issue-manager | review | reporter | pink | project/user | Update GitHub issue board. Link PRs to issues, update labels and status. |
 | signal-normalizer | signal | shaping | yellow | project/user | Parse raw input, find related context → issue_normalized.md, context_brief.md. |
 | problem-framer | signal | shaping | yellow | project/user | Synthesize normalized signal → problem_statement.md. |
 | requirements-author | signal | spec | purple | project/user | Write functional + non-functional requirements → requirements.md. |
@@ -107,13 +118,21 @@ For now: agents are pure tool-users. Only the orchestrator coordinates multiple 
 | feedback-applier | wisdom | analytics | orange | project/user | Create issues, suggest doc updates → feedback_actions.md. |
 | traceability-auditor | wisdom | verification | blue | project/user | Run-level coherence and spec traceability → traceability_audit.md. |
 | wisdom-cleanup | wisdom | verification | blue | project/user | Finalize wisdom_receipt.json, update run index. |
+| reset-diagnose | reset | analytics | orange | project/user | Analyze upstream divergence, identify conflicts, assess severity. |
+| reset-stash-wip | reset | implementation | green | project/user | Stash work-in-progress changes safely before reset operations. |
+| reset-sync-upstream | reset | implementation | green | project/user | Fetch upstream changes without merging. Update remote tracking refs. |
+| reset-resolve-conflicts | reset | implementation | green | project/user | Resolve merge/rebase conflicts. Apply safe resolution strategies. |
+| reset-restore-wip | reset | implementation | green | project/user | Restore stashed work-in-progress after successful reset. |
+| reset-prune-branches | reset | implementation | green | project/user | Clean up old shadow branches and stale remote tracking refs. |
+| reset-archive-run | reset | verification | blue | project/user | Archive current run state before reset. Preserve audit trail. |
+| reset-verify-clean | reset | verification | blue | project/user | Verify clean state after reset. Validate repo integrity. |
 
 ---
 
 ## Summary
 
 <!-- META:AGENT_COUNTS -->
-**Total: 57 agents** (3 built-in + 54 domain)
+**Total: 73 agents** (3 built-in + 70 domain)
 <!-- /META:AGENT_COUNTS -->
 
 | Category | Count | Notes |
@@ -124,10 +143,11 @@ For now: agents are pure tool-users. Only the orchestrator coordinates multiple 
 | Flow 1 (Signal) | 6 | |
 | Flow 2 (Plan) | 8 | |
 | Flow 3 (Build) | 9 | |
-| Flow 4 (Review) | 3 | |
+| Flow 4 (Review) | 11 | |
 | Flow 5 (Gate) | 6 | |
 | Flow 6 (Deploy) | 3 | |
 | Flow 7 (Wisdom) | 13 | |
+| Flow 8 (Reset) | 8 | Shadow fork reset/rebase operations |
 
 ### Agent Categories
 
@@ -172,10 +192,11 @@ For now: agents are pure tool-users. Only the orchestrator coordinates multiple 
 **Microloops**: test-author ⇄ test-critic, code-implementer ⇄ code-critic
 **Cross-cutting**: clarifier, repo-operator, gh-reporter
 
-### Flow 4: Code → Review (3 agents)
-**Question**: What feedback do we get from bots and humans?
-**Agents**: pr-creator, feedback-harvester, feedback-responder
-**Cross-cutting**: repo-operator, gh-reporter
+### Flow 4: Draft → Ready (Review) (11 agents)
+**Question**: Is this PR ready for gate review?
+**Agents**: run-prep, pr-creator, pr-feedback-harvester, review-worklist-writer, test-executor, pr-commenter, pr-status-manager, review-cleanup, build-cleanup, secrets-sanitizer, gh-issue-manager
+**Microloop**: worklist_loop (resolve work items until pending_blocking == 0)
+**Cross-cutting**: repo-operator, gh-reporter, policy-analyst, risk-analyst
 
 ### Flow 5: Review → Gate (6 agents)
 **Question**: Is this merge-eligible?
@@ -191,3 +212,9 @@ For now: agents are pure tool-users. Only the orchestrator coordinates multiple 
 **Question**: What did we learn?
 **Agents**: artifact-auditor, solution-analyst, quality-analyst, maintainability-analyst, process-analyst, regression-analyst, pattern-analyst, signal-quality-analyst, flow-historian, learning-synthesizer, feedback-applier, traceability-auditor, wisdom-cleanup
 **Cross-cutting**: risk-analyst, gh-reporter
+
+### Flow 8: Reset/Rebase (8 agents)
+**Question**: How do we sync with upstream safely?
+**Agents**: reset-diagnose, reset-stash-wip, reset-sync-upstream, reset-resolve-conflicts, reset-restore-wip, reset-prune-branches, reset-archive-run, reset-verify-clean
+**Cross-cutting**: repo-operator
+**Note**: Invoked via INJECT_FLOW when shadow fork diverges from upstream

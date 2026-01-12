@@ -35,7 +35,7 @@ class TestRunbookConfig:
     def test_config_is_valid_yaml(self):
         """Config file should be valid YAML."""
         config_path = Path("swarm/config/runbook_automation.yaml")
-        with open(config_path) as f:
+        with open(config_path, encoding="utf-8") as f:
             config = yaml.safe_load(f)
         assert config is not None, "Config file is empty"
         assert isinstance(config, dict), "Config should be a dictionary"
@@ -43,7 +43,7 @@ class TestRunbookConfig:
     def test_config_has_required_sections(self):
         """Config should have all required top-level sections."""
         config_path = Path("swarm/config/runbook_automation.yaml")
-        with open(config_path) as f:
+        with open(config_path, encoding="utf-8") as f:
             config = yaml.safe_load(f)
 
         required_sections = ["version", "enabled", "triggers", "actions", "notifications"]
@@ -53,7 +53,7 @@ class TestRunbookConfig:
     def test_config_version_is_supported(self):
         """Config version should be supported."""
         config_path = Path("swarm/config/runbook_automation.yaml")
-        with open(config_path) as f:
+        with open(config_path, encoding="utf-8") as f:
             config = yaml.safe_load(f)
 
         assert config.get("version") == "1.0", "Only version 1.0 is supported"
@@ -61,7 +61,7 @@ class TestRunbookConfig:
     def test_triggers_section_structure(self):
         """Triggers section should have expected keys."""
         config_path = Path("swarm/config/runbook_automation.yaml")
-        with open(config_path) as f:
+        with open(config_path, encoding="utf-8") as f:
             config = yaml.safe_load(f)
 
         triggers = config.get("triggers", {})
@@ -72,7 +72,7 @@ class TestRunbookConfig:
     def test_actions_section_structure(self):
         """Actions section should have expected keys."""
         config_path = Path("swarm/config/runbook_automation.yaml")
-        with open(config_path) as f:
+        with open(config_path, encoding="utf-8") as f:
             config = yaml.safe_load(f)
 
         actions = config.get("actions", {})
@@ -83,7 +83,7 @@ class TestRunbookConfig:
     def test_notifications_section_structure(self):
         """Notifications section should have expected keys."""
         config_path = Path("swarm/config/runbook_automation.yaml")
-        with open(config_path) as f:
+        with open(config_path, encoding="utf-8") as f:
             config = yaml.safe_load(f)
 
         notifications = config.get("notifications", {})
@@ -240,21 +240,21 @@ class TestWorkflowYaml:
 
     def test_workflow_is_valid_yaml(self, workflow_path):
         """Workflow file should be valid YAML."""
-        with open(workflow_path) as f:
+        with open(workflow_path, encoding="utf-8") as f:
             workflow = yaml.safe_load(f)
         assert workflow is not None, "Workflow file is empty"
         assert isinstance(workflow, dict), "Workflow should be a dictionary"
 
     def test_workflow_has_name(self, workflow_path):
         """Workflow should have a name."""
-        with open(workflow_path) as f:
+        with open(workflow_path, encoding="utf-8") as f:
             workflow = yaml.safe_load(f)
         assert "name" in workflow, "Workflow must have a name"
         assert workflow["name"] == "Selftest Auto-Diagnostics"
 
     def test_workflow_has_triggers(self, workflow_path):
         """Workflow should have trigger configuration."""
-        with open(workflow_path) as f:
+        with open(workflow_path, encoding="utf-8") as f:
             workflow = yaml.safe_load(f)
 
         triggers = _get_workflow_triggers(workflow)
@@ -271,7 +271,7 @@ class TestWorkflowYaml:
 
     def test_workflow_run_trigger_config(self, workflow_path):
         """workflow_run trigger should be configured correctly."""
-        with open(workflow_path) as f:
+        with open(workflow_path, encoding="utf-8") as f:
             workflow = yaml.safe_load(f)
 
         triggers = _get_workflow_triggers(workflow)
@@ -287,7 +287,7 @@ class TestWorkflowYaml:
 
     def test_workflow_has_jobs(self, workflow_path):
         """Workflow should have jobs defined."""
-        with open(workflow_path) as f:
+        with open(workflow_path, encoding="utf-8") as f:
             workflow = yaml.safe_load(f)
 
         assert "jobs" in workflow, "Workflow must have jobs"
@@ -295,7 +295,7 @@ class TestWorkflowYaml:
 
     def test_job_has_condition(self, workflow_path):
         """Job should only run on failure or manual trigger."""
-        with open(workflow_path) as f:
+        with open(workflow_path, encoding="utf-8") as f:
             workflow = yaml.safe_load(f)
 
         job = workflow["jobs"]["auto-diagnose"]
@@ -307,7 +307,7 @@ class TestWorkflowYaml:
 
     def test_job_has_timeout(self, workflow_path):
         """Job should have a timeout."""
-        with open(workflow_path) as f:
+        with open(workflow_path, encoding="utf-8") as f:
             workflow = yaml.safe_load(f)
 
         job = workflow["jobs"]["auto-diagnose"]
@@ -316,21 +316,21 @@ class TestWorkflowYaml:
 
     def test_job_runs_incident_pack(self, workflow_path):
         """Job should run selftest-incident-pack."""
-        with open(workflow_path) as f:
+        with open(workflow_path, encoding="utf-8") as f:
             content = f.read()
 
         assert "selftest-incident-pack" in content, "Should run incident pack"
 
     def test_job_runs_remediation(self, workflow_path):
         """Job should run suggest-remediation."""
-        with open(workflow_path) as f:
+        with open(workflow_path, encoding="utf-8") as f:
             content = f.read()
 
         assert "selftest_suggest_remediation" in content, "Should run remediation suggestions"
 
     def test_job_uploads_artifacts(self, workflow_path):
         """Job should upload diagnostic artifacts."""
-        with open(workflow_path) as f:
+        with open(workflow_path, encoding="utf-8") as f:
             workflow = yaml.safe_load(f)
 
         job = workflow["jobs"]["auto-diagnose"]
@@ -342,7 +342,7 @@ class TestWorkflowYaml:
 
     def test_workflow_has_permissions(self, workflow_path):
         """Workflow should declare required permissions."""
-        with open(workflow_path) as f:
+        with open(workflow_path, encoding="utf-8") as f:
             workflow = yaml.safe_load(f)
 
         assert "permissions" in workflow, "Workflow should declare permissions"
@@ -367,7 +367,7 @@ class TestArtifactPaths:
     def test_config_artifacts_list(self):
         """Config should specify artifact files to include."""
         config_path = Path("swarm/config/runbook_automation.yaml")
-        with open(config_path) as f:
+        with open(config_path, encoding="utf-8") as f:
             config = yaml.safe_load(f)
 
         artifacts = config.get("artifacts", {})
@@ -385,14 +385,14 @@ class TestArtifactPaths:
         """Workflow artifact paths should match config specification."""
         # Load config
         config_path = Path("swarm/config/runbook_automation.yaml")
-        with open(config_path) as f:
+        with open(config_path, encoding="utf-8") as f:
             config = yaml.safe_load(f)
 
         config_artifacts = set(config.get("artifacts", {}).get("include", []))
 
         # Load workflow
         workflow_path = Path(".github/workflows/selftest-auto-diagnostics.yml")
-        with open(workflow_path) as f:
+        with open(workflow_path, encoding="utf-8") as f:
             content = f.read()
 
         # Check that key artifacts are mentioned in workflow
@@ -438,7 +438,7 @@ class TestRunbookIntegration:
     def test_makefile_has_remote_diagnose_target(self):
         """Makefile should have selftest-diagnose-remote target."""
         makefile_path = Path("Makefile")
-        with open(makefile_path) as f:
+        with open(makefile_path, encoding="utf-8") as f:
             content = f.read()
 
         assert "selftest-diagnose-remote:" in content, "Missing selftest-diagnose-remote target"
@@ -446,7 +446,7 @@ class TestRunbookIntegration:
     def test_makefile_has_config_check_target(self):
         """Makefile should have runbook-config-check target."""
         makefile_path = Path("Makefile")
-        with open(makefile_path) as f:
+        with open(makefile_path, encoding="utf-8") as f:
             content = f.read()
 
         assert "runbook-config-check:" in content, "Missing runbook-config-check target"

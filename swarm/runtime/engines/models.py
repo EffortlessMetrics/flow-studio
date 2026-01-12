@@ -21,7 +21,7 @@ from swarm.config.flow_registry import TeachingNotes
 from swarm.runtime.types import HandoffEnvelope, RunEvent, RunSpec
 
 if TYPE_CHECKING:
-    pass  # Future type imports if needed
+    from swarm.runtime.workspace import Workspace
 
 
 @dataclass
@@ -61,7 +61,7 @@ class StepContext:
     previous steps for context building.
 
     Attributes:
-        repo_root: Repository root path.
+        repo_root: Repository root path (may be workspace.root() in shadow mode).
         run_id: The run identifier.
         flow_key: The flow being executed (signal, plan, build, etc.).
         step_id: The step identifier within the flow.
@@ -75,6 +75,7 @@ class StepContext:
         extra: Additional context-specific data.
         teaching_notes: Optional teaching notes for the step.
         routing: Optional routing context for microloop state.
+        workspace: Optional workspace abstraction for isolation and boundary checks.
     """
 
     repo_root: Path
@@ -91,11 +92,23 @@ class StepContext:
     extra: Dict[str, Any] = field(default_factory=dict)
     teaching_notes: Optional[TeachingNotes] = None
     routing: Optional[RoutingContext] = None
+    workspace: Optional["Workspace"] = None
 
     @property
     def run_base(self) -> Path:
-        """Get the RUN_BASE path for this step's artifacts."""
+        """Get the RUN_BASE path for this step's artifacts.
+
+        Uses workspace.run_base if available, otherwise falls back to
+        repo_root-based calculation.
+        """
+        if self.workspace is not None:
+            return self.workspace.run_base
         return Path(self.repo_root) / "swarm" / "runs" / self.run_id / self.flow_key
+
+    @property
+    def is_shadow_mode(self) -> bool:
+        """Check if executing in shadow workspace mode."""
+        return self.workspace is not None and self.workspace.is_shadow()
 
 
 @dataclass

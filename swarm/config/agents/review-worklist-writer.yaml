@@ -1,0 +1,9 @@
+# Auto-bootstrapped from swarm/AGENTS.md
+key: review-worklist-writer
+flows:
+  - review
+category: shaping
+color: yellow
+source: project/user
+short_role: "Cluster PR feedback into actionable Work Items with stable RW-NNN IDs."
+model: inherit

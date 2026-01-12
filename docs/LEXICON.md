@@ -28,8 +28,12 @@
 | **Context Pack** | Curated context prepared for a station. Selected by the Curator, consumed by the Worker. Respects context budgets. | Handoff from previous step + relevant artifacts |
 | **Forensics** | Semantic interpretation of diffs, logs, and test results. Physical evidence the Navigator uses for routing decisions (not just counters). | DiffScanner output, TestParser results, git status |
 | **Curator** | Cheap model that preps context for an expensive model. Selects what goes into the Context Pack. | Selects 20K tokens from 200K available |
-| **Handoff** | Structured artifact written by a step's Finalizer. Contains: summary, artifacts, concerns, next_step_hint. Crosses the amnesia boundary. | `handoff.json` written at step completion |
+| **Handoff** | Structured artifact written by a step's Finalizer. Contains: summary, artifacts, concerns, next_step_hint. Crosses the session boundary. | `handoff.json` written at step completion |
 | **Receipt** | Audit artifact documenting what an agent did, decisions made, and outcomes. Enables traceability. | `build_receipt.json`, `gate_receipt.json` |
+| **Scoped Focus** | Each step starts fresh with a curated context pack. Sessions reset between steps to clear irrelevant prior context, keeping reasoning sharp. Not a limitation—a feature. | Session boundary prevents context drag |
+| **Session Boundary** | The point where one step ends and another begins. Context is explicitly handed off via artifacts, not carried implicitly. Ensures each step reasons with relevant context only. | Handoff crosses the session boundary |
+| **Context Reset** | Starting a step with a fresh session to drop irrelevant prior context. The "clearing the workbench" operation that happens at every session boundary. | First part of session hygiene |
+| **Rehydration** | Rebuilding context from durable artifacts (handoffs, receipts, diffs) and targeted file pointers after a context reset. Only what's still relevant gets loaded. | Second part of session hygiene |
 
 ---
 
@@ -94,3 +98,39 @@ Subagent (Specialist)
 | What context a step gets | **Context Pack** |
 | Evidence for routing | **Forensics** |
 | Who preps context cheaply | **Curator** |
+
+---
+
+## Flow Numbering Policy
+
+Flow numbering follows these conventions:
+
+1. **Config files are numberless**: Flow titles in `swarm/config/flows/*.yaml` do not include numbers
+2. **Ordering is registry-derived**: Use `get_flow_order()` from `flow_registry.py` as the source of truth
+3. **UI may display indices**: The Flow Studio UI can show indices (1-7) for convenience
+4. **Documentation uses names**: Prefer "Build flow" over "Flow 3" in prose
+
+The canonical flow order is:
+
+```
+signal → plan → build → review → gate → deploy → wisdom
+```
+
+Utility flows (e.g., `reset`, `stepwise-demo`) are not part of the main SDLC sequence and may use `is_utility_flow: true` in their metadata.
+
+---
+
+## Routing Source Values
+
+The `routing_source` field in routing events documents how decisions were made:
+
+| Value | Description |
+|-------|-------------|
+| `fast_path` | Obvious deterministic case |
+| `deterministic` | CEL evaluation or graph rules |
+| `navigator` | Navigator chose from candidates |
+| `navigator:detour` | Navigator chose a detour |
+| `envelope_fallback` | Legacy signal from step output |
+| `escalate` | Last resort fallback |
+
+See [ROUTING_API.md](./ROUTING_API.md) for complete routing documentation.

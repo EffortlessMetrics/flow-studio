@@ -1,0 +1,9 @@
+# Flow 8: Reset/Rebase agent
+key: reset-stash-wip
+flows:
+  - reset
+category: implementation
+color: green
+source: project/user
+short_role: "Stash work-in-progress changes safely before reset operations."
+model: inherit

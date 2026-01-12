@@ -174,7 +174,7 @@ Advanced).
 
 - Interactive graph showing flows → steps → agents
 - Run history and artifact tracking
-- Quick spot-check of which agents are used where
+- Quick verification of which agents are used where
 - Operator vs. Author modes (different audiences)
 
 ### Setup (beyond Minimal)

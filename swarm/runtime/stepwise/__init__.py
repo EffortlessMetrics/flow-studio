@@ -50,7 +50,7 @@ from .models import (
     FlowExecutionResult,
     FlowStepwiseSummary,
     ResolvedNode,
-    RoutingOutcome,
+    # Note: RoutingOutcome is now imported from .routing (driver.py version)
 )
 
 # =============================================================================
@@ -67,11 +67,22 @@ from .graph_bridge import build_flow_graph_from_definition
 from .node_resolver import find_step_index, get_next_node_id, resolve_node
 from .receipt_compat import read_receipt_field, update_receipt_routing
 
-# Legacy routing re-exports - prefer importing from swarm.runtime.stepwise.routing
+# Routing re-exports
+# Note: There are TWO route_step functions with different signatures:
+# 1. route_step_legacy (from _routing_legacy.py) - Legacy signature for receipt-based routing
+#    Signature: (flow_def, current_step, result, loop_state, run_id, flow_key, ...) -> (next_step_id, reason)
+# 2. route_step (from routing/driver.py) - New unified driver signature
+#    Signature: (*, step, step_result, run_state, loop_state, iteration, routing_mode, ...) -> RoutingOutcome
+#
+# For backwards compatibility, this package exports route_step_legacy as route_step.
+# New code should import from swarm.runtime.stepwise.routing for the driver version.
 from .routing import (
-    # Core routing
+    # Re-export legacy route_step for backwards compatibility
+    route_step_legacy as route_step,  # Legacy signature - for existing code
+    # Driver's RoutingOutcome type
+    RoutingOutcome,  # From driver.py - use with driver's route_step
+    # Legacy routing signal creation
     create_routing_signal,
-    route_step,
     # Elephant Protocol
     ProgressDelta,
     ProgressEvidence,

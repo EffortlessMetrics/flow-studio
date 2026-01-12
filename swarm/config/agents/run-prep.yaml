@@ -1,0 +1,9 @@
+# Auto-bootstrapped from swarm/AGENTS.md
+key: run-prep
+flows:
+  - review
+category: implementation
+color: green
+source: project/user
+short_role: "Establish run directory and flow infrastructure. Creates RUN_BASE/<flow>/ structure."
+model: inherit

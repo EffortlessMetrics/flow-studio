@@ -22,7 +22,7 @@ Create `swarm/config/flows/<name>.yaml`:
 
 ```yaml
 key: review
-title: "Flow 7 - Code Review"
+title: "Custom Flow: Code Review (Example)"
 description: "Automated code review with multiple perspectives."
 
 steps:
@@ -50,10 +50,10 @@ Create `.claude/commands/flow-<n>-<name>.md`:
 
 ```yaml
 ---
-description: Run Flow 7 (Code Review): automated multi-perspective review.
+description: Run Custom Flow (Code Review): automated multi-perspective review.
 ---
 
-# Flow 7: Code Review
+# Custom Flow: Code Review (Example)
 ...
 ```
 

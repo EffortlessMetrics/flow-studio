@@ -1,0 +1,9 @@
+# Auto-bootstrapped from swarm/AGENTS.md
+key: pr-status-manager
+flows:
+  - review
+category: implementation
+color: green
+source: project/user
+short_role: "Flip Draft PR to Ready when review complete. Keeps Draft if incomplete."
+model: inherit

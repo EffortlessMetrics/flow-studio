@@ -94,7 +94,24 @@ Events are written to `RUN_BASE/events.jsonl` and provide observability into run
 
 | Kind | When Emitted | Payload |
 |------|--------------|---------|
-| `route_decision` | After step completion | `{from_step, to_step, reason, loop_state}` |
+| `route_decision` | **Primary audit event.** After routing decision. | `{from_step, to_step, reason, loop_state, routing_source}` |
+
+**Note:** `route_decision` is the canonical event kind (see `db.py` `CANONICAL_EVENT_KINDS`). It includes the routing decision payload with audit trail.
+
+### `routing_source` Field
+
+The `routing_source` field documents how the routing decision was made:
+
+| Value | Description |
+|-------|-------------|
+| `fast_path` | Obvious deterministic case (terminal step, single edge, explicit next_step_id) |
+| `deterministic` | CEL evaluation or deterministic graph rules |
+| `navigator` | Navigator chose from candidates |
+| `navigator:detour` | Navigator chose a detour/sidequest |
+| `envelope_fallback` | Legacy RoutingSignal from step output |
+| `escalate` | Last resort fallback |
+
+This field enables audit trail analysis to understand routing behavior patterns.
 
 ---
 

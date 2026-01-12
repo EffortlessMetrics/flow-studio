@@ -1,4 +1,4 @@
-# Flow 2 - Spec → Design
+# Plan — Spec → Design
 
 **Goal:** Transform requirements into architecture decisions, contracts, and
 implementation plans—build the gravity well that constrains Build and Gate.

@@ -214,7 +214,7 @@ def log_file_has_entries(bdd_context: Dict[str, Any]):
 
     # Store initial line count for later comparison
     bdd_context["log_file"] = log_file
-    bdd_context["initial_log_lines"] = len(log_file.read_text().strip().split("\n"))
+    bdd_context["initial_log_lines"] = len(log_file.read_text(encoding="utf-8").strip().split("\n"))
 
 
 # ============================================================================
@@ -337,7 +337,7 @@ def parse_as_json_lines(bdd_context: Dict[str, Any]):
     Stores parsed entries in context for validation.
     """
     log_file = _get_log_file(bdd_context)
-    lines = log_file.read_text().strip().split("\n")
+    lines = log_file.read_text(encoding="utf-8").strip().split("\n")
     parsed_entries: List[Dict[str, Any]] = []
     for line in lines:
         if line.strip():
@@ -354,7 +354,7 @@ def parse_as_json_lines(bdd_context: Dict[str, Any]):
 def view_as_plain_text(bdd_context: Dict[str, Any]):
     """View log file as plain text."""
     log_file = _get_log_file(bdd_context)
-    bdd_context["log_text"] = log_file.read_text()
+    bdd_context["log_text"] = log_file.read_text(encoding="utf-8")
 
 
 # ============================================================================
@@ -863,7 +863,7 @@ def assert_log_entries_table(bdd_context: Dict[str, Any], datatable: list[list[s
     if not DEGRADATIONS_LOG_PATH.exists():
         pytest.skip("Log file does not exist yet")
 
-    content = DEGRADATIONS_LOG_PATH.read_text()
+    content = DEGRADATIONS_LOG_PATH.read_text(encoding="utf-8")
     # Simple check: file should not be empty
     assert len(content.strip()) > 0, "Log file is empty"
 
@@ -1030,7 +1030,7 @@ def assert_log_entries_have_details(bdd_context: Dict[str, Any]):
     if not log_file.exists():
         pytest.skip("Log file does not exist yet")
 
-    content = log_file.read_text()
+    content = log_file.read_text(encoding="utf-8")
     # Should have some structure
     assert len(content.strip()) > 0
 
@@ -1042,7 +1042,7 @@ def assert_log_entries_distinct(bdd_context: Dict[str, Any]):
     if not log_file.exists():
         pytest.skip("Log file does not exist yet")
 
-    lines = log_file.read_text().strip().split("\n")
+    lines = log_file.read_text(encoding="utf-8").strip().split("\n")
     assert len(lines) > 0, "Log should have entries"
 
 
@@ -1054,7 +1054,7 @@ def assert_log_chronological(bdd_context: Dict[str, Any]):
         pytest.skip("Log file does not exist yet")
 
     # Simple heuristic: file should have content (detailed ordering checked elsewhere)
-    content = log_file.read_text()
+    content = log_file.read_text(encoding="utf-8")
     assert len(content.strip()) > 0
 
 
@@ -1065,7 +1065,7 @@ def assert_log_appended(bdd_context: Dict[str, Any]):
     if not log_file.exists():
         pytest.skip("Log file does not exist yet")
 
-    content = log_file.read_text()
+    content = log_file.read_text(encoding="utf-8")
     assert len(content.strip()) > 0
 
 
@@ -1076,7 +1076,7 @@ def assert_log_previous_entries(bdd_context: Dict[str, Any]):
     if not log_file.exists():
         pytest.skip("Log file does not exist yet")
 
-    content = log_file.read_text()
+    content = log_file.read_text(encoding="utf-8")
     lines = content.strip().split("\n")
     assert len(lines) >= 1, "Log should preserve entries"
 
@@ -1146,7 +1146,7 @@ def assert_log_fields(bdd_context: Dict[str, Any]):
 def assert_log_multiple_entries(bdd_context: Dict[str, Any]):
     """Assert log has multiple entries."""
     log_file = _get_log_file(bdd_context)
-    lines = log_file.read_text().strip().split("\n")
+    lines = log_file.read_text(encoding="utf-8").strip().split("\n")
     non_empty_lines = [line for line in lines if line.strip()]
     # Should have at least 1 entry (could have more depending on what failed)
     assert len(non_empty_lines) >= 1, f"Expected multiple entries, got {len(non_empty_lines)}"
@@ -1159,7 +1159,7 @@ def assert_log_distinct_entries(bdd_context: Dict[str, Any]):
     if not entries:
         # If no parsed entries, check raw log
         log_file = _get_log_file(bdd_context)
-        lines = log_file.read_text().strip().split("\n")
+        lines = log_file.read_text(encoding="utf-8").strip().split("\n")
         assert len([line for line in lines if line.strip()]) >= 1, "Expected log entries"
     else:
         # Check that each entry has timestamp and step_id
@@ -1174,7 +1174,7 @@ def assert_log_chronological_order(bdd_context: Dict[str, Any]):
     """Assert log entries are in chronological order."""
     log_file = _get_log_file(bdd_context)
     # Simple heuristic: file should have content (detailed ordering checked elsewhere)
-    content = log_file.read_text()
+    content = log_file.read_text(encoding="utf-8")
     assert len(content.strip()) > 0
 
 
@@ -1184,7 +1184,7 @@ def assert_log_clear_structure(bdd_context: Dict[str, Any]):
     log_text = bdd_context.get("log_text", "")
     if not log_text:
         log_file = _get_log_file(bdd_context)
-        log_text = log_file.read_text()
+        log_text = log_file.read_text(encoding="utf-8")
 
     # Should have some structure (timestamps, step ids, messages)
     assert "[" in log_text or "timestamp" in log_text.lower() or "step" in log_text.lower() or len(log_text) > 50

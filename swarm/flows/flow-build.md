@@ -1,4 +1,4 @@
-# Flow 3 - Design -> Code
+# Build — Design → Code
 
 **Goal:** Implement via adversarial microloops--build code+tests, self-verify, produce receipts that minimize human attention.
 

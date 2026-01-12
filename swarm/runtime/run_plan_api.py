@@ -45,6 +45,7 @@ from typing import Any, Dict, List, Optional
 
 import yaml
 
+from swarm.config.flow_registry import get_sdlc_flow_keys
 from .types import (
     HumanPolicy,
     MacroAction,
@@ -178,7 +179,7 @@ def create_default_autopilot_plan() -> StoredPlan:
             is_default=True,
         ),
         spec=RunPlanSpec(
-            flow_sequence=["signal", "plan", "build", "gate", "deploy", "wisdom"],
+            flow_sequence=get_sdlc_flow_keys(),  # From registry, includes review
             macro_policy=MacroPolicy.default(),
             human_policy=HumanPolicy.autopilot(),
             constraints=[
@@ -203,7 +204,7 @@ def create_default_supervised_plan() -> StoredPlan:
             is_default=True,
         ),
         spec=RunPlanSpec(
-            flow_sequence=["signal", "plan", "build", "gate", "deploy", "wisdom"],
+            flow_sequence=get_sdlc_flow_keys(),  # From registry, includes review
             macro_policy=MacroPolicy.default(),
             human_policy=HumanPolicy.supervised(),
             constraints=[
@@ -253,7 +254,7 @@ def create_signal_to_gate_plan() -> StoredPlan:
             is_default=True,
         ),
         spec=RunPlanSpec(
-            flow_sequence=["signal", "plan", "build", "gate"],
+            flow_sequence=["signal", "plan", "build", "review", "gate"],
             macro_policy=MacroPolicy.default(),
             human_policy=HumanPolicy.autopilot(),
             constraints=[
@@ -399,7 +400,7 @@ class RunPlanAPI:
         hp = HumanPolicy.autopilot() if human_policy == "autopilot" else HumanPolicy.supervised()
 
         spec = RunPlanSpec(
-            flow_sequence=flow_sequence or ["signal", "plan", "build", "gate", "deploy", "wisdom"],
+            flow_sequence=flow_sequence or get_sdlc_flow_keys(),  # From registry
             macro_policy=MacroPolicy.default(),
             human_policy=hp,
             constraints=constraints or [],
@@ -563,8 +564,8 @@ class RunPlanAPI:
         """
         errors = []
 
-        # Check flow sequence
-        valid_flows = {"signal", "plan", "build", "gate", "deploy", "wisdom"}
+        # Check flow sequence - only SDLC flows are valid in run plans
+        valid_flows = set(get_sdlc_flow_keys())
         for flow in plan.spec.flow_sequence:
             if flow not in valid_flows:
                 errors.append(f"Unknown flow in sequence: {flow}")

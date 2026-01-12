@@ -29,6 +29,32 @@ You're ready to start if you can say "yes" to all of:
 
 ---
 
+## The Operator Mindset
+
+Before adopting, internalize these principles from [AGOPS_MANIFESTO.md](./AGOPS_MANIFESTO.md):
+
+1. **You are the foreman, not the worker** — Define specs, audit outputs, don't pair-program
+2. **Trust forensics, not narrative** — If the diff is empty, work didn't happen (the AI lies)
+3. **Scoped focus beats long threads** — Each step starts fresh, clearing irrelevant prior context
+4. **Compute-attention arbitrage** — Burn compute to save your attention
+
+> **Review the output, not the process.**
+> The system does prep work before it reaches you. It will make mistakes. It will also catch mistakes.
+> Treat it like a junior's drafts: you care about the final diff, tests, and receipts—not the messy iteration.
+
+**The paradigm shift:**
+
+| Chatbot Habit | Factory Discipline |
+|---------------|-------------------|
+| Read the chat log | Check the git diff |
+| Intervene when stuck | Come back when it's ready |
+| Long conversations | Scoped steps |
+| Trust the summary | Trust the receipt |
+
+If you find yourself staring at the terminal, you're using it wrong. Launch the run and walk away.
+
+---
+
 ## Prerequisites
 
 - Python 3.10+ with uv

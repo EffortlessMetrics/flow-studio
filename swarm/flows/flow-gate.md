@@ -1,4 +1,4 @@
-# Flow 4 - Code → Artifact (Gate)
+# Gate — Code → Artifact
 
 **Goal:** Audit receipts, verify contracts, enforce policies—second-layer gravity that protects maintainer attention.
 

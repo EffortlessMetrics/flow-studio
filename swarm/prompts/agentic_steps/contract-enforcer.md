@@ -156,9 +156,9 @@ Routing rules use the **Navigator routing vocabulary**:
 
 - **CONTINUE**: Proceed on the golden path (no intervention needed)
 - **DETOUR**: Route to an existing flow/agent to address the issue, then return
-- **INJECT_FLOW**: (not used here) Insert an entire flow into the execution graph
-- **INJECT_NODES**: (not used here) Insert specific nodes into the current flow
-- **EXTEND_GRAPH**: (not used here) Add nodes to the end of the execution path
+
+> **Constraint:** This station only emits CONTINUE or DETOUR. Graph mutation decisions
+> (INJECT_FLOW, INJECT_NODES, EXTEND_GRAPH) are reserved for Navigator orchestration.
 
 The merge decision is owned by `merge-decider`.
 

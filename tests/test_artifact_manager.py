@@ -351,7 +351,7 @@ class TestWriteArtifact:
             result = manager.write_artifact("signal", "requirements.md", content)
 
             assert result.exists()
-            assert result.read_text() == content
+            assert result.read_text(encoding="utf-8") == content
 
     def test_write_dict_artifact_as_json(self, tmp_path):
         """write_artifact writes dict content as JSON."""
@@ -403,7 +403,7 @@ class TestWriteArtifact:
             manager.write_artifact("signal", "test.md", "updated")
 
             path = manager.get_artifact_path("signal", "test.md")
-            assert path.read_text() == "updated"
+            assert path.read_text(encoding="utf-8") == "updated"
 
     def test_write_dict_with_datetime(self, tmp_path):
         """write_artifact handles dict with datetime values."""

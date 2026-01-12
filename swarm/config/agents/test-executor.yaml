@@ -1,0 +1,9 @@
+# Auto-bootstrapped from swarm/AGENTS.md
+key: test-executor
+flows:
+  - review
+category: verification
+color: blue
+source: project/user
+short_role: "Execute test suites to verify fixes. Uses test-runner skill."
+model: inherit

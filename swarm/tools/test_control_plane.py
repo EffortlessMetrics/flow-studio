@@ -20,9 +20,9 @@ def test_valid_models():
     for model in VALID_MODELS:
         try:
             validate_model_value(model)
-            print(f"  ✓ {model} accepted")
+            print(f"  [OK] {model} accepted")
         except ValueError as e:
-            print(f"  ✗ {model} rejected: {e}")
+            print(f"  [FAIL] {model} rejected: {e}")
             return False
 
     # Test invalid
@@ -30,10 +30,10 @@ def test_valid_models():
     for model in invalid:
         try:
             validate_model_value(model)
-            print(f"  ✗ {model} should be rejected but wasn't")
+            print(f"  [FAIL] {model} should be rejected but wasn't")
             return False
         except ValueError:
-            print(f"  ✓ {model} correctly rejected")
+            print(f"  [OK] {model} correctly rejected")
 
     return True
 
@@ -46,25 +46,25 @@ def test_decision_priority():
     # Case 1: Override wins
     model, decision = cp.resolve_model("test-agent-1", "sonnet", "haiku")
     if model != "haiku" or decision.source != "override":
-        print(f"  ✗ Override should win, got {model} (source={decision.source})")
+        print(f"  [FAIL] Override should win, got {model} (source={decision.source})")
         return False
-    print("  ✓ Override takes priority")
+    print("  [OK] Override takes priority")
 
     # Case 2: Config used if no override
     cp = ControlPlane()
     model, decision = cp.resolve_model("test-agent-2", "sonnet", None)
     if model != "sonnet" or decision.source != "config":
-        print(f"  ✗ Config should be used, got {model} (source={decision.source})")
+        print(f"  [FAIL] Config should be used, got {model} (source={decision.source})")
         return False
-    print("  ✓ Config used when no override")
+    print("  [OK] Config used when no override")
 
     # Case 3: Default to inherit if nothing specified
     cp = ControlPlane()
     model, decision = cp.resolve_model("test-agent-3", None, None)
     if model != "inherit" or decision.source != "default":
-        print(f"  ✗ Should default to inherit, got {model} (source={decision.source})")
+        print(f"  [FAIL] Should default to inherit, got {model} (source={decision.source})")
         return False
-    print("  ✓ Defaults to inherit when nothing specified")
+    print("  [OK] Defaults to inherit when nothing specified")
 
     return True
 
@@ -85,31 +85,31 @@ def test_audit_logging():
 
     # Verify format
     if "# Control Plane Audit Log" not in log:
-        print("  ✗ Audit log missing header")
+        print("  [FAIL] Audit log missing header")
         return False
-    print("  ✓ Header present")
+    print("  [OK] Header present")
 
     # Verify entries
     for agent in ["agent-a", "agent-b", "agent-c", "agent-d"]:
         if agent not in log:
-            print(f"  ✗ Audit log missing entry for {agent}")
+            print(f"  [FAIL] Audit log missing entry for {agent}")
             return False
-    print("  ✓ All agents logged")
+    print("  [OK] All agents logged")
 
     # Verify timestamps
     if "Z" not in log:  # ISO 8601 with Z suffix
-        print("  ✗ Audit log missing timestamps")
+        print("  [FAIL] Audit log missing timestamps")
         return False
-    print("  ✓ Timestamps present")
+    print("  [OK] Timestamps present")
 
     # Verify sources (all three types should appear in this test)
     if "config ->" not in log or "override ->" not in log or "default ->" not in log:
-        print("  ✗ Audit log missing source info")
+        print("  [FAIL] Audit log missing source info")
         print(f"     config -> {('config ->' in log)}")
         print(f"     override -> {('override ->' in log)}")
         print(f"     default -> {('default ->' in log)}")
         return False
-    print("  ✓ Sources documented")
+    print("  [OK] Sources documented")
 
     return True
 
@@ -127,19 +127,19 @@ def test_change_tracking():
 
     changed = cp.changed_agents()
     if "stable-agent" in changed:
-        print("  ✗ stable-agent should not be in changes")
+        print("  [FAIL] stable-agent should not be in changes")
         return False
-    print("  ✓ Stable agents not marked as changed")
+    print("  [OK] Stable agents not marked as changed")
 
     if "updated-agent" not in changed:
-        print("  ✗ updated-agent should be in changes")
+        print("  [FAIL] updated-agent should be in changes")
         return False
 
     old, new = changed["updated-agent"]
     if old != "sonnet" or new != "haiku":
-        print(f"  ✗ Change should be sonnet→haiku, got {old}→{new}")
+        print(f"  [FAIL] Change should be sonnet->haiku, got {old}->{new}")
         return False
-    print("  ✓ Changes correctly tracked")
+    print("  [OK] Changes correctly tracked")
 
     return True
 
@@ -158,33 +158,33 @@ def test_summary_statistics():
 
     # Check totals
     if summary["total_decisions"] != 3:
-        print(f"  ✗ Expected 3 decisions, got {summary['total_decisions']}")
+        print(f"  [FAIL] Expected 3 decisions, got {summary['total_decisions']}")
         return False
-    print("  ✓ Total decisions correct")
+    print("  [OK] Total decisions correct")
 
     # Check by_source
     if summary["by_source"].get("config") != 2:
-        print(f"  ✗ Expected 2 config decisions, got {summary['by_source'].get('config')}")
+        print(f"  [FAIL] Expected 2 config decisions, got {summary['by_source'].get('config')}")
         return False
     if summary["by_source"].get("override") != 1:
-        print(f"  ✗ Expected 1 override decision, got {summary['by_source'].get('override')}")
+        print(f"  [FAIL] Expected 1 override decision, got {summary['by_source'].get('override')}")
         return False
-    print("  ✓ By-source counts correct")
+    print("  [OK] By-source counts correct")
 
     # Check by_model
     if summary["by_model"].get("inherit") != 1:
-        print(f"  ✗ Expected 1 inherit, got {summary['by_model'].get('inherit')}")
+        print(f"  [FAIL] Expected 1 inherit, got {summary['by_model'].get('inherit')}")
         return False
     if summary["by_model"].get("haiku") != 2:
-        print(f"  ✗ Expected 2 haiku, got {summary['by_model'].get('haiku')}")
+        print(f"  [FAIL] Expected 2 haiku, got {summary['by_model'].get('haiku')}")
         return False
-    print("  ✓ By-model counts correct")
+    print("  [OK] By-model counts correct")
 
     # Check change count
     if summary["changed_count"] != 1:
-        print(f"  ✗ Expected 1 change, got {summary['changed_count']}")
+        print(f"  [FAIL] Expected 1 change, got {summary['changed_count']}")
         return False
-    print("  ✓ Change count correct")
+    print("  [OK] Change count correct")
 
     return True
 
@@ -196,14 +196,14 @@ def test_invalid_model_error():
 
     try:
         cp.resolve_model("bad-agent", "invalid-model", None)
-        print("  ✗ Should have raised ValueError for invalid model")
+        print("  [FAIL] Should have raised ValueError for invalid model")
         return False
     except ValueError as e:
         if "Invalid model" in str(e) and "invalid-model" in str(e):
-            print(f"  ✓ Clear error: {e}")
+            print(f"  [OK] Clear error: {e}")
             return True
         else:
-            print(f"  ✗ Error message unclear: {e}")
+            print(f"  [FAIL] Error message unclear: {e}")
             return False
 
 
@@ -228,7 +228,7 @@ def main():
             result = test_fn()
             results.append((test_fn.__name__, result))
         except Exception as e:
-            print(f"\n✗ Test {test_fn.__name__} crashed: {e}")
+            print(f"\n[FAIL] Test {test_fn.__name__} crashed: {e}")
             import traceback
             traceback.print_exc()
             results.append((test_fn.__name__, False))
@@ -241,7 +241,7 @@ def main():
     total = len(results)
 
     for name, result in results:
-        status = "✓ PASS" if result else "✗ FAIL"
+        status = "[OK] PASS" if result else "[FAIL] FAIL"
         print(f"{status}: {name}")
 
     print(f"\nTotal: {passed}/{total} passed")

@@ -31,12 +31,12 @@ Golden runs live in `swarm/examples/<scenario>/` and are committed to version co
 
 | Run ID | Scenario | Flows Covered | Status | Learning Goal |
 |--------|----------|---------------|--------|---------------|
-| `health-check` | Complete baseline | 1-6 (all) | GREEN | Full flow execution, artifact shapes |
-| `health-check-missing-tests` | Degraded build | 1-4 | BOUNCE | Failure detection, receipt audit |
-| `health-check-no-gate-decision` | Incomplete gate | 1-4 (partial) | INCOMPLETE | Missing decision artifacts |
-| `health-check-risky-deploy` | Risk management | 1-6 (all) | CONDITIONAL | Risk acceptance, conditional approval |
+| `health-check` | Complete baseline | 1-7 (all) | GREEN | Full flow execution, artifact shapes |
+| `health-check-missing-tests` | Degraded build | 1-5 | BOUNCE | Failure detection, receipt audit |
+| `health-check-no-gate-decision` | Incomplete gate | 1-5 (partial) | INCOMPLETE | Missing decision artifacts |
+| `health-check-risky-deploy` | Risk management | 1-7 (all) | CONDITIONAL | Risk acceptance, conditional approval |
 | `swarm-selftest-baseline` | Infrastructure | N/A | GREEN | Selftest report structure |
-| `swarm-alignment` | Governance verification | 1-6 (all) | GREEN | Canonical naming, self-referential validation |
+| `swarm-alignment` | Governance verification | 1-7 (all) | GREEN | Canonical naming, self-referential validation |
 
 ### Status Legend
 
@@ -57,10 +57,10 @@ Golden runs live in `swarm/examples/<scenario>/` and are committed to version co
 **Start with**: `health-check`
 
 **Key takeaways**:
-- All 7 flows produce artifacts in their respective directories
+- All 7 flows produce artifacts in their respective directories (signal/, plan/, build/, review/, gate/, deploy/, wisdom/)
 - Each artifact has a defined shape and purpose
 - Receipts (especially `build_receipt.json`) tie everything together
-- Gate produces a clear merge recommendation
+- Gate produces a clear merge recommendation after Review gathers feedback
 
 ### Path 2: Understanding Failure Detection
 
@@ -137,17 +137,26 @@ health-check/
 │   ├── test_critique.md
 │   ├── impl_changes_summary.md
 │   └── ... (12 artifacts)
-├── gate/                   # Flow 4 artifacts
+├── review/                 # Flow 4 artifacts
+│   ├── pr_feedback_summary.md
+│   ├── review_worklist.md
+│   ├── review_actions.md
+│   └── ... (6 artifacts)
+├── gate/                   # Flow 5 artifacts
 │   ├── receipt_audit.md
 │   ├── contract_status.md
 │   ├── security_status.md
 │   ├── merge_recommendation.md
 │   └── ... (8 artifacts)
-├── operate/                # Flow 5/6 artifacts
+├── deploy/                 # Flow 6 artifacts
 │   ├── deployment_verification.md
 │   ├── regression_report.md
 │   ├── flow_timeline.md
-│   └── playbook_update.md
+│   └── verification_report.md
+├── wisdom/                 # Flow 7 artifacts
+│   ├── artifact_audit.md
+│   ├── learnings.md
+│   └── feedback_actions.md
 ├── reports/                # Generated diagnostics
 │   ├── flow-build-report.txt
 │   └── ... (per-flow reports)
@@ -159,13 +168,16 @@ health-check/
 - `signal/problem_statement.md`: Canonical problem framing
 - `plan/adr_current.md`: Architecture decision record
 - `build/build_receipt.json`: Machine-readable receipt with all verification data
+- `review/pr_feedback_summary.md`: Consolidated PR feedback from reviewers
 - `gate/merge_recommendation.md`: Final gate decision (MERGE)
-- `operate/regression_report.md`: Post-deploy verification
+- `deploy/verification_report.md`: Post-deploy verification
+- `wisdom/learnings.md`: Extracted patterns and lessons learned
 
 **Flow Studio Status**:
 - Signal: GREEN
 - Plan: GREEN
 - Build: GREEN
+- Review: GREEN
 - Gate: GREEN
 - Deploy: GREEN
 - Wisdom: GREEN
@@ -178,7 +190,7 @@ health-check/
 
 > Teaching scenario: Build flow completed with missing test artifacts, gate bounces back.
 
-**Scenario**: Build flow runs but `test-author` step fails to produce required test artifacts. Gate detects the gap and bounces.
+**Scenario**: Build flow runs but `test-author` step fails to produce required test artifacts. Review and Gate detect the gap and bounce back.
 
 **Directory Structure**:
 ```
@@ -195,12 +207,16 @@ health-check-missing-tests/
 │   ├── impl_changes_summary.md
 │   ├── code_critique.md
 │   └── build_receipt.json     # Status shows test step incomplete
-└── gate/                       # Flow 4 - BOUNCE
+├── review/                     # Flow 4 - DETECTED
+│   ├── pr_feedback_summary.md # Flags missing test coverage
+│   └── review_worklist.md
+└── gate/                       # Flow 5 - BOUNCE
     ├── receipt_audit.md       # Identifies missing test artifacts
     └── merge_recommendation.md # Status: BOUNCE
 ```
 
 **Key Artifacts**:
+- `review/pr_feedback_summary.md`: Initial detection of missing tests
 - `gate/receipt_audit.md`: Shows which artifacts are missing
 - `gate/merge_recommendation.md`: Status is `BOUNCE` with reason "missing test coverage"
 
@@ -208,11 +224,12 @@ health-check-missing-tests/
 - Signal: GREEN
 - Plan: GREEN
 - Build: YELLOW (missing `test_changes_summary.md`)
+- Review: YELLOW (detected issues)
 - Gate: RED (BOUNCE)
 - Deploy: GRAY (not started)
 - Wisdom: GRAY (not started)
 
-**Educational Value**: Demonstrates that **incomplete flows are detectable**. Gate enforces receipts and bounces work back to Build rather than trying to fix test gaps. The human reviews `merge_recommendation.md` to understand why.
+**Educational Value**: Demonstrates that **incomplete flows are detectable**. Review and Gate enforce receipts and bounce work back to Build rather than trying to fix test gaps. The human reviews `merge_recommendation.md` to understand why.
 
 **Contrast with Baseline**: Baseline has all test artifacts; this scenario is missing `test_changes_summary.md`.
 
@@ -222,7 +239,7 @@ health-check-missing-tests/
 
 > Teaching scenario: Gate flow incomplete - individual checks passed but decision artifact missing.
 
-**Scenario**: Gate flow performs individual verification steps but the `merge-decider` agent is never invoked, leaving no final decision artifact.
+**Scenario**: Build and Review flows complete successfully, but Gate flow performs individual verification steps without the `merge-decider` agent being invoked, leaving no final decision artifact.
 
 **Directory Structure**:
 ```
@@ -240,13 +257,17 @@ health-check-no-gate-decision/
 │   ├── impl_changes_summary.md
 │   ├── code_critique.md
 │   └── build_receipt.json
-└── gate/                       # Flow 4 - INCOMPLETE
+├── review/                     # Flow 4 - Complete
+│   ├── pr_feedback_summary.md
+│   └── review_worklist.md
+└── gate/                       # Flow 5 - INCOMPLETE
     ├── receipt_audit.md        # Present
     └── security_status.md      # Present
     # MISSING: merge_recommendation.md
 ```
 
 **Key Artifacts**:
+- `review/pr_feedback_summary.md`: Review flow completed
 - `gate/receipt_audit.md`: Individual check completed
 - `gate/security_status.md`: Individual check completed
 - **Missing**: `gate/merge_recommendation.md` (the decision artifact)
@@ -255,6 +276,7 @@ health-check-no-gate-decision/
 - Signal: GREEN
 - Plan: GREEN
 - Build: GREEN
+- Review: GREEN
 - Gate: YELLOW (incomplete - no decision)
 - Deploy: GRAY (cannot start without gate decision)
 - Wisdom: GRAY (not started)
@@ -271,7 +293,7 @@ health-check-no-gate-decision/
 
 > Teaching scenario: Complete flows with risk warnings, conditional approval, monitored deployment.
 
-**Scenario**: All flows complete successfully, but with documented risks. Gate approves with conditions (MERGE_WITH_CONDITIONS), and Deploy proceeds with enhanced monitoring.
+**Scenario**: All flows complete successfully, but with documented risks. Review consolidates feedback, Gate approves with conditions (MERGE_WITH_CONDITIONS), and Deploy proceeds with enhanced monitoring.
 
 **Directory Structure**:
 ```
@@ -291,16 +313,20 @@ health-check-risky-deploy/
 │   ├── impl_changes_summary.md
 │   ├── code_critique.md
 │   └── build_receipt.json
-├── gate/                       # Flow 4 - MERGE_WITH_CONDITIONS
+├── review/                     # Flow 4 - Complete with risk notes
+│   ├── pr_feedback_summary.md
+│   ├── review_worklist.md
+│   └── review_risk_notes.md   # Flags risks identified in PR review
+├── gate/                       # Flow 5 - MERGE_WITH_CONDITIONS
 │   ├── receipt_audit.md
 │   ├── security_status.md
 │   ├── gate_risk_report.md    # Documents accepted risk
 │   └── merge_recommendation.md # Status: MERGE_WITH_CONDITIONS
-├── deploy/                     # Flow 5 - Complete with monitoring
+├── deploy/                     # Flow 6 - Complete with monitoring
 │   ├── deployment_log.md
 │   ├── verification_report.md
 │   └── deployment_decision.md # proceed_with_risk: true
-└── wisdom/                     # Flow 6 - Complete with learnings
+└── wisdom/                     # Flow 7 - Complete with learnings
     ├── artifact_audit.md
     ├── regression_report.md
     ├── learnings.md
@@ -310,6 +336,7 @@ health-check-risky-deploy/
 **Key Artifacts**:
 - `signal/early_risk_assessment.md`: Identifies performance concern early
 - `plan/observability_spec.md`: Adds monitoring for risk mitigation
+- `review/pr_feedback_summary.md`: PR reviewers flag risks
 - `gate/gate_risk_report.md`: Documents the accepted risk
 - `gate/merge_recommendation.md`: Status is `MERGE_WITH_CONDITIONS`
 - `deploy/deployment_decision.md`: Shows `proceed_with_risk: true`
@@ -319,6 +346,7 @@ health-check-risky-deploy/
 - Signal: GREEN (with risk documentation)
 - Plan: GREEN (with mitigation plan)
 - Build: GREEN
+- Review: YELLOW (risks noted)
 - Gate: YELLOW (CONDITIONAL - approved with monitoring requirements)
 - Deploy: GREEN (deployed with monitoring)
 - Wisdom: GREEN (with learnings)
@@ -326,9 +354,10 @@ health-check-risky-deploy/
 **Educational Value**: Demonstrates the swarm's approach to risk:
 1. **Early identification**: Signal flow identifies performance concern
 2. **Mitigation planning**: Plan flow adds observability spec
-3. **Informed decision**: Gate evaluates risk vs mitigation, approves with conditions
-4. **Monitored deployment**: Deploy proceeds with enhanced instrumentation
-5. **Learning extraction**: Wisdom analyzes for regression detection
+3. **Review feedback**: Review flow captures risks from PR reviewers
+4. **Informed decision**: Gate evaluates risk vs mitigation, approves with conditions
+5. **Monitored deployment**: Deploy proceeds with enhanced instrumentation
+6. **Learning extraction**: Wisdom analyzes for regression detection
 
 The swarm aims for **managed risk with receipts**, not zero risk.
 
@@ -393,10 +422,11 @@ swarm-selftest-baseline/
 **Location**: `swarm/runs/swarm-alignment/`
 
 **What it demonstrates**:
-- Full Flow 1-6 coverage (Signal -> Wisdom)
+- Full Flow 1-7 coverage (Signal -> Wisdom)
+- Review flow integration between Build and Gate
 - Branch protection configuration
 - Self-referential governance validation
-- Canonical directory naming (`deploy/`, `wisdom/`)
+- Canonical directory naming (`review/`, `deploy/`, `wisdom/`)
 
 **Directory Structure**:
 ```
@@ -407,14 +437,20 @@ swarm-alignment/
 │   └── ...
 ├── build/                      # Flow 3 artifacts
 │   └── ...
-├── gate/                       # Flow 4 artifacts
+├── review/                     # Flow 4 artifacts
+│   ├── pr_feedback_summary.md
+│   ├── review_worklist.md
 │   └── ...
-├── deploy/                     # Flow 5 artifacts (canonical naming)
+├── gate/                       # Flow 5 artifacts
+│   ├── receipt_audit.md
+│   ├── merge_recommendation.md
+│   └── ...
+├── deploy/                     # Flow 6 artifacts (canonical naming)
 │   ├── branch_protection.md
 │   ├── deployment_decision.md
 │   ├── deployment_log.md
 │   └── verification_report.md
-├── wisdom/                     # Flow 6 artifacts
+├── wisdom/                     # Flow 7 artifacts
 │   ├── artifact_audit.md
 │   ├── feedback_actions.md
 │   ├── flow_history.json
@@ -425,6 +461,8 @@ swarm-alignment/
 ```
 
 **Key Artifacts**:
+- `review/pr_feedback_summary.md`: Consolidated PR feedback
+- `gate/merge_recommendation.md`: Gate decision
 - `deploy/branch_protection.md`: GitHub branch protection configuration
 - `deploy/verification_report.md`: Post-deployment verification
 - `wisdom/learnings.md`: Meta-learnings from governance implementation
@@ -434,12 +472,14 @@ swarm-alignment/
 - Signal: GREEN
 - Plan: GREEN
 - Build: GREEN
+- Review: GREEN
 - Gate: GREEN
 - Deploy: GREEN
 - Wisdom: GREEN
 
-**Educational Value**: This is the only example with **complete Flow 5-6 coverage using canonical naming**. Use this to understand:
-- How deploy artifacts differ from operate artifacts
+**Educational Value**: This is the only example with **complete Flow 1-7 coverage using canonical naming**. Use this to understand:
+- How Review flow fits between Build and Gate
+- How review artifacts differ from gate artifacts
 - What wisdom extraction looks like in practice
 - How the swarm closes feedback loops
 
@@ -468,6 +508,7 @@ Each flow's artifacts show what that flow's agents produce:
 | Signal | `problem_statement.md`, `requirements_functional.md` | signal-normalizer, problem-framer, requirements-author |
 | Plan | `adr_current.md`, `interface_spec.md`, `test_plan.md` | adr-author, interface-designer, test-strategist |
 | Build | `build_receipt.json`, `code_critique.md`, `test_critique.md` | code-implementer, code-critic, test-critic |
+| Review | `pr_feedback_summary.md`, `review_worklist.md` | review-collector, review-summarizer |
 | Gate | `receipt_audit.md`, `merge_recommendation.md` | receipt-checker, merge-decider |
 | Deploy | `deployment_log.md`, `verification_report.md` | deploy-monitor, smoke-verifier |
 | Wisdom | `learnings.md`, `feedback_actions.md` | learning-synthesizer, feedback-applier |
@@ -526,7 +567,17 @@ If your orchestrator can produce these artifacts in this structure, it is compat
 | `mutation_report.md` | No | Mutation testing results |
 | `subtask_context_manifest.json` | No | Context bundle |
 
-### Flow 4 - Gate
+### Flow 4 - Review
+
+| Artifact | Required | Description |
+|----------|----------|-------------|
+| `pr_feedback_summary.md` | Yes | Consolidated PR feedback |
+| `review_worklist.md` | Yes | Itemized feedback list |
+| `review_actions.md` | No | Actions taken from feedback |
+| `review_risk_notes.md` | No | Risk signals from PR review |
+| `final_status.md` | No | Review completion status |
+
+### Flow 5 - Gate
 
 | Artifact | Required | Description |
 |----------|----------|-------------|
@@ -538,7 +589,7 @@ If your orchestrator can produce these artifacts in this structure, it is compat
 | `gate_risk_report.md` | No | Aggregated risk signals |
 | `gate_fix_summary.md` | No | Trivial fixes applied |
 
-### Flow 5 - Deploy
+### Flow 6 - Deploy
 
 | Artifact | Required | Description |
 |----------|----------|-------------|
@@ -546,7 +597,7 @@ If your orchestrator can produce these artifacts in this structure, it is compat
 | `deployment_log.md` | Yes | Deployment record |
 | `verification_report.md` | Yes | Post-deploy verification |
 
-### Flow 6 - Wisdom
+### Flow 7 - Wisdom
 
 | Artifact | Required | Description |
 |----------|----------|-------------|
@@ -564,15 +615,16 @@ If your orchestrator can produce these artifacts in this structure, it is compat
 
 ```bash
 # 1. Clear the example
-rm -rf swarm/examples/health-check/{signal,plan,build,gate,operate,reports}
+rm -rf swarm/examples/health-check/{signal,plan,build,review,gate,deploy,wisdom,reports}
 
 # 2. Run all 7 flows with a new run ID
 /flow-1-signal health-check-v2 "Add a health-check endpoint"
 /flow-2-plan health-check-v2
 /flow-3-build health-check-v2
-/flow-4-gate health-check-v2
-/flow-5-deploy health-check-v2
-/flow-6-wisdom health-check-v2
+/flow-4-review health-check-v2
+/flow-5-gate health-check-v2
+/flow-6-deploy health-check-v2
+/flow-7-wisdom health-check-v2
 
 # 3. Copy artifacts from active run to example
 cp -r swarm/runs/health-check-v2/* swarm/examples/health-check/
@@ -655,7 +707,7 @@ This matrix shows which examples have wisdom summaries generated.
 
 | Example | Has Wisdom | Reason |
 |---------|------------|--------|
-| `health-check` | Yes | Complete 4-flow example |
+| `health-check` | Yes | Complete 7-flow example |
 | `health-check-missing-tests` | No | **Teaching**: demonstrates missing test artifact |
 | `health-check-no-gate-decision` | No | **Teaching**: demonstrates incomplete gate |
 | `health-check-risky-deploy` | Yes | Complete 7-flow with risk management |
@@ -676,6 +728,7 @@ This matrix shows which examples have wisdom summaries generated.
 
 | Date | Change |
 |------|--------|
+| 2025-12-30 | Updated all flows to include Review (Flow 4); renumbered Deploy (Flow 6) and Wisdom (Flow 7) |
 | 2025-12-10 | Added Wisdom Coverage Matrix section |
 | 2025-12-09 | Added Stepwise Execution Examples section |
 | 2025-12-01 | Added swarm-alignment run; clarified operate/ vs deploy/ naming |

@@ -2,19 +2,21 @@
 prompt_builder.py - Prompt construction for Claude step engine.
 
 Handles:
-- Agentic step prompt loading (from swarm/prompts/agentic_steps/)
+- SpecCompiler-first prompt assembly (default, USE_SPEC_COMPILER=true)
+- Agentic step prompt loading (fallback from swarm/prompts/agentic_steps/)
 - Agent persona loading (fallback from .claude/agents/)
 - ContextPack-first context injection
 - History priority-aware budgeting
 - Inline finalization prompt injection
 - Scent Trail injection (wisdom from previous runs)
-- SpecCompiler integration for spec-driven prompt assembly (optional, feature-flagged)
 
-The SpecCompiler integration (enabled via USE_SPEC_COMPILER flag) provides:
+The SpecCompiler integration (default enabled) provides:
 - Station-based identity and invariants
 - Fragment-resolved guidelines
 - Template-driven prompt composition
 - Better traceability via prompt_hash
+
+Set SWARM_USE_SPEC_COMPILER=false to disable and use legacy file-based loading.
 """
 
 from __future__ import annotations
@@ -53,18 +55,18 @@ _CONTEXTPACK_ONLY = os.environ.get("SWARM_CONTEXTPACK_ONLY", "false").lower() ==
 WISDOM_LATEST_PATH = ".runs/_wisdom/latest.md"
 
 # =============================================================================
-# SpecCompiler Integration (Feature-Flagged)
+# SpecCompiler Integration (Default Enabled)
 # =============================================================================
-# When enabled, prompts are assembled using the spec system (SpecCompiler)
-# instead of raw file loading. This provides:
+# Prompts are now assembled using the spec system (SpecCompiler) by default.
+# This provides:
 # - Station-based identity with invariants
 # - Fragment-resolved guidelines
 # - Template-driven prompt composition
 # - Better traceability via prompt_hash
 #
-# Set SWARM_USE_SPEC_COMPILER=true to enable.
+# Set SWARM_USE_SPEC_COMPILER=false to disable and use legacy file loading.
 
-USE_SPEC_COMPILER = os.environ.get("SWARM_USE_SPEC_COMPILER", "false").lower() == "true"
+USE_SPEC_COMPILER = os.environ.get("SWARM_USE_SPEC_COMPILER", "true").lower() == "true"
 
 
 # Inline finalization prompt (appended to work prompt for single-call pattern)

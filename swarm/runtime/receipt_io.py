@@ -94,6 +94,14 @@ class StepReceiptData:
     # Additional data
     extra: Dict[str, Any] = field(default_factory=dict)
 
+    # Audit trail fields (Wave 3: git_sha + workspace_root)
+    git_sha: Optional[str] = None  # Git HEAD commit at step execution
+    git_branch: Optional[str] = None  # Git branch at step execution
+    workspace_root: Optional[str] = None  # Absolute path to workspace root
+
+    # Tool calls (Wave 4: unified tool call capture)
+    tool_calls: Optional[list] = None  # List of NormalizedToolCall dicts
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to JSON-serializable dict."""
         result: Dict[str, Any] = {
@@ -130,6 +138,18 @@ class StepReceiptData:
             result["error"] = self.error
         if self.context_truncation:
             result["context_truncation"] = self.context_truncation
+
+        # Audit trail fields (Wave 3)
+        if self.git_sha:
+            result["git_sha"] = self.git_sha
+        if self.git_branch:
+            result["git_branch"] = self.git_branch
+        if self.workspace_root:
+            result["workspace_root"] = self.workspace_root
+
+        # Tool calls (Wave 4)
+        if self.tool_calls:
+            result["tool_calls"] = self.tool_calls
 
         # Merge extra data
         if self.extra:
@@ -239,6 +259,12 @@ def make_receipt_data(
     fallback_reason: Optional[str] = None,
     error: Optional[str] = None,
     context_truncation: Optional[Dict[str, Any]] = None,
+    # Audit trail fields (Wave 3)
+    git_sha: Optional[str] = None,
+    git_branch: Optional[str] = None,
+    workspace_root: Optional[str] = None,
+    # Tool calls (Wave 4)
+    tool_calls: Optional[list] = None,
     **extra,
 ) -> StepReceiptData:
     """Factory function to create StepReceiptData with defaults.
@@ -272,8 +298,57 @@ def make_receipt_data(
         fallback_reason=fallback_reason,
         error=error,
         context_truncation=context_truncation,
+        git_sha=git_sha,
+        git_branch=git_branch,
+        workspace_root=workspace_root,
+        tool_calls=tool_calls,
         extra=extra,
     )
+
+
+def capture_git_info(repo_root: Path) -> Dict[str, Optional[str]]:
+    """Capture git SHA and branch at step execution time.
+
+    This is a pure telemetry capture - it doesn't block on errors.
+    If git info can't be captured, returns None values.
+
+    Args:
+        repo_root: Repository root path.
+
+    Returns:
+        Dict with 'git_sha' and 'git_branch' keys (may be None).
+    """
+    import subprocess
+
+    result: Dict[str, Optional[str]] = {"git_sha": None, "git_branch": None}
+
+    try:
+        # Get current commit SHA
+        sha_proc = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if sha_proc.returncode == 0:
+            result["git_sha"] = sha_proc.stdout.strip()
+
+        # Get current branch
+        branch_proc = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if branch_proc.returncode == 0:
+            result["git_branch"] = branch_proc.stdout.strip()
+
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
+        logger.debug("Could not capture git info: %s", e)
+
+    return result
 
 
 __all__ = [
@@ -281,4 +356,5 @@ __all__ = [
     "write_step_receipt",
     "write_step_receipt_dict",
     "make_receipt_data",
+    "capture_git_info",
 ]

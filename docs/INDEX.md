@@ -60,12 +60,13 @@ Quick reference for day-to-day operations:
 - [FLOW_STUDIO_UX_HANDOVER.md](./FLOW_STUDIO_UX_HANDOVER.md) — Handover for new owners
 - **Governed Surfaces** — SDK contract and UIID selectors (see FLOW_STUDIO.md)
 
-### Architecture & Philosophy (35 min)
+### Architecture & Philosophy (40 min)
 
 1. [ARCHITECTURE.md](../ARCHITECTURE.md) - v3.0 system architecture (cognitive hierarchy, components)
 2. [AGOPS_MANIFESTO.md](./AGOPS_MANIFESTO.md) - AgOps operational philosophy (Factory Floor model)
-3. [ROUTING_PROTOCOL.md](./ROUTING_PROTOCOL.md) - V3 routing model (CONTINUE, DETOUR, INJECT)
-4. [ROADMAP_3_0.md](./ROADMAP_3_0.md) - v3.0 roadmap and next steps
+3. [MARKET_SNAPSHOT.md](./MARKET_SNAPSHOT.md) - Economics context (generation vs review speed)
+4. [ROUTING_PROTOCOL.md](./ROUTING_PROTOCOL.md) - V3 routing model (CONTINUE, DETOUR, INJECT)
+5. [ROADMAP_3_0.md](./ROADMAP_3_0.md) - v3.0 roadmap and next steps
 
 ### Contracts & Handoffs
 
@@ -79,7 +80,7 @@ Quick reference for day-to-day operations:
 3. [AGENT_SDK_INTEGRATION.md](./AGENT_SDK_INTEGRATION.md) - Agent SDK integration guide
 4. [TRANSCRIPT_SCHEMA.md](./TRANSCRIPT_SCHEMA.md) - Artifact format specification
 5. [LONG_RUNNING_HARNESSES.md](./LONG_RUNNING_HARNESSES.md) - Pattern mapping (Anthropic harness patterns)
-6. [PLAN_STEPWISE_VNEXT.md](./PLAN_STEPWISE_VNEXT.md) - Executable Graph IR plan (legacy)
+6. [PLAN_STEPWISE_VNEXT_v2.4.md](./archive/PLAN_STEPWISE_VNEXT_v2.4.md) - Executable Graph IR plan (archived)
 
 ### Wisdom & Analytics
 
@@ -111,6 +112,8 @@ Quick reference for day-to-day operations:
 - [RELEASE_CHECKLIST.md](./RELEASE_CHECKLIST.md) — Release preparation checklist
 - [CI_TROUBLESHOOTING.md](./CI_TROUBLESHOOTING.md) — Fixing CI failures
 - [CONTRIBUTING.md](../CONTRIBUTING.md) — How to contribute
+- [REVIEWING_PRS.md](./REVIEWING_PRS.md) — How to review Flow Studio PRs
+- [QUALITY_EVENTS.md](./QUALITY_EVENTS.md) — Quality event types specification
 
 ---
 
