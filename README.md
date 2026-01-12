@@ -16,6 +16,24 @@ Just like every transition before.
 
 ---
 
+## What Flow Studio Does
+
+Flow Studio runs **7 sequential flows** that transform a requirement into a merged PR with forensic evidence:
+
+| Flow | Transformation | Output |
+|------|----------------|--------|
+| **Signal** | Raw input → structured problem | Requirements, BDD scenarios, risk assessment |
+| **Plan** | Requirements → architecture | ADR, contracts, work plan, test plan |
+| **Build** | Plan → working code | Implementation + tests via adversarial loops |
+| **Review** | Draft PR → Ready PR | Harvest feedback, apply fixes |
+| **Gate** | Code → merge decision | Audit receipts, policy check, recommendation |
+| **Deploy** | Approved → production | Merge, verify health, audit trail |
+| **Wisdom** | Artifacts → learnings | Pattern detection, feedback loops |
+
+Each flow produces **receipts** (proof of execution) and **evidence** (test results, coverage, lint output). Kill the process anytime—resume from the last checkpoint with zero data loss.
+
+---
+
 ## The Math
 
 | Approach | Cost | Output |
@@ -65,22 +83,6 @@ A reviewer should be able to answer three questions in under 5 minutes:
 3. **What would I spot-check?**
 
 If yes, approve. If contradictions, investigate. The system did the grinding.
-
----
-
-## The Seven Flows
-
-| Flow | What happens | What you get |
-|------|--------------|--------------|
-| **Signal** | Shape vague input into rigid acceptance criteria | Requirements, BDD scenarios, risks |
-| **Plan** | Design before writing logic | ADR, contracts, work plan |
-| **Build** | Implement with adversarial loops | Code, tests, build receipt |
-| **Review** | Harvest feedback, apply fixes | Drained worklist, ready PR |
-| **Gate** | Forensic audit of the diff | MERGE or BOUNCE verdict |
-| **Deploy** | Merge to mainline | CI verification, audit trail |
-| **Wisdom** | Extract learnings | Feedback actions, pattern library |
-
-Each flow is a directed graph of steps. Each step runs one agent with one job. Steps produce receipts. Receipts are durable. Kill the process at any point—resume with zero data loss.
 
 ---
 

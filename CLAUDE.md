@@ -10,6 +10,24 @@ This is not a complete manual; it points you to the right artifacts.
 
 ---
 
+## What Flow Studio Does
+
+Flow Studio runs **7 sequential flows** that transform a requirement into a merged PR with receipts:
+
+| Flow | Transformation | Output |
+|------|----------------|--------|
+| **Signal** | Raw input → structured problem | Requirements, BDD scenarios, risk assessment |
+| **Plan** | Requirements → architecture | ADR, contracts, work plan, test plan |
+| **Build** | Plan → working code | Implementation + tests via adversarial loops |
+| **Review** | Draft PR → Ready PR | Harvest feedback, apply fixes |
+| **Gate** | Code → merge decision | Audit receipts, policy check, recommendation |
+| **Deploy** | Approved → production | Merge, verify health, audit trail |
+| **Wisdom** | Artifacts → learnings | Pattern detection, feedback loops |
+
+Each flow produces **receipts** (proof of execution) and **evidence** (test results, coverage, lint output). Kill the process anytime—resume from the last checkpoint.
+
+---
+
 ## The Core Thesis
 
 Code generation is cheap. Trust is expensive.
@@ -119,19 +137,7 @@ Then read [DEMO_RUN.md](./DEMO_RUN.md) for a worked example, and [docs/WHY_DEMO_
 
 ## Repository Overview
 
-This repo implements an agentic SDLC with **seven flows** covering the full lifecycle of a change:
-
-1. **Signal -> Specs** (Flow 1): Raw input -> problem statement, requirements, BDD, early risk
-2. **Specs -> Plan** (Flow 2): Requirements -> ADR, contracts, observability, test/work plans
-3. **Plan -> Draft** (Flow 3): Implement via adversarial microloops -> code, tests, receipts
-4. **Draft -> Ready** (Flow 4): Harvest PR feedback, cluster into work items, apply fixes, flip Draft to Ready
-5. **Code -> Gate** (Flow 5): Pre-merge gate -> audit receipts, check contracts/policy, recommend merge/bounce
-6. **Artifact -> Prod** (Flow 6): Move approved artifact to deployed -> verify health, create audit trail
-7. **Prod -> Wisdom** (Flow 7): Analyze artifacts, detect regressions, extract learnings, close feedback loops
-
-**Core trade**: Spend compute to save senior engineer attention. Optimize for receipts and auditability, not speed.
-
-**Out-of-the-Box**: GitHub integration is woven throughout. Flows 1-2 use GitHub for issue research and context. Flow 3 creates Draft PRs to wake bots. Flow 4 harvests PR feedback. Flows 5-7 handle gating, deployment, and learning. No external services beyond GitHub required.
+**GitHub integration is woven throughout.** Flows 1-2 use GitHub for issue research and context. Flow 3 creates Draft PRs to wake bots. Flow 4 harvests PR feedback. Flows 5-7 handle gating, deployment, and learning. No external services beyond GitHub required.
 
 See `swarm/positioning.md` for the full approach and `ARCHITECTURE.md` for a structural overview.
 
