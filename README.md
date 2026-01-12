@@ -1,14 +1,25 @@
 # Flow Studio
 
+> An agentic SDLC harness that transforms requirements into merged PRs with forensic evidence.
+
+[![License](https://img.shields.io/badge/license-Apache--2.0%20%2F%20MIT-blue.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+
+---
+
+## Why This Exists
+
 The job is moving up the stack. Again.
 
-Punchcards → Assembly → High-level languages → **Now**.
+```
+Punchcards → Assembly → High-level languages → Now
+```
 
 Each transition followed the same pattern: what was once skilled craft becomes mechanical, and humans move to higher-leverage work. Programmers stopped managing memory addresses. Then stopped thinking in registers. Now they stop grinding on first-draft implementation.
 
 **The shift:** Models write nearly-working code at 1,000+ tokens/second. The bottleneck isn't generation—it's *trust*. Can a human review and trust the output in 30 minutes instead of spending a week doing it themselves?
 
-**Flow Studio addresses that constraint.** It runs structured SDLC flows that produce forensic evidence alongside code. You review the evidence, spot-check the hotspots, and ship—or bounce it back for another iteration.
+**Flow Studio addresses that constraint.** It produces forensic evidence alongside code. You review the evidence, spot-check the hotspots, and ship—or bounce it back for another iteration.
 
 The machine does the implementation. You do the architecture, the intent, the judgment.
 
@@ -18,7 +29,7 @@ Just like every transition before.
 
 ## What Flow Studio Does
 
-Flow Studio runs **7 sequential flows** that transform a requirement into a merged PR with forensic evidence:
+Flow Studio runs **7 sequential flows** that transform a requirement into a merged PR:
 
 | Flow | Transformation | Output |
 |------|----------------|--------|
@@ -34,7 +45,7 @@ Each flow produces **receipts** (proof of execution) and **evidence** (test resu
 
 ---
 
-## The Math
+## The Economics
 
 | Approach | Cost | Output |
 |----------|------|--------|
@@ -45,12 +56,35 @@ The receipts are the product. The code is a side effect.
 
 ---
 
-## See It Work
+## Installation
+
+**Requirements:**
+- Python 3.11+
+- [uv](https://docs.astral.sh/uv/) (recommended) or pip
+- GNU Make (Linux/macOS: included; Windows: use WSL2 or [MSYS2](https://www.msys2.org/))
+- Node.js 20+ (optional, for UI development)
+
+**Install:**
 
 ```bash
-uv sync --extra dev            # Install dependencies
-make demo-run                  # Populate example artifacts
-make flow-studio               # Start UI → http://localhost:5000
+git clone https://github.com/EffortlessMetrics/flow-studio-swarm.git
+cd flow-studio-swarm
+uv sync --extra dev
+```
+
+**Verify:**
+
+```bash
+make dev-check    # Should pass all checks
+```
+
+---
+
+## Quick Start
+
+```bash
+make demo-run       # Populate example artifacts
+make flow-studio    # Start UI → http://localhost:5000
 ```
 
 Open: **http://localhost:5000/?run=demo-health-check&mode=operator**
@@ -76,7 +110,7 @@ Every completed run produces:
 | **Bounded diff** | The change itself, with clear scope |
 | **Explicit unknowns** | What wasn't measured, what's still risky |
 
-A reviewer should be able to answer three questions in under 5 minutes:
+A reviewer answers three questions in under 5 minutes:
 
 1. **Does evidence exist and is it fresh?**
 2. **Does the panel of metrics agree?**
@@ -86,7 +120,7 @@ If yes, approve. If contradictions, investigate. The system did the grinding.
 
 ---
 
-## How to Think About This
+## The Mental Model
 
 Don't anthropomorphize the AI as a "copilot." View it as a manufacturing plant.
 
@@ -102,7 +136,7 @@ Don't anthropomorphize the AI as a "copilot." View it as a manufacturing plant.
 - Don't give them everything—curate what they need
 - Don't trust their prose—trust their receipts
 
-This is why the system ignores agent claims and runs forensic scanners. Exit codes don't lie. Git diffs don't hallucinate.
+This is why the system doesn't rely on agent claims and runs forensic scanners. Exit codes don't lie. Git diffs don't hallucinate.
 
 ---
 
@@ -127,7 +161,7 @@ Flow Studio orchestrates work in repos of any language. It's implemented in Pyth
 
 ---
 
-## What Makes This Different
+## Key Principles
 
 | Principle | What it means |
 |-----------|---------------|
@@ -135,7 +169,7 @@ Flow Studio orchestrates work in repos of any language. It's implemented in Pyth
 | **Verification is the product** | Output is code + the evidence needed to trust it. |
 | **Steps, not sessions** | Each step has one job in fresh context. No 100k-token confusion. |
 | **Adversarial loops** | Critics find problems. Authors fix them. They never agree to be nice. |
-| **PARTIAL is a save point** | Agents exit honestly when blocked. Resume later, zero data loss. |
+| **Resumable by default** | Kill anytime. Resume from last checkpoint. Zero data loss. |
 
 ---
 
@@ -179,20 +213,15 @@ make help               # All commands
 
 ---
 
-## Operational Invariants
+## Contributing
 
-These aren't suggestions—they're load-bearing:
+Contributions are welcome. Before submitting:
 
-- **Shadow fork isolation** — Work happens in a fork. No "moving target" during iteration.
-- **Atomic commits** — State moves only after the handoff envelope is durable.
-- **Evidence before merge** — Gate requires receipts, not claims.
-- **Resumable by default** — Kill anytime. Resume from last checkpoint.
+1. Run `make dev-check` to validate the swarm
+2. Run `make selftest` for full validation
+3. Follow existing patterns in `swarm/` and `.claude/`
 
----
-
-## Status
-
-Early re-implementation of a proven pattern. The bundled examples work. Outside those, you're exploring.
+See [CLAUDE.md](CLAUDE.md) for the full reference on how the system works.
 
 Something broken? [Open an issue](../../issues).
 
@@ -200,7 +229,7 @@ Something broken? [Open an issue](../../issues).
 
 ## Related
 
-- [EffortlessMetrics/demo-swarm](https://github.com/EffortlessMetrics/demo-swarm) — Portable `.claude/` pack for your own repo
+- [EffortlessMetrics/demo-swarm](https://github.com/EffortlessMetrics/demo-swarm) — Portable `.claude/` swarm pack for your own repo
 
 ---
 
