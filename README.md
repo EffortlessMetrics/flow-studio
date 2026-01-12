@@ -6,7 +6,7 @@ Punchcards → Assembly → High-level languages → **Now**.
 
 Each transition followed the same pattern: what was once skilled craft becomes mechanical, and humans move to higher-leverage work. Programmers stopped managing memory addresses. Then stopped thinking in registers. Now they stop grinding on first-draft implementation.
 
-**The shift:** Models write working code at 1,000+ tokens/second. The bottleneck isn't generation—it's *trust*. Can a human review and trust the output in 30 minutes instead of spending a week doing it themselves?
+**The shift:** Models write nearly-working code at 1,000+ tokens/second. The bottleneck isn't generation—it's *trust*. Can a human review and trust the output in 30 minutes instead of spending a week doing it themselves?
 
 **Flow Studio addresses that constraint.** It runs structured SDLC flows that produce forensic evidence alongside code. You review the evidence, spot-check the hotspots, and ship—or bounce it back for another iteration.
 
