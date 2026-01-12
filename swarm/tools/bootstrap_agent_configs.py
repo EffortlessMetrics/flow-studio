@@ -98,7 +98,7 @@ def main() -> None:
         else:
             write_stub(row)
         count += 1
-    print(f"\n✓ Processed {count} agents from AGENTS.md")
+    print(f"\n[OK] Processed {count} agents from AGENTS.md")
 
 
 if __name__ == "__main__":

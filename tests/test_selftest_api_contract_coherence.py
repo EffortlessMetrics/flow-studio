@@ -91,7 +91,7 @@ def parse_ac_matrix_expected_count() -> int:
     # Pattern to match AC-SELFTEST-* headings
     ac_pattern = re.compile(r"^###\s+(AC-SELFTEST-[\w-]+)", re.MULTILINE)
 
-    content = ac_matrix_path.read_text()
+    content = ac_matrix_path.read_text(encoding="utf-8")
     matches = ac_pattern.findall(content)
 
     if not matches:

@@ -82,7 +82,7 @@ class TestShimIdentity:
         from pathlib import Path
 
         shim_path = Path(__file__).resolve().parents[1] / "swarm" / "runtime" / "orchestrator.py"
-        source = shim_path.read_text()
+        source = shim_path.read_text(encoding="utf-8")
         tree = ast.parse(source)
 
         # Count class and function definitions (excluding imports)

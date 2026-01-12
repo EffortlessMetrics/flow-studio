@@ -108,7 +108,7 @@ class TestCreateOverride:
 
         # Verify file exists and contains the override
         assert override_file.exists()
-        data = json.loads(override_file.read_text())
+        data = json.loads(override_file.read_text(encoding="utf-8"))
         assert "overrides" in data
         assert len(data["overrides"]) == 1
         assert data["overrides"][0]["step_id"] == "agents-governance"
@@ -283,7 +283,7 @@ class TestRevokeOverride:
         manager.revoke_override("core-checks")
 
         # Reload from file and verify status
-        data = json.loads(override_file.read_text())
+        data = json.loads(override_file.read_text(encoding="utf-8"))
         assert data["overrides"][0]["status"] == "REVOKED"
 
 
@@ -592,7 +592,7 @@ class TestAuditTrail:
         manager.create_override("step-1", "Third", "charlie@example.com")
 
         # All three should be in the file
-        data = json.loads(override_file.read_text())
+        data = json.loads(override_file.read_text(encoding="utf-8"))
         assert len(data["overrides"]) == 3
 
         # First two should be REVOKED, third APPROVED
@@ -605,7 +605,7 @@ class TestAuditTrail:
         manager.revoke_override("step-1")
 
         # Override should still be in file, just with REVOKED status
-        data = json.loads(override_file.read_text())
+        data = json.loads(override_file.read_text(encoding="utf-8"))
         assert len(data["overrides"]) == 1
         assert data["overrides"][0]["status"] == "REVOKED"
         assert data["overrides"][0]["reason"] == "Original"

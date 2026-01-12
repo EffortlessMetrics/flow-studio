@@ -39,7 +39,7 @@ This module provides Flow Studio with the ability to:
 20. test_get_flow_status_unknown_flow - Handles unknown flow gracefully
 
 ### Run Summary (4 tests)
-21. test_get_run_summary_complete - Returns all 6 flows in SDLC order
+21. test_get_run_summary_complete - Returns all 7 flows in SDLC order
 22. test_get_run_summary_example_type - Correctly identifies example runs
 23. test_get_run_summary_active_type - Correctly identifies active runs
 24. test_get_run_summary_unknown_run - Handles unknown run gracefully
@@ -646,7 +646,7 @@ class TestGetRunSummary:
     """Tests for getting complete run summaries."""
 
     def test_get_run_summary_complete(self, temp_repo, inspector_with_catalog):
-        """Returns all 6 flows in SDLC order."""
+        """Returns all 7 flows in SDLC order."""
         create_run(temp_repo, "test-run", run_type="active", flows={})
 
         result = inspector_with_catalog.get_run_summary("test-run")
@@ -656,6 +656,7 @@ class TestGetRunSummary:
             "signal",
             "plan",
             "build",
+            "review",
             "gate",
             "deploy",
             "wisdom",
@@ -700,7 +701,7 @@ class TestGetSdlcBar:
         result = inspector_with_catalog.get_sdlc_bar("test-run")
 
         assert isinstance(result, list)
-        assert len(result) == 6
+        assert len(result) == 7
         for flow in result:
             assert "flow_key" in flow
             assert "title" in flow
@@ -715,7 +716,7 @@ class TestGetSdlcBar:
         result = inspector_with_catalog.get_sdlc_bar("test-run")
 
         flow_keys = [f["flow_key"] for f in result]
-        assert flow_keys == ["signal", "plan", "build", "gate", "deploy", "wisdom"]
+        assert flow_keys == ["signal", "plan", "build", "review", "gate", "deploy", "wisdom"]
 
     def test_get_sdlc_bar_status_values(self, temp_repo, inspector_with_catalog):
         """Status values are valid enums."""
@@ -1043,8 +1044,8 @@ class TestIntegrationWithRealCatalog:
         assert "flows" in inspector.catalog
         flows = inspector.catalog.get("flows", {})
 
-        # Should have all 6 flows
-        expected_flows = {"signal", "plan", "build", "gate", "deploy", "wisdom"}
+        # Should have all 7 flows
+        expected_flows = {"signal", "plan", "build", "review", "gate", "deploy", "wisdom"}
         actual_flows = set(flows.keys())
         assert expected_flows == actual_flows, (
             f"Expected flows {expected_flows}, got {actual_flows}"

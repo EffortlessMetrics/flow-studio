@@ -301,7 +301,7 @@ def dry_run(
             cwd=working_dir,
             timeout=30,
         )
-        initial_files = set(git_status_before.stdout.strip().split("\n")) if git_status_before.stdout.strip() else set()
+        initial_files = set(git_status_before.stdout.strip().split("\n")) if git_status_before.stdout and git_status_before.stdout.strip() else set()
     except (subprocess.SubprocessError, FileNotFoundError):
         initial_files = set()
         warnings.append("Could not check git status before dry-run")
@@ -363,7 +363,7 @@ def dry_run(
                 cwd=working_dir,
                 timeout=30,
             )
-            if git_diff.stdout.strip():
+            if git_diff.stdout and git_diff.stdout.strip():
                 affected_files = git_diff.stdout.strip().split("\n")
 
             # Get the actual diff content
@@ -374,7 +374,7 @@ def dry_run(
                 cwd=working_dir,
                 timeout=30,
             )
-            if git_diff_content.stdout.strip():
+            if git_diff_content.stdout and git_diff_content.stdout.strip():
                 diff = git_diff_content.stdout
         except (subprocess.SubprocessError, FileNotFoundError):
             warnings.append("Could not get git diff")
@@ -388,7 +388,7 @@ def dry_run(
             cwd=working_dir,
             timeout=30,
         )
-        final_files = set(git_status_after.stdout.strip().split("\n")) if git_status_after.stdout.strip() else set()
+        final_files = set(git_status_after.stdout.strip().split("\n")) if git_status_after.stdout and git_status_after.stdout.strip() else set()
         new_files = final_files - initial_files
         for f in new_files:
             if f.startswith("?? "):

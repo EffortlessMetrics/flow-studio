@@ -239,7 +239,7 @@ def add_agent_to_registry(repo_path: Path, agent_key: str, line_hint: Optional[i
         role_family: Optional role family (shaping, spec, design, implementation, critic, verification, analytics, reporter, infra)
     """
     agents_md = repo_path / "swarm" / "AGENTS.md"
-    existing = agents_md.read_text()
+    existing = agents_md.read_text(encoding="utf-8")
     role_fam = role_family or "implementation"
 
     # Map role family to canonical color

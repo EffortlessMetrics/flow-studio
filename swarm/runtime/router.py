@@ -74,6 +74,13 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from swarm.runtime.routing_helpers import (
+    MicroloopState,
+    exit_reason_needs_human_review,
+    exit_reason_to_confidence,
+    should_exit_microloop,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -772,7 +779,11 @@ class SmartRouter:
         context: RouteContext,
         edges: List[Edge],
     ) -> Optional[RouteDecision]:
-        """Check exit conditions for microloops."""
+        """Check exit conditions for microloops.
+
+        Delegates to shared helper for decision logic, maintaining backward
+        compatibility with existing method signature.
+        """
         node_config = graph.get_node(current_node)
         iteration_count = context.get_iteration_count(current_node)
         max_iterations = (
@@ -781,59 +792,75 @@ class SmartRouter:
             else graph.get_max_loop_iterations()
         )
 
-        exit_reason = None
-
-        # Check status-based exit (VERIFIED = done)
-        if step_output.status == "VERIFIED":
-            exit_reason = "status=VERIFIED"
-
-        # Check iteration limit
-        elif iteration_count >= max_iterations:
-            exit_reason = f"max_iterations={max_iterations}"
-
-        # Check can_further_iteration_help
-        elif step_output.can_further_iteration_help is False:
-            exit_reason = "can_further_iteration_help=false"
-
-        # Check node-specific exit_on conditions
-        elif node_config and node_config.exit_on:
+        # Build success values from node-specific exit_on config
+        success_values = ["VERIFIED"]
+        if node_config and node_config.exit_on:
             exit_on = node_config.exit_on
-
-            # Check status values
             if "status" in exit_on:
                 status_values = exit_on["status"]
-                if isinstance(status_values, list) and step_output.status in status_values:
-                    exit_reason = f"exit_on.status={step_output.status}"
-                elif isinstance(status_values, str) and step_output.status == status_values:
-                    exit_reason = f"exit_on.status={step_output.status}"
+                if isinstance(status_values, list):
+                    success_values = status_values
+                elif isinstance(status_values, str):
+                    success_values = [status_values]
 
-        if exit_reason:
-            # Find non-loop edge (exit edge)
-            exit_edges = [e for e in edges if e.edge_type != "loop"]
-            if exit_edges:
-                # Take highest priority exit edge
-                exit_edge = self._get_default_edge(exit_edges)
-                return RouteDecision(
-                    next_node_id=exit_edge.to_node,
-                    decision_type=DecisionType.EXIT_CONDITION,
-                    reasoning=f"Exit condition met: {exit_reason}",
-                    loop_count=iteration_count,
-                )
-            else:
-                # No exit edge, flow complete
-                return RouteDecision(
-                    next_node_id=None,
-                    decision_type=DecisionType.EXIT_CONDITION,
-                    reasoning=f"Exit condition met ({exit_reason}), no exit edge",
-                    loop_count=iteration_count,
-                )
+        # Normalize can_further_iteration_help to string for MicroloopState
+        can_help = step_output.can_further_iteration_help
+        if can_help is None:
+            can_help_str = "yes"
+        elif isinstance(can_help, bool):
+            can_help_str = "yes" if can_help else "no"
+        else:
+            can_help_str = str(can_help)
 
-        # Increment iteration count for loop edges
-        loop_edges = [e for e in edges if e.edge_type == "loop"]
-        if loop_edges:
-            context.increment_iteration(current_node)
+        # Build MicroloopState from step_output and context
+        state = MicroloopState(
+            current_iteration=iteration_count,
+            max_iterations=max_iterations,
+            status=step_output.status,
+            can_further_iteration_help=can_help_str,
+            success_values=success_values,
+        )
 
-        return None
+        should_exit, reason = should_exit_microloop(state)
+
+        if not should_exit:
+            # Increment iteration count for loop edges if continuing
+            loop_edges = [e for e in edges if e.edge_type == "loop"]
+            if loop_edges:
+                context.increment_iteration(current_node)
+            return None
+
+        # Map exit reason to human-readable format for RouteDecision
+        exit_reason_map = {
+            "status_verified": f"status={step_output.status}",
+            "max_iterations_reached": f"max_iterations={max_iterations}",
+            "no_further_help": "can_further_iteration_help=false",
+        }
+        exit_reason = exit_reason_map.get(reason, reason)
+
+        # Find non-loop edge (exit edge)
+        exit_edges = [e for e in edges if e.edge_type != "loop"]
+        if exit_edges:
+            # Take highest priority exit edge
+            exit_edge = self._get_default_edge(exit_edges)
+            return RouteDecision(
+                next_node_id=exit_edge.to_node,
+                decision_type=DecisionType.EXIT_CONDITION,
+                reasoning=f"Exit condition met: {exit_reason}",
+                loop_count=iteration_count,
+                confidence=exit_reason_to_confidence(reason),
+                needs_human=exit_reason_needs_human_review(reason),
+            )
+        else:
+            # No exit edge, flow complete
+            return RouteDecision(
+                next_node_id=None,
+                decision_type=DecisionType.EXIT_CONDITION,
+                reasoning=f"Exit condition met ({exit_reason}), no exit edge",
+                loop_count=iteration_count,
+                confidence=exit_reason_to_confidence(reason),
+                needs_human=exit_reason_needs_human_review(reason),
+            )
 
     def _try_deterministic_routing(
         self,
@@ -1238,7 +1265,8 @@ class StepRouter:
     ) -> Tuple[List[Edge], List[Dict[str, Any]]]:
         """Apply exit conditions to filter candidates.
 
-        Checks for microloop termination conditions:
+        Delegates to shared helper for microloop termination decisions.
+        Checks for:
         - Status == VERIFIED
         - max_iterations reached
         - can_further_iteration_help == false
@@ -1265,23 +1293,33 @@ class StepRouter:
         status = context.get("status", "")
         can_help = context.get("can_further_iteration_help", True)
 
-        # Check exit conditions
-        exit_triggered = False
-        exit_reason = ""
+        # Normalize can_help to string for MicroloopState
+        if can_help is None:
+            can_help_str = "yes"
+        elif isinstance(can_help, bool):
+            can_help_str = "yes" if can_help else "no"
+        else:
+            can_help_str = str(can_help)
 
-        if status.upper() == "VERIFIED":
-            exit_triggered = True
-            exit_reason = "status=VERIFIED"
-        elif iteration_count >= max_iterations:
-            exit_triggered = True
-            exit_reason = f"max_iterations={max_iterations}"
-        elif can_help is False or (
-            isinstance(can_help, str) and can_help.lower() in ("no", "false")
-        ):
-            exit_triggered = True
-            exit_reason = "can_further_iteration_help=false"
+        # Build MicroloopState and delegate to shared helper
+        state = MicroloopState(
+            current_iteration=iteration_count,
+            max_iterations=max_iterations,
+            status=str(status).upper() if status else "",
+            can_further_iteration_help=can_help_str,
+        )
 
-        if exit_triggered:
+        should_exit, reason = should_exit_microloop(state)
+
+        if should_exit:
+            # Map exit reason to human-readable format
+            exit_reason_map = {
+                "status_verified": "status=VERIFIED",
+                "max_iterations_reached": f"max_iterations={max_iterations}",
+                "no_further_help": "can_further_iteration_help=false",
+            }
+            exit_reason = exit_reason_map.get(reason, reason)
+
             # Filter out loop edges when exit condition is met
             remaining = []
             for edge in candidates:

@@ -1,8 +1,8 @@
-# Review — Draft → Ready
+# Review — Harvest Feedback and Apply Fixes
 
-**Goal:** Harvest PR feedback, cluster into actionable items, apply fixes, transition Draft PR to Ready for merge.
+**Goal:** Harvest PR feedback from bots and humans, cluster into actionable items, apply fixes in the shadow fork until work items are resolved.
 
-**Question:** Is this PR ready for gate review?
+**Question:** Is this work ready for gate review?
 
 **Core Outputs:** `review_receipt.json`, `review_worklist.json`
 
@@ -49,7 +49,7 @@ Flow 4 also reads from Flows 1-2 for context:
 |--------|-----------------|---------------|
 | **Purpose** | Fix issues | Audit compliance |
 | **Action** | Apply changes | Verify contracts |
-| **Output** | Ready PR | Merge decision |
+| **Output** | Resolved work items | Merge decision |
 | **Role** | Worker | Auditor |
 
 **Review fixes.** Gate audits. Review iterates until work items are resolved. Gate passes or bounces.
@@ -60,12 +60,11 @@ Flow 4 also reads from Flows 1-2 for context:
 
 ```json
 {
-  "goal": "Resolve all blocking PR feedback and transition Draft PR to Ready for merge",
+  "goal": "Resolve all blocking feedback items in the shadow fork",
   "exit_criteria": [
     "All CRITICAL and MAJOR work items resolved",
     "PR feedback processed and clustered into review_worklist.json",
     "pending_blocking count is 0",
-    "Draft PR flipped to Ready (or documented reason why not)",
     "review_receipt.json produced with resolution summary"
   ],
   "non_goals": [
@@ -78,6 +77,8 @@ Flow 4 also reads from Flows 1-2 for context:
 }
 ```
 
+**Note:** PR status (Draft/Ready) is informational output, not a control mechanism. Flow 4 completes when work items are resolved, regardless of PR status.
+
 ---
 
 <!-- FLOW AUTOGEN START -->
@@ -87,11 +88,11 @@ Flow 4 also reads from Flows 1-2 for context:
 |------|----------|---------|
 | run_prep | run-prep | Establish review directory |
 | branch | repo-operator | Ensure run branch exists |
-| pr_create | pr-creator | Create Draft PR if missing |
+| pr_create | pr-creator | Create Draft PR if missing (for bot feedback) |
 | harvest | pr-feedback-harvester | Pull all PR feedback |
 | cluster | review-worklist-writer | Group feedback into work items |
 | worklist_loop | Multiple | **Microloop**: resolve work items |
-| close_pr | pr-commenter, pr-status-manager | Flip Draft to Ready |
+| finalize | pr-commenter | Update PR with resolution summary (informational) |
 | cleanup | review-cleanup, build-cleanup | Write review_receipt.json |
 | sanitize | secrets-sanitizer | Scan for secrets |
 | commit | repo-operator | Commit and push |
@@ -145,8 +146,21 @@ Flow 5 (Gate) proceeds when Review completes with `pending_blocking == 0`.
 
 ---
 
+## Shadow Fork Model
+
+Flow 4 operates entirely within the shadow fork:
+
+- All fixes are applied in the isolated fork
+- PR feedback is harvested as input, but PR status doesn't control flow
+- Work completion is determined by `pending_blocking == 0`, not PR state
+- Flow 5 (Gate) decides merge-worthiness based on evidence, not PR status
+
+PR status may be updated as a **communication signal** to upstream maintainers, but this is informational output, not a gate.
+
+---
+
 ## See Also
 
 - [flow-build.md](./flow-build.md) — Upstream: creates the Draft PR
-- [flow-gate.md](./flow-gate.md) — Downstream: audits the Ready PR
+- [flow-gate.md](./flow-gate.md) — Downstream: audits and decides merge
 - `swarm/config/flows/review.yaml` — Full step configuration

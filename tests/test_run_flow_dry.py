@@ -229,7 +229,7 @@ def test_run_flow_with_artifacts_missing(tmp_path, monkeypatch):
     assert isinstance(report_path, Path)
     assert ok is False  # artifact does not exist
     # Report should contain MISSING
-    report_content = report_path.read_text()
+    report_content = report_path.read_text(encoding="utf-8")
     assert "MISSING" in report_content
 
 

@@ -6,8 +6,9 @@ It provides:
 1. Clean imports with fallback handling
 2. A single "options builder" that enforces High-Trust design
 3. Helper functions for common SDK operations
-4. ClaudeSDKClient - Per-step session pattern with Work -> Finalize -> Route phases
+4. StepSessionClient - Per-step session pattern with Work -> Finalize -> Route phases
 5. Structured output schemas for HandoffEnvelope and RoutingSignal
+6. NormalizedToolCall integration for unified tool call tracking
 
 Usage:
     from swarm.runtime.claude_sdk import (
@@ -16,9 +17,10 @@ Usage:
         create_options_from_plan,
         query_with_options,
         get_sdk_module,
-        ClaudeSDKClient,
+        StepSessionClient,  # Per-step session orchestrator (Work -> Finalize -> Route)
         HANDOFF_ENVELOPE_SCHEMA,
         ROUTING_SIGNAL_SCHEMA,
+        _dict_to_normalized_tool_call,  # Backward compatibility helper
     )
 
 Design Principles:
@@ -28,6 +30,7 @@ Design Principles:
     - Project-only settings by default
     - High-trust tool policy: broad access with foot-gun blocking
     - Per-step sessions: Work -> Finalize -> Route in single hot context
+    - Normalized tool calls for consistent receipt format across transports
 """
 
 from __future__ import annotations
@@ -56,6 +59,11 @@ from typing import (
 
 if TYPE_CHECKING:
     from swarm.spec.types import PromptPlan
+
+from swarm.runtime.types.tool_call import (
+    NormalizedToolCall,
+    truncate_output,
+)
 
 # Module logger
 logger = logging.getLogger(__name__)
@@ -1133,7 +1141,7 @@ class WorkPhaseResult:
         token_counts: Token usage statistics.
         model: Model name used.
         error: Error message if work phase failed.
-        tool_calls: List of tool calls made during work.
+        tool_calls: List of NormalizedToolCall instances made during work.
     """
 
     success: bool
@@ -1144,7 +1152,7 @@ class WorkPhaseResult:
     )
     model: str = "unknown"
     error: Optional[str] = None
-    tool_calls: List[Dict[str, Any]] = field(default_factory=list)
+    tool_calls: List[NormalizedToolCall] = field(default_factory=list)
 
 
 @dataclass
@@ -1203,11 +1211,11 @@ class StepSessionResult:
 
 
 # =============================================================================
-# ClaudeSDKClient - Per-Step Session Pattern
+# StepSessionClient - Per-Step Session Pattern
 # =============================================================================
 
 
-class ClaudeSDKClient:
+class StepSessionClient:
     """Client for per-step SDK sessions with Work -> Finalize -> Route pattern.
 
     This client implements the SDK alignment pattern where each step gets ONE
@@ -1225,7 +1233,7 @@ class ClaudeSDKClient:
     - Collects telemetry data for each phase
 
     Example:
-        >>> client = ClaudeSDKClient(repo_root=Path("/repo"))
+        >>> client = StepSessionClient(repo_root=Path("/repo"))
         >>> async with client.step_session(ctx) as session:
         ...     work = await session.work(prompt="Implement feature X")
         ...     envelope = await session.finalize()
@@ -1344,7 +1352,7 @@ class StepSession:
 
     def __init__(
         self,
-        client: ClaudeSDKClient,
+        client: "StepSessionClient",
         step_id: str,
         flow_key: str,
         run_id: str,
@@ -1355,7 +1363,7 @@ class StepSession:
         """Initialize the step session.
 
         Args:
-            client: The parent ClaudeSDKClient.
+            client: The parent StepSessionClient.
             step_id: The step identifier.
             flow_key: The flow key.
             run_id: The run identifier.
@@ -1442,10 +1450,11 @@ class StepSession:
 
         events: List[Dict[str, Any]] = []
         full_text: List[str] = []
-        tool_calls: List[Dict[str, Any]] = []
+        tool_calls: List[NormalizedToolCall] = []
         token_counts: Dict[str, int] = {"prompt": 0, "completion": 0, "total": 0}
         model_name = self.client.model or "unknown"
-        pending_tool_contexts: Dict[str, Dict[str, Any]] = {}  # tool_use_id -> context
+        # Track pending tool calls: tool_use_id -> (NormalizedToolCall, context_dict)
+        pending_tool_calls: Dict[str, Tuple[NormalizedToolCall, Dict[str, Any]]] = {}
 
         try:
             async for event in sdk.query(prompt=prompt, options=options):
@@ -1474,6 +1483,8 @@ class StepSession:
                 elif event_type == "ToolUseEvent" or hasattr(event, "tool_name"):
                     tool_name = getattr(event, "tool_name", getattr(event, "name", "unknown"))
                     tool_input = getattr(event, "input", getattr(event, "args", {}))
+                    if not isinstance(tool_input, dict):
+                        tool_input = {"value": tool_input} if tool_input else {}
                     tool_use_id = getattr(
                         event, "id", getattr(event, "tool_use_id", str(time.time()))
                     )
@@ -1481,18 +1492,20 @@ class StepSession:
                     # Initialize tool context for this call
                     tool_ctx: Dict[str, Any] = {
                         "tool_name": tool_name,
+                        "tool_input": tool_input,
                         "tool_start_time": time.time(),
                         "step_id": self.step_id,
                         "session_id": self.session_id,
                     }
-                    pending_tool_contexts[tool_use_id] = tool_ctx
 
                     # Apply tool policy hook (legacy)
                     blocked = False
+                    blocked_reason: Optional[str] = None
                     if self.client.tool_policy_hook and isinstance(tool_input, dict):
                         allowed, reason = self.client.tool_policy_hook(tool_name, tool_input)
                         if not allowed:
                             blocked = True
+                            blocked_reason = reason
                             logger.warning(
                                 "Tool use blocked by policy: %s - %s",
                                 tool_name,
@@ -1508,6 +1521,7 @@ class StepSession:
                                 allowed, reason = hook(tool_name, tool_input, tool_ctx)
                                 if not allowed:
                                     blocked = True
+                                    blocked_reason = reason
                                     logger.warning(
                                         "Tool use blocked by pre-hook: %s - %s",
                                         tool_name,
@@ -1519,14 +1533,17 @@ class StepSession:
                             except Exception as hook_err:
                                 logger.debug("Pre-tool-use hook failed: %s", hook_err)
 
-                    tool_calls.append(
-                        {
-                            "tool": tool_name,
-                            "input": tool_input,
-                            "timestamp": now.isoformat() + "Z",
-                            "blocked": blocked,
-                        }
+                    # Create NormalizedToolCall and store for later matching with result
+                    tool_call = NormalizedToolCall(
+                        tool_name=tool_name,
+                        tool_input=tool_input,
+                        source="sdk",
+                        timestamp=now.isoformat() + "Z",
+                        blocked=blocked,
+                        blocked_reason=blocked_reason,
                     )
+                    pending_tool_calls[tool_use_id] = (tool_call, tool_ctx)
+
                     event_dict["tool"] = tool_name
 
                 elif event_type == "ToolResultEvent" or hasattr(event, "tool_result"):
@@ -1536,22 +1553,38 @@ class StepSession:
 
                     event_dict["success"] = success
 
-                    # Get tool context and calculate duration
-                    tool_ctx = pending_tool_contexts.pop(tool_use_id, {})
-                    tool_name = tool_ctx.get("tool_name", "unknown")
-                    start_time = tool_ctx.get("tool_start_time", 0)
-                    duration_ms = (time.time() - start_time) * 1000 if start_time else 0
+                    # Get pending tool call and context, then calculate duration
+                    pending = pending_tool_calls.pop(tool_use_id, None)
+                    if pending:
+                        tool_call, tool_ctx = pending
+                        start_time = tool_ctx.get("tool_start_time", 0)
+                        duration_ms = int((time.time() - start_time) * 1000) if start_time else 0
+
+                        # Update the NormalizedToolCall with result details
+                        tool_call.tool_output = truncate_output(str(result), max_chars=2000)
+                        tool_call.success = success
+                        tool_call.duration_ms = duration_ms
+
+                        # Add to completed tool calls list
+                        tool_calls.append(tool_call)
+
+                        tool_name = tool_call.tool_name
+                        tool_input = tool_ctx.get("tool_input", {})
+                    else:
+                        tool_name = "unknown"
+                        tool_input = {}
+                        duration_ms = 0
 
                     # Record telemetry
-                    telemetry.record_tool_call(tool_name, duration_ms)
+                    telemetry.record_tool_call(tool_name, float(duration_ms))
 
                     # Apply post-tool-use hooks
-                    tool_input = tool_ctx.get("tool_input", {})
-                    for hook in self.client.post_tool_hooks:
-                        try:
-                            hook(tool_name, tool_input, result, success, tool_ctx)
-                        except Exception as hook_err:
-                            logger.debug("Post-tool-use hook failed: %s", hook_err)
+                    if pending:
+                        for hook in self.client.post_tool_hooks:
+                            try:
+                                hook(tool_name, tool_input, result, success, tool_ctx)
+                            except Exception as hook_err:
+                                logger.debug("Post-tool-use hook failed: %s", hook_err)
 
                 elif event_type == "ResultEvent" or hasattr(event, "result"):
                     result = getattr(event, "result", event)
@@ -2008,6 +2041,50 @@ Output ONLY a JSON object with: decision, next_step_id, reason, confidence, need
 
 
 # =============================================================================
+# Backward Compatibility Helpers
+# =============================================================================
+
+
+def _dict_to_normalized_tool_call(d: Dict[str, Any]) -> NormalizedToolCall:
+    """Convert legacy dict format to NormalizedToolCall.
+
+    This helper enables gradual migration from the old dict-based tool call
+    tracking to the new NormalizedToolCall format. Use it when consuming
+    tool calls from older code paths or external sources.
+
+    Args:
+        d: Dictionary with legacy tool call fields. Supports both old keys
+           ("tool", "input", "output") and new keys ("tool_name", "tool_input",
+           "tool_output").
+
+    Returns:
+        NormalizedToolCall instance with fields mapped from the dictionary.
+
+    Example:
+        >>> old_tool_call = {
+        ...     "tool": "Bash",
+        ...     "input": {"command": "ls -la"},
+        ...     "output": "total 42...",
+        ...     "timestamp": "2024-01-01T00:00:00Z",
+        ... }
+        >>> normalized = _dict_to_normalized_tool_call(old_tool_call)
+        >>> normalized.tool_name
+        'Bash'
+    """
+    return NormalizedToolCall(
+        tool_name=d.get("tool", d.get("tool_name", "unknown")),
+        tool_input=d.get("input", d.get("tool_input", {})),
+        tool_output=d.get("output", d.get("tool_output")),
+        success=d.get("success", True),
+        duration_ms=d.get("duration_ms", 0),
+        blocked=d.get("blocked", False),
+        blocked_reason=d.get("blocked_reason"),
+        source=d.get("source", "sdk"),
+        timestamp=d.get("timestamp"),
+    )
+
+
+# =============================================================================
 # Hook Factory Functions for Common Guardrails and Telemetry
 # =============================================================================
 
@@ -2029,7 +2106,7 @@ def create_dangerous_command_hook(
 
     Example:
         >>> hook = create_dangerous_command_hook()
-        >>> client = ClaudeSDKClient(pre_tool_hooks=[hook])
+        >>> client = StepSessionClient(pre_tool_hooks=[hook])
     """
     if blocked_patterns is None:
         blocked_patterns = [
@@ -2072,7 +2149,7 @@ def create_telemetry_hook() -> Tuple[PreToolUseHook, PostToolUseHook]:
 
     Example:
         >>> pre_hook, post_hook = create_telemetry_hook()
-        >>> client = ClaudeSDKClient(
+        >>> client = StepSessionClient(
         ...     pre_tool_hooks=[pre_hook],
         ...     post_tool_hooks=[post_hook],
         ... )
@@ -2122,7 +2199,7 @@ def create_file_access_audit_hook(
     Example:
         >>> audit_log = []
         >>> hook = create_file_access_audit_hook(audit_log)
-        >>> client = ClaudeSDKClient(post_tool_hooks=[hook])
+        >>> client = StepSessionClient(post_tool_hooks=[hook])
         >>> # After execution:
         >>> for entry in audit_log:
         ...     print(f"{entry['tool']}: {entry['path']}")
@@ -2210,3 +2287,11 @@ def create_token_budget_hook(
                     )
 
     return hook
+
+
+# =============================================================================
+# Backward Compatibility Alias
+# =============================================================================
+# Preserve the old name for existing code that imports ClaudeSDKClient.
+# New code should use StepSessionClient directly.
+ClaudeSDKClient = StepSessionClient

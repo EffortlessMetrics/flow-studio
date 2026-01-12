@@ -92,7 +92,7 @@ def test_all_42_agents_present(run_validator):
     # Count agents in registry
     agents_md = repo_root / "swarm" / "AGENTS.md"
     if agents_md.exists():
-        content = agents_md.read_text()
+        content = agents_md.read_text(encoding="utf-8")
         # Count "- key:" entries
         agent_count = content.count("- key:")
 

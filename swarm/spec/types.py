@@ -379,8 +379,13 @@ def station_spec_from_dict(data: Dict[str, Any]) -> StationSpec:
     )
 
     handoff_data = data.get("handoff", {})
+    # Support both path_template and draft_path_template for compatibility
+    path_template = handoff_data.get(
+        "path_template",
+        handoff_data.get("draft_path_template", "{{run.base}}/handoff/{{step.id}}.draft.json")
+    )
     handoff = StationHandoff(
-        path_template=handoff_data.get("path_template", "{{run.base}}/handoff/{{step.id}}.draft.json"),
+        path_template=path_template,
         required_fields=tuple(handoff_data.get("required_fields", ["status", "summary", "artifacts", "can_further_iteration_help"])),
     )
 
@@ -417,6 +422,28 @@ def station_spec_from_dict(data: Dict[str, Any]) -> StationSpec:
         invariants=tuple(data.get("invariants", [])),
         routing_hints=routing_hints,
     )
+
+
+def _normalize_version(version: Any) -> int:
+    """Normalize version to an integer.
+
+    Handles:
+    - int: returned as-is
+    - str like "1" or "1.0.0": parsed to major version int
+    - None: defaults to 1
+    """
+    if version is None:
+        return 1
+    if isinstance(version, int):
+        return version
+    if isinstance(version, str):
+        # Handle semver strings like "1.0.0" - extract major version
+        parts = version.split(".")
+        try:
+            return int(parts[0])
+        except (ValueError, IndexError):
+            return 1
+    return 1
 
 
 def flow_spec_from_dict(data: Dict[str, Any]) -> FlowSpec:
@@ -479,7 +506,7 @@ def flow_spec_from_dict(data: Dict[str, Any]) -> FlowSpec:
 
     return FlowSpec(
         id=data["id"],
-        version=data.get("version", 1),
+        version=_normalize_version(data.get("version")),
         title=data.get("title", data["id"]),
         description=data.get("description", ""),
         defaults=defaults,

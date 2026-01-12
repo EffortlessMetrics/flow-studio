@@ -1,0 +1,529 @@
+---
+# specs/capabilities.yaml
+# Capability Registry: What Flow Studio can do (with evidence)
+#
+# This file is the SINGLE SOURCE OF TRUTH for capability claims.
+# Generated docs MUST be regenerated when this file changes.
+#
+# Status meanings:
+#   implemented - Has code + test evidence; safe to claim publicly
+#   supported   - Has code but incomplete/no formal tests; use with caveats
+#   aspirational - Design exists; NOT shipped; do NOT claim as available
+#
+# Validation rules (FR-007):
+#   - implemented -> must have >=1 test pointer
+#   - implemented -> must have >=1 code pointer
+#   - @cap:<id> tags in BDD must exist in this registry
+#   - README/marketing must not claim aspirational capabilities as shipped
+#
+# Evidence types:
+#   code   - Source file + optional symbol (class/function)
+#   tests  - Unit test, integration test, or BDD scenario
+#   design - Design doc or spec (for aspirational only)
+
+version: 1
+
+surfaces:
+  # =========================================================================
+  # RECEIPTS: Step execution audit trail
+  # =========================================================================
+  receipts:
+    description: "Step execution audit trail and evidence binding"
+    capabilities:
+      - id: receipts.required_fields
+        status: implemented
+        summary: "Receipts include engine, mode, step_id, flow_key, run_id, timestamps, status, tokens"
+        evidence:
+          code:
+            - path: swarm/runtime/receipt_io.py
+              symbol: StepReceiptData
+          tests:
+            - kind: unit
+              ref: tests/test_receipt_io.py
+
+      - id: receipts.write_api
+        status: implemented
+        summary: "Unified write_step_receipt() API for all execution paths"
+        evidence:
+          code:
+            - path: swarm/runtime/receipt_io.py
+              symbol: write_step_receipt
+          tests:
+            - kind: unit
+              ref: tests/test_receipt_io.py
+
+      - id: receipts.git_capture
+        status: implemented
+        summary: "Receipts capture git SHA and branch at execution time"
+        evidence:
+          code:
+            - path: swarm/runtime/receipt_io.py
+              symbol: capture_git_info
+          tests:
+            - kind: unit
+              ref: tests/test_receipt_io.py
+
+      - id: receipts.tool_calls
+        status: implemented
+        summary: "Receipts capture normalized tool call data"
+        evidence:
+          code:
+            - path: swarm/runtime/receipt_io.py
+              symbol: StepReceiptData.tool_calls
+          tests:
+            - kind: unit
+              ref: tests/test_receipt_io.py
+
+      - id: receipts.routing_signal
+        status: implemented
+        summary: "Receipts include routing decision for audit trail"
+        evidence:
+          code:
+            - path: swarm/runtime/receipt_io.py
+              symbol: StepReceiptData.routing_signal
+          tests:
+            - kind: unit
+              ref: tests/test_receipt_io.py
+
+  # =========================================================================
+  # ROUTING: Flow graph navigation
+  # =========================================================================
+  routing:
+    description: "Flow graph navigation and step transitions"
+    capabilities:
+      - id: routing.decision_vocabulary
+        status: implemented
+        summary: "Closed vocabulary: ADVANCE, LOOP, TERMINATE, BRANCH, SKIP"
+        evidence:
+          code:
+            - path: swarm/runtime/types/routing.py
+              symbol: RoutingDecision
+          tests:
+            - kind: unit
+              ref: tests/test_route_step_navigator.py
+
+      - id: routing.decision_types
+        status: implemented
+        summary: "Decision provenance: EXPLICIT, EXIT_CONDITION, DETERMINISTIC, CEL, LLM_*"
+        evidence:
+          code:
+            - path: swarm/runtime/types/routing.py
+              symbol: DecisionType
+          tests:
+            - kind: unit
+              ref: tests/test_route_step_navigator.py
+
+      - id: routing.modes
+        status: implemented
+        summary: "Routing modes: DETERMINISTIC_ONLY, ASSIST, AUTHORITATIVE"
+        evidence:
+          code:
+            - path: swarm/runtime/types/routing.py
+              symbol: RoutingMode
+          tests:
+            - kind: unit
+              ref: tests/test_routing_driver_fixes.py
+
+      - id: routing.microloop_context
+        status: implemented
+        summary: "Microloop iteration tracking with stall detection"
+        evidence:
+          code:
+            - path: swarm/runtime/types/routing.py
+              symbol: MicroloopContext
+          tests:
+            - kind: unit
+              ref: tests/test_progress_tracker.py
+
+      - id: routing.stall_detection
+        status: implemented
+        summary: "Elephant Protocol: velocity-based stall detection for repeated failures"
+        evidence:
+          code:
+            - path: swarm/runtime/types/routing.py
+              symbol: StallContext
+          tests:
+            - kind: unit
+              ref: tests/test_progress_tracker.py
+
+      - id: routing.candidate_pattern
+        status: implemented
+        summary: "Python generates candidates, Navigator chooses, Python validates"
+        evidence:
+          code:
+            - path: swarm/runtime/types/routing.py
+              symbol: RoutingCandidate
+          tests:
+            - kind: unit
+              ref: tests/test_route_step_navigator.py
+
+      - id: routing.skip_justification
+        status: implemented
+        summary: "High-friction justification required for SKIP decisions"
+        evidence:
+          code:
+            - path: swarm/runtime/types/routing.py
+              symbol: SkipJustification
+          tests:
+            - kind: unit
+              ref: tests/test_route_step_navigator.py
+
+      - id: routing.why_now
+        status: implemented
+        summary: "WhyNow justification for DETOUR/INJECT routing"
+        evidence:
+          code:
+            - path: swarm/runtime/types/routing.py
+              symbol: WhyNowJustification
+          tests:
+            - kind: unit
+              ref: tests/test_route_step_navigator.py
+
+      - id: routing.wp4_explanation
+        status: implemented
+        summary: "WP4-compliant routing explanation for audit trails"
+        evidence:
+          code:
+            - path: swarm/runtime/types/routing.py
+              symbol: WP4RoutingExplanation
+          tests:
+            - kind: unit
+              ref: tests/test_route_step_navigator.py
+
+  # =========================================================================
+  # VALIDATION: Swarm alignment (pack-check)
+  # =========================================================================
+  validation:
+    description: "Swarm specification validation (pack-check philosophy)"
+    capabilities:
+      - id: validation.fr001_bijection
+        status: implemented
+        summary: "1:1 mapping between AGENTS.md registry and .claude/agents/"
+        evidence:
+          code:
+            - path: swarm/tools/validate_swarm.py
+              symbol: validate_bijection
+          tests:
+            - kind: unit
+              ref: tests/test_bijection.py
+
+      - id: validation.fr002_frontmatter
+        status: implemented
+        summary: "Agent frontmatter validation (name, description, color, model)"
+        evidence:
+          code:
+            - path: swarm/tools/validate_swarm.py
+              symbol: validate_frontmatter
+          tests:
+            - kind: unit
+              ref: tests/test_frontmatter.py
+
+      - id: validation.fr003_flow_refs
+        status: implemented
+        summary: "Flow specs only reference valid agents (with typo detection)"
+        evidence:
+          code:
+            - path: swarm/tools/validate_swarm.py
+              symbol: validate_flow_references
+          tests:
+            - kind: unit
+              ref: tests/test_validate_swarm_json.py
+
+      - id: validation.fr004_skills
+        status: implemented
+        summary: "Skills have valid SKILL.md files"
+        evidence:
+          code:
+            - path: swarm/tools/validate_swarm.py
+              symbol: validate_skills
+          tests:
+            - kind: unit
+              ref: tests/test_skills_lint.py
+
+      - id: validation.fr005_runbase
+        status: implemented
+        summary: "Flow specs use RUN_BASE placeholders, not hardcoded paths"
+        evidence:
+          code:
+            - path: swarm/tools/validate_swarm.py
+              symbol: validate_runbase_paths
+          tests:
+            - kind: unit
+              ref: tests/test_runbase.py
+
+      - id: validation.fr006_prompt_sections
+        status: implemented
+        summary: "Agent prompts have required sections (Inputs, Outputs, Behavior)"
+        evidence:
+          code:
+            - path: swarm/tools/validate_swarm.py
+              symbol: validate_prompt_sections
+          tests:
+            - kind: unit
+              ref: tests/test_prompt_sections.py
+
+      - id: validation.incremental_mode
+        status: implemented
+        summary: "Git-aware incremental validation (--check-modified)"
+        evidence:
+          code:
+            - path: swarm/tools/validate_swarm.py
+          tests:
+            - kind: unit
+              ref: tests/test_incremental_mode.py
+
+  # =========================================================================
+  # TRANSPORT: LLM backend abstraction
+  # =========================================================================
+  transport:
+    description: "LLM backend abstraction and capability declaration"
+    capabilities:
+      - id: transport.capability_declaration
+        status: implemented
+        summary: "Transports declare capabilities via TransportCapabilities dataclass"
+        evidence:
+          code:
+            - path: swarm/runtime/transports/port.py
+              symbol: TransportCapabilities
+          tests:
+            - kind: unit
+              ref: tests/test_step_engine_contract.py
+
+      - id: transport.session_protocol
+        status: implemented
+        summary: "StepSessionProtocol: work() -> finalize() -> route() phases"
+        evidence:
+          code:
+            - path: swarm/runtime/transports/port.py
+              symbol: StepSessionProtocol
+          tests:
+            - kind: unit
+              ref: tests/test_step_engine_contract.py
+
+      - id: transport.claude_sdk
+        status: implemented
+        summary: "Claude Agent SDK transport with full capabilities"
+        evidence:
+          code:
+            - path: swarm/runtime/transports/port.py
+              symbol: CLAUDE_SDK_CAPABILITIES
+            - path: swarm/runtime/transports/claude_sdk_transport.py
+          tests:
+            - kind: unit
+              ref: tests/test_step_engine_sdk_smoke.py
+
+      - id: transport.claude_cli
+        status: implemented
+        summary: "Claude CLI transport (stateless, best-effort structured output)"
+        evidence:
+          code:
+            - path: swarm/runtime/transports/port.py
+              symbol: CLAUDE_CLI_CAPABILITIES
+          tests:
+            - kind: unit
+              ref: tests/test_claude_stepwise_backend.py
+
+      - id: transport.gemini_cli
+        status: implemented
+        summary: "Gemini CLI transport (large context, microloop fallback)"
+        evidence:
+          code:
+            - path: swarm/runtime/transports/port.py
+              symbol: GEMINI_CLI_CAPABILITIES
+          tests:
+            - kind: unit
+              ref: tests/test_gemini_stepwise_backend.py
+
+      - id: transport.stub
+        status: implemented
+        summary: "Stub transport for testing and CI (simulates all capabilities)"
+        evidence:
+          code:
+            - path: swarm/runtime/transports/port.py
+              symbol: STUB_CAPABILITIES
+          tests:
+            - kind: unit
+              ref: tests/test_step_engine_contract.py
+
+      - id: transport.subsumption
+        status: supported
+        summary: "Kernel compensates for missing backend capabilities"
+        notes: "Pattern defined; implementation varies by capability"
+        evidence:
+          code:
+            - path: swarm/runtime/transports/port.py
+              symbol: structured_output_fallback
+          design:
+            - path: .claude/rules/execution/subsumption-principle.md
+
+  # =========================================================================
+  # SELFTEST: Platform health validation
+  # =========================================================================
+  selftest:
+    description: "Platform selftest and governance tiers"
+    capabilities:
+      - id: selftest.kernel_smoke
+        status: implemented
+        summary: "Fast kernel health check (<0.5s)"
+        evidence:
+          code:
+            - path: swarm/tools/kernel_smoke.py
+          tests:
+            - kind: bdd
+              ref: "@AC-SELFTEST-KERNEL-FAST"
+
+      - id: selftest.introspectable_plan
+        status: implemented
+        summary: "Selftest --plan shows all steps with tiers"
+        evidence:
+          code:
+            - path: swarm/tools/selftest.py
+          tests:
+            - kind: bdd
+              ref: "@AC-SELFTEST-INTROSPECTABLE"
+
+      - id: selftest.individual_steps
+        status: implemented
+        summary: "Run individual selftest steps with --step flag"
+        evidence:
+          code:
+            - path: swarm/tools/selftest.py
+          tests:
+            - kind: bdd
+              ref: "@AC-SELFTEST-INDIVIDUAL-STEPS"
+
+      - id: selftest.degraded_mode
+        status: implemented
+        summary: "Degraded mode treats OPTIONAL failures as warnings"
+        evidence:
+          code:
+            - path: swarm/tools/selftest.py
+          tests:
+            - kind: bdd
+              ref: "@AC-SELFTEST-DEGRADED"
+
+      - id: selftest.governance_tiers
+        status: implemented
+        summary: "KERNEL, GOVERNANCE, OPTIONAL tiers with different blocking behavior"
+        evidence:
+          code:
+            - path: swarm/tools/selftest.py
+          tests:
+            - kind: unit
+              ref: tests/test_selftest_core_cli.py
+
+  # =========================================================================
+  # FLOW_STUDIO: Visualization and UI
+  # =========================================================================
+  flow_studio:
+    description: "Flow visualization and developer experience"
+    capabilities:
+      - id: flow_studio.sdk_api
+        status: implemented
+        summary: "window.__flowStudio SDK for programmatic control"
+        evidence:
+          code:
+            - path: swarm/tools/flow_studio_ui/flow_studio_sdk.ts
+          tests:
+            - kind: unit
+              ref: tests/test_flow_studio_sdk_path.py
+
+      - id: flow_studio.uiid_selectors
+        status: implemented
+        summary: "data-uiid selectors for stable test automation"
+        evidence:
+          code:
+            - path: swarm/tools/flow_studio_ui/index.html
+          tests:
+            - kind: unit
+              ref: tests/test_flow_studio_governance.py
+
+      - id: flow_studio.profile_management
+        status: implemented
+        summary: "Save, load, diff flow profiles"
+        evidence:
+          code:
+            - path: swarm/config/profile_registry.py
+          tests:
+            - kind: unit
+              ref: tests/test_flow_profiles.py
+
+      - id: flow_studio.fastapi_backend
+        status: implemented
+        summary: "FastAPI backend for run management and status"
+        evidence:
+          code:
+            - path: swarm/tools/flow_studio_api.py
+          tests:
+            - kind: unit
+              ref: tests/test_flow_studio_fastapi_smoke.py
+
+  # =========================================================================
+  # QUALITY: Quality event detection (forensics)
+  # =========================================================================
+  quality:
+    description: "Quality event detection and forensic analysis"
+    capabilities:
+      - id: quality.diff_scanner
+        status: implemented
+        summary: "Analyze git diffs for change metrics"
+        evidence:
+          code:
+            - path: swarm/runtime/diff_scanner.py
+          tests:
+            - kind: unit
+              ref: tests/test_diff_scanner.py
+
+      - id: quality.test_parsing
+        status: supported
+        summary: "Parse pytest output for pass/fail counts"
+        notes: "pytest parser implemented; jest parser is stub"
+        evidence:
+          code:
+            - path: swarm/runtime/forensics/test_parser.py
+
+      - id: quality.panel_evaluation
+        status: aspirational
+        summary: "Multi-metric panel evaluation (anti-Goodhart)"
+        evidence:
+          design:
+            - path: .claude/rules/governance/panel-thinking.md
+
+  # =========================================================================
+  # SPEC_LEDGER: Story and AC tracking
+  # =========================================================================
+  spec_ledger:
+    description: "Story and acceptance criteria governance"
+    capabilities:
+      - id: spec_ledger.yaml_format
+        status: implemented
+        summary: "Stories and ACs tracked in specs/spec_ledger.yaml"
+        evidence:
+          code:
+            - path: specs/spec_ledger.yaml
+          tests:
+            - kind: bdd
+              ref: "@AC-SPEC-LEDGER-EXISTS"
+
+      - id: spec_ledger.bdd_cross_refs
+        status: implemented
+        summary: "BDD scenarios tagged with AC IDs (@AC-*)"
+        evidence:
+          code:
+            - path: features/selftest.feature
+          tests:
+            - kind: unit
+              ref: tests/test_selftest_ac_bijection.py
+
+# =============================================================================
+# META: Registry metadata
+# =============================================================================
+meta:
+  schema_version: 1
+  last_updated: "2025-01-11"
+  generated_docs:
+    - path: docs/reference/CAPABILITIES.md
+      warning: "GENERATED - DO NOT EDIT - regenerate with: make gen-capabilities-doc"
+  validation_rule: FR-007
+  maintainers:
+    - swarm-ops

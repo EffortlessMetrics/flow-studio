@@ -53,6 +53,12 @@ Usage:
         human_policy_to_dict, human_policy_from_dict,
         run_plan_spec_to_dict, run_plan_spec_from_dict,
         macro_routing_decision_to_dict, macro_routing_decision_from_dict,
+        # Normalized tool call representation (cross-transport)
+        NormalizedToolCall, truncate_output,
+        normalized_tool_call_from_sdk_events,
+        normalized_tool_call_from_gemini_events,
+        normalized_tool_call_from_stub,
+        normalized_tool_call_from_kernel_execution,
     )
 """
 
@@ -109,6 +115,14 @@ from .audit import (
     assumption_entry_to_dict,
     decision_log_entry_from_dict,
     decision_log_entry_to_dict,
+)
+from .tool_call import (
+    NormalizedToolCall,
+    from_gemini_events as normalized_tool_call_from_gemini_events,
+    from_kernel_execution as normalized_tool_call_from_kernel_execution,
+    from_sdk_events as normalized_tool_call_from_sdk_events,
+    from_stub as normalized_tool_call_from_stub,
+    truncate_output,
 )
 
 

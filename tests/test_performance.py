@@ -146,7 +146,7 @@ def test_incremental_mode_faster_than_baseline(git_repo, run_validator):
 
     # Modify just one agent
     agent_file = git_repo / ".claude" / "agents" / "agent-0.md"
-    content = agent_file.read_text()
+    content = agent_file.read_text(encoding="utf-8")
     agent_file.write_text(content + "\n# Modified\n")
 
     # Incremental: check only modified
@@ -424,7 +424,7 @@ def test_benchmark_incremental_mode(git_repo, run_validator):
 
     # Modify one file
     agent_file = git_repo / ".claude" / "agents" / "agent-0.md"
-    content = agent_file.read_text()
+    content = agent_file.read_text(encoding="utf-8")
     agent_file.write_text(content + "\n# Modified\n")
 
     times = []

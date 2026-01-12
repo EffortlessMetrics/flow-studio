@@ -68,11 +68,11 @@ class IncidentPackCollector:
             print(f"\n[{step_name}]")
             try:
                 step_func(pack_dir)
-                print("  ✓ Collected")
+                print("  [OK] Collected")
             except Exception as e:
                 error_msg = f"{step_name}: {str(e)}"
                 self.errors.append(error_msg)
-                print(f"  ✗ Failed: {e}")
+                print(f"  [FAIL] Failed: {e}")
 
         # Write manifest
         self._write_manifest(pack_dir)
@@ -544,7 +544,7 @@ Output:
         return 0
 
     except Exception as e:
-        print(f"\n✗ Error creating incident pack: {e}", file=sys.stderr)
+        print(f"\n[FAIL] Error creating incident pack: {e}", file=sys.stderr)
         import traceback
         traceback.print_exc()
         return 1

@@ -29,7 +29,7 @@ def test_ux_manifest_valid_json():
 
 def test_ux_manifest_required_keys():
     """ux_manifest.json must have required top-level keys."""
-    manifest = json.loads(MANIFEST_PATH.read_text())
+    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
 
     required_keys = ["name", "version", "specs", "docs", "tests", "tools"]
     for key in required_keys:
@@ -38,7 +38,7 @@ def test_ux_manifest_required_keys():
 
 def test_ux_manifest_specs_exist():
     """All files in specs.files must exist."""
-    manifest = json.loads(MANIFEST_PATH.read_text())
+    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
     specs = manifest.get("specs", {})
     files = specs.get("files", [])
 
@@ -49,7 +49,7 @@ def test_ux_manifest_specs_exist():
 
 def test_ux_manifest_docs_exist():
     """All files in docs.files must exist."""
-    manifest = json.loads(MANIFEST_PATH.read_text())
+    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
     docs = manifest.get("docs", {})
     files = docs.get("files", [])
 
@@ -60,7 +60,7 @@ def test_ux_manifest_docs_exist():
 
 def test_ux_manifest_tests_exist():
     """All files in tests.files must exist."""
-    manifest = json.loads(MANIFEST_PATH.read_text())
+    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
     tests = manifest.get("tests", {})
     files = tests.get("files", [])
 
@@ -71,7 +71,7 @@ def test_ux_manifest_tests_exist():
 
 def test_ux_manifest_tools_exist():
     """All files in tools.files must exist."""
-    manifest = json.loads(MANIFEST_PATH.read_text())
+    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
     tools = manifest.get("tools", {})
     files = tools.get("files", [])
 
@@ -82,7 +82,7 @@ def test_ux_manifest_tools_exist():
 
 def test_ux_manifest_version_format():
     """Version must follow semver-like format."""
-    manifest = json.loads(MANIFEST_PATH.read_text())
+    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
     version = manifest.get("version", "")
 
     # Should have at least major.minor.patch
@@ -96,7 +96,7 @@ def test_ux_manifest_version_format():
 
 def test_ux_manifest_sdk_methods():
     """SDK methods must include core required methods."""
-    manifest = json.loads(MANIFEST_PATH.read_text())
+    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
     sdk = manifest.get("sdk", {})
     methods = sdk.get("methods", [])
 
@@ -123,7 +123,7 @@ def test_ux_manifest_sdk_methods():
 
 def test_ux_manifest_api_endpoints():
     """API endpoints must include layout_screens."""
-    manifest = json.loads(MANIFEST_PATH.read_text())
+    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
     api = manifest.get("api", {})
     endpoints = api.get("endpoints", [])
 
@@ -144,7 +144,7 @@ class TestLayoutSpecConsistency:
     def test_layout_screens_endpoint_exists_in_fastapi(self):
         """FastAPI must have layout_screens endpoint defined."""
         fastapi_path = REPO_ROOT / "swarm/tools/flow_studio_fastapi.py"
-        content = fastapi_path.read_text()
+        content = fastapi_path.read_text(encoding="utf-8")
 
         assert "/api/layout_screens" in content, "FastAPI missing /api/layout_screens route"
         assert "LAYOUT_SCREENS" in content, "FastAPI missing LAYOUT_SCREENS definition"
@@ -235,7 +235,7 @@ class TestRunLayoutReview:
     def test_run_layout_review_is_executable(self):
         """run_layout_review.py must have main() function."""
         tool_path = REPO_ROOT / "swarm/tools/run_layout_review.py"
-        content = tool_path.read_text()
+        content = tool_path.read_text(encoding="utf-8")
 
         assert "def main()" in content, "run_layout_review.py must have main() function"
         assert 'if __name__ == "__main__"' in content, "run_layout_review.py must be executable"
@@ -243,6 +243,6 @@ class TestRunLayoutReview:
     def test_run_layout_review_uses_layout_screens_api(self):
         """run_layout_review.py must use /api/layout_screens."""
         tool_path = REPO_ROOT / "swarm/tools/run_layout_review.py"
-        content = tool_path.read_text()
+        content = tool_path.read_text(encoding="utf-8")
 
         assert "/api/layout_screens" in content, "run_layout_review.py must fetch from /api/layout_screens"

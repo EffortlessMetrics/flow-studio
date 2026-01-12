@@ -97,7 +97,7 @@ class TestReadmeContent:
     @pytest.fixture
     def readme(self) -> str:
         """Load README content."""
-        return (TEMPLATE_DIR / "README.md").read_text()
+        return (TEMPLATE_DIR / "README.md").read_text(encoding="utf-8")
 
     def test_has_audience_header(self, readme: str) -> None:
         """README should have audience header."""
@@ -124,7 +124,7 @@ class TestDockerfile:
     @pytest.fixture
     def dockerfile(self) -> str:
         """Load Dockerfile content."""
-        return (TEMPLATE_DIR / "Dockerfile").read_text()
+        return (TEMPLATE_DIR / "Dockerfile").read_text(encoding="utf-8")
 
     def test_dockerfile_has_from(self, dockerfile: str) -> None:
         """Dockerfile should have FROM instruction."""

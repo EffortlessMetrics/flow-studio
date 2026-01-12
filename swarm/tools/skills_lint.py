@@ -96,10 +96,10 @@ def main():
 
     if not is_valid:
         for error in errors:
-            print(f"✗ {error}", file=sys.stderr)
+            print(f"[FAIL] {error}", file=sys.stderr)
         sys.exit(1)
 
-    print("✓ Skills validation passed", file=sys.stdout)
+    print("[OK] Skills validation passed", file=sys.stdout)
     sys.exit(0)
 
 

@@ -72,7 +72,7 @@ def baseline_schema():
         pytest.skip(
             "Baseline schema not found; run 'make dump-openapi-schema' first"
         )
-    return json.loads(baseline_path.read_text())
+    return json.loads(baseline_path.read_text(encoding="utf-8"))
 
 
 @pytest.fixture

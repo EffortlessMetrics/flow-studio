@@ -60,7 +60,7 @@ ALLOWED_VIOLATIONS: Dict[str, Dict[int, str]] = {
     },
     # Fallback in _get_default_flow_sequence() when registry import fails
     "swarm/runtime/types/__init__.py": {
-        127: "Fallback constant when flow_registry import fails in _get_default_flow_sequence()",
+        141: "Fallback constant when flow_registry import fails in _get_default_flow_sequence()",
     },
     # Run plan defaults - defines example configurations
     "swarm/runtime/run_plan_api.py": {

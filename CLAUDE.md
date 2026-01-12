@@ -10,6 +10,37 @@ This is not a complete manual; it points you to the right artifacts.
 
 ---
 
+## The Core Thesis
+
+Code generation is cheap. Trust is expensive.
+
+Models write code at 1,000+ tokens/second. The bottleneck isn't "can it write code"—it's "can a human review and trust the output in 30 minutes instead of spending a week doing it themselves."
+
+**The trade:** Spend ~$30 on compute that produces a reviewable PR with evidence. Don't spend 5 days of developer time producing something worse.
+
+**What this system produces:**
+- **Receipts** - Proof of what happened, when, with what evidence
+- **Evidence panels** - Multi-metric verification that resists gaming
+- **Bounded artifacts** - Changes with clear scope and audit trail
+- **Trust bundles** - The actual product; code is a side effect
+
+**What this system is NOT:**
+- A chatbot that writes code when asked
+- A "copilot" that suggests completions
+- A magic tool that removes the need for review
+
+**What this system IS:**
+- A verification infrastructure that happens to generate code
+- A trust compiler that transforms intent into auditable evidence
+- A factory that trades compute for senior attention
+
+> The verification stack is the crown jewel, not the codebase.
+> If you can regenerate code cheaply, the real capital is the evidence contracts.
+
+See [docs/explanation/TRUST_COMPILER.md](./docs/explanation/TRUST_COMPILER.md) for the full treatment.
+
+---
+
 ## If You're a Human
 
 Start here:
@@ -46,6 +77,31 @@ Treat this repo as four layers:
   - `[data-uiid="flow_studio.header.search.input"]`
   - `[data-uiid="flow_studio.sidebar.flow_list"]`
   - `[data-uiid^="flow_studio.canvas.outline.step:"]`
+
+---
+
+## The Factory Mental Model
+
+Do not anthropomorphize AI agents as "copilots" or "partners." View the system as a manufacturing plant.
+
+| Component | Role | Behavior |
+|-----------|------|----------|
+| **Python Kernel** | Factory Foreman | Deterministic, strict. Manages time, disk, budget. Never guesses; enforces. |
+| **Agents** | Enthusiastic Interns | Brilliant and tireless. Prone to "hallucinating success" to please. Need boundaries. |
+| **Disk** | Ledger | If it isn't written to `RUN_BASE/`, it didn't happen. |
+| **Receipts** | Audit Trail | The product. Not the code. |
+
+**The intern psychology:**
+- Infinite energy (will iterate 50 times without fatigue)
+- People-pleasing risk (may claim success to avoid disappointing)
+- Context drunkenness (500 pages of docs = confusion)
+
+**The foreman's job:**
+- Don't ask interns if they succeeded—measure the bolt
+- Don't give them everything—curate what they need
+- Don't trust their prose—trust their receipts
+
+See [docs/AGOPS_MANIFESTO.md](./docs/AGOPS_MANIFESTO.md) for the full operational philosophy.
 
 ---
 
@@ -363,9 +419,13 @@ Flows 1 and 3 use microloops between writer and reviewer:
 
 Critics never fix; they write harsh critiques. Stations never block—they document concerns and continue.
 
+**Why this works:** Adversarial iteration beats cooperative revision. A single agent asked to "write and review" will be kind to itself. Separate critics with harsh mandates produce better work. The author knows the critic is coming—this changes how they write.
+
 ### 2. Heavy Context Loading
 
 Context-heavy agents (`context-loader`, `impact-analyzer`) are encouraged to load 20-50k tokens. Compute is cheap; reducing downstream re-search saves attention.
+
+**Why this works:** Compression pays forward. One agent reads 50k tokens and produces a 2k summary. Ten downstream agents each save 48k tokens of re-reading. The math: 50k + (10 × 2k) = 70k vs. 10 × 50k = 500k. Heavy loaders are multipliers, not waste.
 
 ### 3. Git State Management
 
@@ -381,6 +441,8 @@ Gate (Flow 4) may bounce work back to Build or Plan if issues are non-trivial. G
 
 Stations never block or escalate mid-flow. Document ambiguities and concerns in receipts, then continue. Humans review at flow gates.
 
+**Why this works:** Fix-forward keeps velocity. Mid-flow escalation creates babysitting overhead—humans monitoring runs, answering questions, unblocking agents. Completed flows with documented concerns are reviewable artifacts. Stalled flows are waste. An imperfect complete run is worth more than a perfect incomplete one.
+
 ### 6. Assumptive-but-Transparent Work
 
 When facing ambiguity, stations:
@@ -390,6 +452,8 @@ When facing ambiguity, stations:
 4. Proceed with work
 
 This enables re-running flows with better inputs. Humans answer clarification questions at flow boundaries, not mid-flow. Each flow is designed to be **run again** with refined inputs.
+
+**Why this works:** Flows are designed to be re-run. An assumption that's wrong costs one re-run. A blocked flow that waits for human input costs human attention while the system idles. Document the assumption, ship the run, fix the assumption if needed, re-run. Compute is cheaper than waiting.
 
 **BLOCKED is exceptional**: Set BLOCKED only when input artifacts don't exist. Ambiguity uses documented assumptions + UNVERIFIED status, not BLOCKED.
 
@@ -504,7 +568,19 @@ See [docs/CI_TROUBLESHOOTING.md](./docs/CI_TROUBLESHOOTING.md) for detailed trou
 
 ## For New Contributors
 
-This repo demonstrates:
+**This is not a code generator. It's a trust compiler.**
+
+The system's job isn't to write code—it's to produce reviewable trust bundles that minimize the attention cost of verification. Code is a side effect. Evidence is the product.
+
+**The verification stack is the crown jewel:**
+- Receipts prove what happened
+- Evidence panels resist gaming
+- Forensic scanners measure reality
+- Pack-check enforces the constitution
+
+If you can regenerate code cheaply, the real capital is the verification infrastructure. Treat it accordingly.
+
+**This repo demonstrates:**
 
 - How to model SDLC as **flows** (not chat)
 - How to use **agents as narrow interns** (not magic copilots)
@@ -515,7 +591,13 @@ This repo demonstrates:
 
 The V3 architecture treats flows as graphs where nodes can be injected, bypassed, or extended at runtime. This enables adaptive execution while maintaining auditability through the routing protocol.
 
-Read `swarm/positioning.md` for the full philosophy. Browse `swarm/examples/health-check/` for concrete flow outputs. See [docs/ROUTING_PROTOCOL.md](./docs/ROUTING_PROTOCOL.md) for the routing model.
+**Start with the philosophy:**
+- [docs/explanation/META_LEARNINGS.md](./docs/explanation/META_LEARNINGS.md) - 15 lessons from building this
+- [docs/explanation/EMERGENT_PHYSICS.md](./docs/explanation/EMERGENT_PHYSICS.md) - 12 laws that emerged
+- [docs/explanation/TRUST_COMPILER.md](./docs/explanation/TRUST_COMPILER.md) - What this system actually is
+- [docs/AGOPS_MANIFESTO.md](./docs/AGOPS_MANIFESTO.md) - The operational philosophy
+
+Read `swarm/positioning.md` for positioning. Browse `swarm/examples/health-check/` for concrete flow outputs. See [docs/ROUTING_PROTOCOL.md](./docs/ROUTING_PROTOCOL.md) for the routing model.
 
 ---
 
@@ -531,6 +613,14 @@ Read `swarm/positioning.md` for the full philosophy. Browse `swarm/examples/heal
 | Lexicon (canonical vocabulary) | [docs/LEXICON.md](./docs/LEXICON.md) |
 | v3.0 Roadmap | [docs/ROADMAP_3_0.md](./docs/ROADMAP_3_0.md) |
 | v2.4 Roadmap (archived) | [docs/archive/ROADMAP_2_4.md](./docs/archive/ROADMAP_2_4.md) |
+| **Meta-Learning & Physics** | |
+| Meta learnings (15 lessons) | [docs/explanation/META_LEARNINGS.md](./docs/explanation/META_LEARNINGS.md) |
+| Emergent physics (12 laws) | [docs/explanation/EMERGENT_PHYSICS.md](./docs/explanation/EMERGENT_PHYSICS.md) |
+| Physics principles index | [docs/explanation/PHYSICS_PRINCIPLES.md](./docs/explanation/PHYSICS_PRINCIPLES.md) |
+| Trust compiler (synthesis) | [docs/explanation/TRUST_COMPILER.md](./docs/explanation/TRUST_COMPILER.md) |
+| Validator as law | [docs/explanation/VALIDATOR_AS_LAW.md](./docs/explanation/VALIDATOR_AS_LAW.md) |
+| Review as piloting | [docs/explanation/REVIEW_AS_PILOTING.md](./docs/explanation/REVIEW_AS_PILOTING.md) |
+| Governance evolution | [docs/explanation/GOVERNANCE_EVOLUTION.md](./docs/explanation/GOVERNANCE_EVOLUTION.md) |
 | **Validation & Governance** | |
 | Validation rules (FR-001-FR-005) | [docs/VALIDATION_RULES.md](./docs/VALIDATION_RULES.md) |
 | Validation walkthrough | [docs/VALIDATION_WALKTHROUGH.md](./docs/VALIDATION_WALKTHROUGH.md) |

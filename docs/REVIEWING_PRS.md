@@ -15,7 +15,7 @@ A Flow Studio PR should be reviewable in 5-10 minutes by answering these questio
 | 2 | **Are boundaries respected?** | Quality Events (interface locks, layering checks) |
 | 3 | **What's the risk assessment?** | Summary or Concerns section |
 | 4 | **What wasn't measured?** | Not Measured section (explicit gaps) |
-| 5 | **Do I trust the evidence?** | Spot-check hotspots against receipts |
+| 5 | **Do I trust the evidence?** | Escalate verification on hotspots if doubt exists |
 
 If any question is unanswerable from the PR body, the PR cockpit is incomplete. Request it be regenerated.
 
@@ -66,7 +66,7 @@ Files or areas requiring focused review:
 | **Summary** | Quick orientation | Understand scope in 10 seconds |
 | **Hotspots** | Focus review attention | Read these 3-8 files; skip the rest |
 | **Quality Events** | What quality was verified | Check "Type" column for Observed vs Prevented |
-| **Evidence** | Links to receipts | Spot-check 1-2 receipts for consistency |
+| **Evidence** | Links to receipts | Verify 1-2 receipts for consistency; escalate if doubt exists |
 | **Not Measured** | Explicit gaps | Decide if gaps are acceptable for this change |
 
 ---
@@ -121,10 +121,11 @@ Quick checklist for reviewing a PR cockpit:
 - [ ] Are the gaps acceptable for this change?
 - [ ] Any gaps that should block merge?
 
-### 4. Spot-Check Hotspots (3-5 minutes)
-- [ ] Open 2-3 hotspot files
+### 4. Escalate Verification on Hotspots (3-5 minutes)
+- [ ] Review hotspot files in evidence context
 - [ ] Do the changes match what Summary claims?
-- [ ] Any obvious issues not caught by automation?
+- [ ] If doubt exists, escalate: request targeted tests, mutation testing, or deeper scans
+- [ ] The answer to doubt is more verification, not manual code reading
 
 ### 5. Verify Evidence (1 minute)
 - [ ] Open 1 receipt (e.g., `build_receipt.json`)
@@ -135,7 +136,7 @@ Quick checklist for reviewing a PR cockpit:
 
 | Outcome | When |
 |---------|------|
-| **Approve** | All 5 questions answered, spot-checks pass |
+| **Approve** | All 5 questions answered, verification passes |
 | **Request Changes** | Gaps in Not Measured are unacceptable, or evidence doesn't match claims |
 | **Request Regeneration** | PR cockpit is incomplete or missing sections |
 

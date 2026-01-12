@@ -55,7 +55,7 @@ These are representative examples, not endorsements:
 - Choosing boundaries (contracts, layering, "what must not change")
 - Picking *what to verify* and *how much proof is sufficient*
 - Making risk calls (breaking changes, perf tradeoffs, operational posture)
-- Reviewing the cockpit and spot-checking hotspots
+- Reviewing the cockpit and escalating verification when doubt exists
 - Architecture and decisions that require judgment
 
 ## The Implication

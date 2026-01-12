@@ -191,7 +191,7 @@ class TestReadmeContent:
     @pytest.fixture
     def readme(self) -> str:
         """Load README content."""
-        return (TEMPLATE_DIR / "README.md").read_text()
+        return (TEMPLATE_DIR / "README.md").read_text(encoding="utf-8")
 
     def test_readme_has_audience_header(self, readme: str) -> None:
         """README should have audience header."""

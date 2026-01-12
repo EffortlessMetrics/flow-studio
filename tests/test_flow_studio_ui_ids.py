@@ -925,7 +925,7 @@ class TestDynamicUIIDs:
         js_file = repo_root / "swarm" / "tools" / "flow_studio_ui" / "js" / "run_history.js"
         assert js_file.exists(), "run_history.js should exist"
 
-        content = js_file.read_text()
+        content = js_file.read_text(encoding="utf-8")
 
         # Should contain the backend badge UIID pattern
         assert "flow_studio.sidebar.run_history.item.badge.backend:" in content, (
@@ -944,7 +944,7 @@ class TestDynamicUIIDs:
         js_file = repo_root / "swarm" / "tools" / "flow_studio_ui" / "js" / "run_detail_modal.js"
         assert js_file.exists(), "run_detail_modal.js should exist"
 
-        content = js_file.read_text()
+        content = js_file.read_text(encoding="utf-8")
 
         # Should contain the events toggle UIID
         assert "flow_studio.modal.run_detail.events.toggle" in content, (
@@ -963,7 +963,7 @@ class TestDynamicUIIDs:
         js_file = repo_root / "swarm" / "tools" / "flow_studio_ui" / "js" / "run_detail_modal.js"
         assert js_file.exists(), "run_detail_modal.js should exist"
 
-        content = js_file.read_text()
+        content = js_file.read_text(encoding="utf-8")
 
         # Should contain the events container UIID
         assert "flow_studio.modal.run_detail.events.container" in content, (
@@ -982,7 +982,7 @@ class TestDynamicUIIDs:
         js_file = repo_root / "swarm" / "tools" / "flow_studio_ui" / "js" / "run_detail_modal.js"
         assert js_file.exists(), "run_detail_modal.js should exist"
 
-        content = js_file.read_text()
+        content = js_file.read_text(encoding="utf-8")
 
         # Should contain the exemplar checkbox UIID
         assert "flow_studio.modal.run_detail.exemplar" in content, (
@@ -1014,7 +1014,7 @@ class TestBackendBadgeUIIDs:
         # This is a documentation test
         # Verify the pattern is documented in domain.ts FlowStudioUIID type
         ts_file = repo_root / "swarm" / "tools" / "flow_studio_ui" / "src" / "domain.ts"
-        content = ts_file.read_text()
+        content = ts_file.read_text(encoding="utf-8")
 
         # The type should include run detail modal UIIDs
         assert "flow_studio.modal.run_detail" in content, (
@@ -1035,7 +1035,7 @@ class TestEventsTimelineUIIDs:
     def test_events_uiids_defined_in_domain(self):
         """Verify events UIIDs are defined in domain.ts FlowStudioUIID type."""
         ts_file = repo_root / "swarm" / "tools" / "flow_studio_ui" / "src" / "domain.ts"
-        content = ts_file.read_text()
+        content = ts_file.read_text(encoding="utf-8")
 
         # Should include events toggle and container UIIDs
         assert "flow_studio.modal.run_detail.events.toggle" in content, (

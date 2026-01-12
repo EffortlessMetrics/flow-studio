@@ -449,7 +449,7 @@ class TestApplyEvolutionPatch:
         assert result.success is True
         assert result.dry_run is True
         # File should not be modified
-        assert "new_field" not in target.read_text()
+        assert "new_field" not in target.read_text(encoding="utf-8")
 
     def test_apply_json_patch(self, repo_root):
         """Test applying JSON patch operations."""
@@ -476,7 +476,7 @@ class TestApplyEvolutionPatch:
 
         # Verify file was modified
         import yaml
-        updated = yaml.safe_load(target.read_text())
+        updated = yaml.safe_load(target.read_text(encoding="utf-8"))
         assert len(updated["steps"]) == 1
         assert updated["steps"][0]["id"] == "new_step"
 

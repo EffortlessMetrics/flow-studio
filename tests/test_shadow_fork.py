@@ -282,7 +282,7 @@ class TestShadowForkPushGuard:
 
         hook_path = hooks_dir / "pre-push"
         assert hook_path.exists()
-        content = hook_path.read_text()
+        content = hook_path.read_text(encoding="utf-8")
         assert PRE_PUSH_HOOK_MARKER in content
         assert MARKER_FILE in content
 
@@ -296,7 +296,7 @@ class TestShadowForkPushGuard:
 
         fork.block_upstream_push()
 
-        content = hook_path.read_text()
+        content = hook_path.read_text(encoding="utf-8")
         assert "existing hook" in content
         assert PRE_PUSH_HOOK_MARKER in content
 
@@ -314,7 +314,7 @@ class TestShadowForkPushGuard:
 
         hook_path = hooks_dir / "pre-push"
         # Hook should be removed if it was only our guard
-        assert not hook_path.exists() or PRE_PUSH_HOOK_MARKER not in hook_path.read_text()
+        assert not hook_path.exists() or PRE_PUSH_HOOK_MARKER not in hook_path.read_text(encoding="utf-8")
         assert fork._push_allowed is True
 
 

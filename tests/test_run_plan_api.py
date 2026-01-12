@@ -181,7 +181,7 @@ class TestRunPlanAPI:
         assert plan is not None
         assert plan.metadata.plan_id == "default-autopilot"
         assert plan.metadata.is_default == True
-        assert len(plan.spec.flow_sequence) == 6  # Full SDLC
+        assert len(plan.spec.flow_sequence) == 7  # Full SDLC (includes review)
 
     def test_load_nonexistent_plan(self, tmp_path: Path):
         """Test loading a plan that doesn't exist."""
@@ -279,7 +279,7 @@ class TestRunPlanAPI:
 
         assert spec is not None
         assert isinstance(spec, RunPlanSpec)
-        assert len(spec.flow_sequence) == 6
+        assert len(spec.flow_sequence) == 7  # Full SDLC (includes review)
 
     def test_validate_plan_valid(self, tmp_path: Path):
         """Test validating a valid plan."""
@@ -374,7 +374,7 @@ class TestDefaultPlans:
         plan = api.load_plan("default-autopilot")
 
         assert plan is not None
-        assert plan.spec.flow_sequence == ["signal", "plan", "build", "gate", "deploy", "wisdom"]
+        assert plan.spec.flow_sequence == ["signal", "plan", "build", "review", "gate", "deploy", "wisdom"]
         assert plan.spec.human_policy.mode == "run_end"
         assert plan.spec.max_total_flows == 20
 
@@ -401,5 +401,5 @@ class TestDefaultPlans:
         plan = api.load_plan("signal-to-gate")
 
         assert plan is not None
-        assert plan.spec.flow_sequence == ["signal", "plan", "build", "gate"]
+        assert plan.spec.flow_sequence == ["signal", "plan", "build", "review", "gate"]
         assert "deploy" not in plan.spec.flow_sequence

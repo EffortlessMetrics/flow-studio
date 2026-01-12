@@ -288,13 +288,13 @@ if __name__ == "__main__":
                 try:
                     method = getattr(instance, method_name)
                     method()
-                    print(f"✓ {test_class.__name__}.{method_name}")
+                    print(f"[OK] {test_class.__name__}.{method_name}")
                     passed += 1
                 except AssertionError as e:
-                    print(f"✗ {test_class.__name__}.{method_name}")
+                    print(f"[FAIL] {test_class.__name__}.{method_name}")
                     print(f"  {e}")
                 except Exception as e:
-                    print(f"✗ {test_class.__name__}.{method_name} (ERROR)")
+                    print(f"[FAIL] {test_class.__name__}.{method_name} (ERROR)")
                     print(f"  {e}")
 
     print(f"\n{passed}/{total} tests passed")

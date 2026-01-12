@@ -153,7 +153,7 @@ def main():
         hours = int(sys.argv[5]) if len(sys.argv) > 5 else 24
 
         override = manager.create_override(step_id, reason, approver, hours)
-        print(f"✓ Override created for {step_id}")
+        print(f"[OK] Override created for {step_id}")
         print(f"  Reason: {reason}")
         print(f"  Approver: {approver}")
         print(f"  Expires: {override.expires_at}")
@@ -165,15 +165,15 @@ def main():
 
         step_id = sys.argv[2]
         if manager.revoke_override(step_id):
-            print(f"✓ Override revoked for {step_id}")
+            print(f"[OK] Override revoked for {step_id}")
         else:
-            print(f"✗ No active override found for {step_id}")
+            print(f"[FAIL] No active override found for {step_id}")
             sys.exit(1)
 
     elif command == "list":
         overrides = manager.list_overrides()
         if not overrides:
-            print("✓ No active overrides")
+            print("[OK] No active overrides")
         else:
             print(f"Active Overrides ({len(overrides)}):")
             for override in overrides:

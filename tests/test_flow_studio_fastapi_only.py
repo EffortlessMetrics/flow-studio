@@ -34,7 +34,7 @@ def test_flask_not_in_production_dependencies():
     pyproject = repo_root / "pyproject.toml"
     assert pyproject.exists(), "pyproject.toml should exist"
 
-    content = pyproject.read_text()
+    content = pyproject.read_text(encoding="utf-8")
 
     # Flask should not be in dependencies (might be in optional-dependencies for legacy support)
     # But should not be in main dependencies
@@ -72,7 +72,7 @@ def test_makefile_flow_studio_uses_fastapi():
     makefile = repo_root / "Makefile"
     assert makefile.exists(), "Makefile should exist"
 
-    content = makefile.read_text()
+    content = makefile.read_text(encoding="utf-8")
 
     # Find flow-studio target
     assert "flow-studio:" in content, "Makefile should have flow-studio target"
@@ -107,7 +107,7 @@ def test_no_flask_imports_in_fastapi_module():
     fastapi_module = repo_root / "swarm" / "tools" / "flow_studio_fastapi.py"
     assert fastapi_module.exists(), "FastAPI module should exist"
 
-    content = fastapi_module.read_text()
+    content = fastapi_module.read_text(encoding="utf-8")
 
     # Should not import Flask
     assert "import flask" not in content.lower(), (
@@ -131,7 +131,7 @@ def test_no_flask_in_active_test_imports():
         if not test_path.exists():
             continue
 
-        content = test_path.read_text()
+        content = test_path.read_text(encoding="utf-8")
 
         # Check for Flask imports in non-skipped tests
         lines = content.split("\n")
@@ -209,7 +209,7 @@ def test_ui_module_extracted():
 def test_fastapi_uses_extracted_ui():
     """Verify FastAPI imports HTML from shared UI module."""
     fastapi_module = repo_root / "swarm" / "tools" / "flow_studio_fastapi.py"
-    content = fastapi_module.read_text()
+    content = fastapi_module.read_text(encoding="utf-8")
 
     assert "from swarm.tools.flow_studio_ui import get_index_html" in content, (
         "FastAPI should import get_index_html from shared UI module"
@@ -219,7 +219,7 @@ def test_fastapi_uses_extracted_ui():
 def test_no_backend_toggle_in_makefile():
     """Verify FLOWSTUDIO_BACKEND toggle is removed from Makefile."""
     makefile = repo_root / "Makefile"
-    content = makefile.read_text()
+    content = makefile.read_text(encoding="utf-8")
 
     # Find flow-studio target
     lines = content.split("\n")
@@ -256,7 +256,7 @@ def test_flow_studio_docs_reference_fastapi():
     if not doc_path.exists():
         pytest.skip("FLOW_STUDIO.md not found")
 
-    content = doc_path.read_text()
+    content = doc_path.read_text(encoding="utf-8")
 
     # Should mention FastAPI or uvicorn (implementation details)
     # (Might mention Flask in migration notes, so we don't enforce strict exclusion)
@@ -278,7 +278,7 @@ def test_no_flask_test_client_in_conftest():
     if not conftest.exists():
         pytest.skip("conftest.py not found")
 
-    content = conftest.read_text()
+    content = conftest.read_text(encoding="utf-8")
 
     # Should not import Flask for test fixtures
     assert "from flask import" not in content, (
@@ -295,7 +295,7 @@ def test_demo_commands_reference_fastapi():
     if not demo_commands.exists():
         pytest.skip("DEMO_RUN_COMMANDS.jsonl not found")
 
-    content = demo_commands.read_text()
+    content = demo_commands.read_text(encoding="utf-8")
 
     # If it mentions flow-studio, should not mention Flask
     if "flow-studio" in content:

@@ -31,14 +31,14 @@ SCHEMA_DIR = Path(__file__).parent.parent / "swarm" / "spec" / "schemas"
 def load_schema(schema_name: str) -> dict:
     """Load a schema from the schema directory."""
     schema_path = SCHEMA_DIR / schema_name
-    return json.loads(schema_path.read_text())
+    return json.loads(schema_path.read_text(encoding="utf-8"))
 
 
 def load_all_schemas() -> dict:
     """Load all schemas from the schema directory."""
     schemas = {}
     for schema_file in SCHEMA_DIR.glob("*.schema.json"):
-        schema = json.loads(schema_file.read_text())
+        schema = json.loads(schema_file.read_text(encoding="utf-8"))
         schemas[schema_file.name] = schema
     return schemas
 
@@ -47,7 +47,7 @@ def create_registry() -> "Registry":
     """Create a Registry for resolving $ref to local schema files."""
     resources = []
     for schema_file in SCHEMA_DIR.glob("*.schema.json"):
-        schema = json.loads(schema_file.read_text())
+        schema = json.loads(schema_file.read_text(encoding="utf-8"))
         schema_id = schema.get("$id", schema_file.name)
         # Add with full $id URL
         resources.append((schema_id, Resource.from_contents(schema, default_specification=DRAFT7)))
@@ -874,7 +874,7 @@ class TestFlowGraphSchema:
 
     def test_invalid_flow_number_range(self, flow_graph_schema):
         """Test invalid flow_number values."""
-        # Below minimum
+        # Below minimum (0 is invalid)
         graph = {
             "id": "test-flow",
             "version": 1,
@@ -886,8 +886,9 @@ class TestFlowGraphSchema:
         with pytest.raises(ValidationError):
             validate(graph, flow_graph_schema)
 
-        # Above maximum
-        graph["flow_number"] = 8
+        # Above maximum (100 is invalid, schema allows 1-99)
+        # Note: Schema allows 1-99 to support utility flows (8+)
+        graph["flow_number"] = 100
         with pytest.raises(ValidationError):
             validate(graph, flow_graph_schema)
 
@@ -1382,8 +1383,16 @@ class TestFlowGraphSchema:
         validate(graph, flow_graph_schema)
 
     def test_flow_transition_next_flow_pattern(self, flow_graph_schema):
-        """Test next_flow pattern validation."""
-        # Valid patterns
+        """Test next_flow accepts various valid formats.
+
+        The FlowTransition schema allows any string for next_flow to support:
+        - Main SDLC flows: "1-signal", "2-plan", etc.
+        - Utility flow special values: "return", "pause"
+        - Custom flow identifiers
+
+        No pattern validation is enforced at the schema level.
+        """
+        # Valid patterns - main SDLC flows
         valid_flows = ["1-signal", "2-plan", "3-build", "4-review", "5-gate", "6-deploy", "7-wisdom"]
         for next_flow in valid_flows:
             graph = {
@@ -1397,9 +1406,17 @@ class TestFlowGraphSchema:
             }
             validate(graph, flow_graph_schema)
 
-        # Invalid pattern
-        graph["on_complete"]["next_flow"] = "invalid-format"
-        with pytest.raises(ValidationError):
+        # Valid patterns - utility flow special values
+        for special_value in ["return", "pause"]:
+            graph = {
+                "id": "test-flow",
+                "version": 1,
+                "title": "Test Flow",
+                "flow_number": 8,  # Utility flow
+                "nodes": [self._minimal_node()],
+                "edges": [],
+                "on_complete": {"next_flow": special_value}
+            }
             validate(graph, flow_graph_schema)
 
     def test_id_pattern_validation(self, flow_graph_schema):
@@ -1662,7 +1679,7 @@ class TestSchemaFileExistence:
         """Test that all schemas are valid JSON."""
         for schema_file in SCHEMA_DIR.glob("*.schema.json"):
             try:
-                json.loads(schema_file.read_text())
+                json.loads(schema_file.read_text(encoding="utf-8"))
             except json.JSONDecodeError as e:
                 pytest.fail(f"Invalid JSON in {schema_file.name}: {e}")
 
@@ -1676,7 +1693,7 @@ class TestSchemaFileExistence:
 
         for schema_name in required_schemas:
             schema_path = SCHEMA_DIR / schema_name
-            schema = json.loads(schema_path.read_text())
+            schema = json.loads(schema_path.read_text(encoding="utf-8"))
 
             assert "$schema" in schema, f"{schema_name} missing $schema"
             assert "$id" in schema, f"{schema_name} missing $id"

@@ -23,7 +23,7 @@ Feature: Selftest Resilience and Decomposability
     And the necessary build tools (cargo, python, uv) are available
 
   # AC-1: Kernel health check exists and is fast
-  @AC-SELFTEST-KERNEL-FAST @executable
+  @AC-SELFTEST-KERNEL-FAST @cap:selftest.kernel_smoke @executable
   Scenario: Kernel smoke check is fast and reliable
     When I run `uv run swarm/tools/kernel_smoke.py`
     Then the exit code should be 0 or 1
@@ -40,7 +40,7 @@ Feature: Selftest Resilience and Decomposability
     And the output should show which components (ruff, compile checks) passed or failed
 
   # AC-2: Selftest is introspectable
-  @AC-SELFTEST-INTROSPECTABLE @executable
+  @AC-SELFTEST-INTROSPECTABLE @cap:selftest.introspectable_plan @executable
   Scenario: Selftest plan shows all steps with tiers
     Given the selftest system is properly installed
     When I run `uv run swarm/tools/selftest.py --plan`
@@ -67,7 +67,7 @@ Feature: Selftest Resilience and Decomposability
     And steps with no dependencies should be identifiable as root steps
 
   # AC-3: Selftest can run individual steps
-  @AC-SELFTEST-INDIVIDUAL-STEPS @executable
+  @AC-SELFTEST-INDIVIDUAL-STEPS @cap:selftest.individual_steps @executable
   Scenario: Can run individual selftest steps
     When I run `uv run swarm/tools/selftest.py --step core-checks`
     Then the exit code should reflect only that step's status
@@ -99,7 +99,7 @@ Feature: Selftest Resilience and Decomposability
       | elapsed_ms  | (numeric, optional) |
 
   # AC-4: Selftest degraded mode
-  @AC-SELFTEST-DEGRADED @executable
+  @AC-SELFTEST-DEGRADED @cap:selftest.degraded_mode @executable
   Scenario: Degraded mode allows work around governance failures
     When I run `uv run swarm/tools/selftest.py --degraded`
     Then the exit code should be 0 or 1
